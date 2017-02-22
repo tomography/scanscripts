@@ -13,7 +13,7 @@ How to add your beamline scripts
     git clone https://github.com/tomography/scanscripts.git
     
 
-* Add your beamline scan scritps to **scanscripts**::     
+* Add your beamline scan scripts to **scanscripts**::     
 	
 	cd scanscripts
 	mkdir my_beamline
@@ -21,7 +21,7 @@ How to add your beamline scripts
 	...
 	...
 
-* Publish your  to **scanscripts**  beamline scan scritps to **scanscripts**::
+* Publish your  to **scanscripts**  beamline scan scripts to **scanscripts**::
 
 	git add my_beamline
 	git commit -m "first commit"
