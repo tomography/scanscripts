@@ -8,12 +8,12 @@ This **scanscripts** contains the python scripts in use at various APS beamlines
 How to add your beamline scripts
 ================================
 
-* Clone **scanscripts** to your machine
+* Clone **scanscripts** to your machine::
 
     git clone https://github.com/tomography/scanscripts.git
     
 
-* Add your beamline scan scritps to **scanscripts**     
+* Add your beamline scan scritps to **scanscripts**::     
 	
 	cd scanscripts
 	mkdir my_beamline
@@ -21,12 +21,12 @@ How to add your beamline scripts
 	...
 	...
 
-* Publish your  to **scanscripts**  beamline scan scritps to **scanscripts**
+* Publish your  to **scanscripts**  beamline scan scritps to **scanscripts**::
 
 	git add my_beamline
 	git commit -m "first commit"
 	git push origin master
 
-	   
+
 
 
