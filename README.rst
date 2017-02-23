@@ -3,7 +3,7 @@ scanscripts
 
 Experiment scanning scripts at APS
 
-This **scanscripts** contains the python scripts in use at various APS beamlines to collect data.
+This **scanscripts** contains the scripts used at various APS beamlines to collect data.
 
 How to add your beamline scripts
 ================================
