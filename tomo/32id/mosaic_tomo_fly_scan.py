@@ -66,7 +66,7 @@ def main():
     update_variable_dict(variableDict)
     init_general_PVs(global_PVs, variableDict)
     if variableDict.has_key('StopTheScan'):
-        cleanup(global_PVs, variableDict)
+        cleanup(global_PVs, variableDict, keys)
         return
     keys.append(start_verifier(INSTRUMENT, None, variableDict))
     global_PVs['Fly_ScanControl'].put('Custom')
