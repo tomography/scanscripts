@@ -66,9 +66,9 @@ def main():
     update_variable_dict(variableDict)
     init_general_PVs(global_PVs, variableDict)
     if variableDict.has_key('StopTheScan'):
-        cleanup(global_PVs, variableDict, keys)
+        cleanup(global_PVs, variableDict, HOST, PORT, keys)
         return
-    keys.append(start_verifier(INSTRUMENT, None, variableDict))
+    keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, PORT))
     global_PVs['Fly_ScanControl'].put('Custom')
     FileName = global_PVs['HDF1_FileName'].get(as_string=True)
     FileTemplate = global_PVs['HDF1_FileTemplate'].get(as_string=True)
@@ -104,7 +104,7 @@ def main():
 
 if __name__ == '__main__':
     def on_exit(sig, func=None):
-        cleanup(global_PVs, variableDict, keys)
+        cleanup(global_PVs, variableDict, HOST, PORT, keys)
         sys.exit(0)
     set_exit_handler(on_exit)
 
