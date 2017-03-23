@@ -165,7 +165,7 @@ def init_general_PVs(global_PVs, variableDict):
 	global_PVs['DCMputEnergy'] = PV('32ida:BraggEAO.VAL')
 
 
-def start_verifier(conf, report_file, variableDict, verifier_dir, port):
+def start_verifier(conf, report_file, variableDict, verifier_dir, host, port):
     """
     This function starts a real-time verifier application on a remote machine. It first starts a server that controls
     starting and stopping of the verifier. On starting the server this method will pass verifier arguments:
@@ -222,7 +222,7 @@ def start_verifier(conf, report_file, variableDict, verifier_dir, port):
     COMMAND="python " + verifier_dir + "server_verifier.py " + conf + ", " + report_file + ", " + json_sequence + \
             ", " + port + ", " + key
 
-    ssh = subprocess.Popen(["ssh", "%s" % HOST, COMMAND],
+    ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
                            shell=False,
                            stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE)
