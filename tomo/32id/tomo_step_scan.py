@@ -11,13 +11,19 @@ import shutil
 import os
 import imp
 import traceback
+import signal
 
 from tomo_scan_lib import *
 
 
+# hardcoded values for verifier
+HOST = "txmtwo"
+PORT = "5011"
+VER_DIR = "/home/beams/USR32IDC/temp/"
+INSTRUMENT = "32id_micro"
+keys = []
+
 global variableDict
-
-
 
 variableDict = {'PreDarkImages': 5,
 		'PreWhiteImages': 5,
@@ -48,6 +54,9 @@ variableDict = {'PreDarkImages': 5,
 		}
 
 global_PVs = {}
+
+def set_exit_handler(func):
+    signal.signal(signal.SIGTERM, func)
 
 def getVariableDict():
 	global variableDict
@@ -145,8 +154,10 @@ def full_tomo_scan():
 	print 'start_scan()'
 	init_general_PVs(global_PVs, variableDict)
 	if variableDict.has_key('StopTheScan'):
-		stop_scan(global_PVs, variableDict)
+		cleanup(global_PVs, variableDict, keys)
 		return
+	#start verifier on remote machine
+        keys.append(start_verifier(INSTRUMENT, None, variableDict))
 	#collect interferometer
 	interf_arrs = []
 	if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
@@ -192,5 +203,10 @@ def main():
 	full_tomo_scan()
 
 if __name__ == '__main__':
-	main()
+    def on_exit(sig, func=None):
+        cleanup(global_PVs, variableDict, keys)
+        sys.exit(0)
+    set_exit_handler(on_exit)
+
+    main()
 
