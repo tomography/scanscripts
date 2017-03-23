@@ -17,11 +17,11 @@ from tomo_scan_lib import *
 
 
 # hardcoded values for verifier
-HOST = "txmtwo"
-PORT = "5011"
+VER_HOST = "txmtwo"
+VER_PORT = "5011"
 VER_DIR = "/home/beams/USR32IDC/temp/"
 INSTRUMENT = "32id_micro"
-keys = []
+ver_keys = []
 
 global variableDict
 
@@ -154,10 +154,10 @@ def full_tomo_scan():
 	print 'start_scan()'
 	init_general_PVs(global_PVs, variableDict)
 	if variableDict.has_key('StopTheScan'):
-		cleanup(global_PVs, variableDict, HOST, PORT, keys)
+		cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
 		return
 	#start verifier on remote machine
-        keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, HOST, PORT))
+        keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT))
 	#collect interferometer
 	interf_arrs = []
 	if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
@@ -204,7 +204,7 @@ def main():
 
 if __name__ == '__main__':
     def on_exit(sig, func=None):
-        cleanup(global_PVs, variableDict, HOST, PORT, keys)
+        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
         sys.exit(0)
     set_exit_handler(on_exit)
 
