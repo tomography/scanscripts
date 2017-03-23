@@ -11,8 +11,16 @@ import shutil
 import os
 import imp
 import traceback
+import signal
 
 from tomo_scan_lib import *
+
+# hardcoded values for verifier
+HOST = "txmtwo"
+PORT = "5011"
+VER_DIR = "/home/beams/USR32IDC/temp/"
+INSTRUMENT = "32id_micro"
+keys = []
 
 global variableDict
 
@@ -43,6 +51,9 @@ variableDict = {'PreDarkImages': 5,
 
 
 global_PVs = {}
+
+def set_exit_handler(func):
+    signal.signal(signal.SIGTERM, func)
 
 #def getVariableDict():
 #	return variableDict
@@ -111,8 +122,9 @@ def start_scan(variableDict, detector_filename):
 	print 'start_scan()'
 	init_general_PVs(global_PVs, variableDict)
 	if variableDict.has_key('StopTheScan'):
-		stop_scan(global_PVs, variableDict)
+		cleanup(global_PVs, variableDict, keys)
 		return
+        keys.append(start_verifier(INSTRUMENT, None, variableDict))
 	get_calculated_num_projections(variableDict)
 	global_PVs['Fly_ScanControl'].put('Custom')
 	# Start scan sleep in min so min * 60 = sec
@@ -161,5 +173,10 @@ def main():
 
 
 if __name__ == '__main__':
-	main()
+    def on_exit(sig, func=None):
+        cleanup(global_PVs, variableDict, keys)
+        sys.exit(0)
+    set_exit_handler(on_exit)
+
+    main()
 
