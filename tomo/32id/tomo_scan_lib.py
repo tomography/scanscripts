@@ -164,7 +164,119 @@ def init_general_PVs(global_PVs, variableDict):
 	global_PVs['EnergyWait'] = PV('ID32us:Busy')
 	global_PVs['DCMputEnergy'] = PV('32ida:BraggEAO.VAL')
 
-def stop_scan(global_PVs, variableDict):
+
+def start_verifier(conf, report_file, variableDict, verifier_dir, port):
+    """
+    This function starts a real-time verifier application on a remote machine. It first starts a server that controls
+    starting and stopping of the verifier. On starting the server this method will pass verifier arguments:
+    configuration file, report file, and sequence, and server arguments: port, and key.
+    Parameters
+    ----------
+    conf : str
+        configuration file on the remote machine where the verifier will execute
+    report_file : str
+        name of the report file that will be stored on the remote machine
+    variableDict : dict
+        a dictionary defining sequence of data type scanning
+    Returns
+    -------
+    key : str
+        a random string used for authentication
+    """
+
+    sequence = []
+    index = -1
+    try:
+        images = variableDict['PreDarkImages']
+        index += images
+        sequence.append(('data_dark', index))
+    except KeyError:
+        pass
+    try:
+        images = variableDict['PreWhiteImages']
+        index += images
+        sequence.append(('data_white', index))
+    except KeyError:
+        pass
+    try:
+        images = variableDict['Projections']
+        index += images
+        sequence.append(('data', index))
+    except KeyError:
+        pass
+    try:
+        images = variableDict['PostDarkImages']
+        index += images
+        sequence.append(('data_dark', index))
+    except KeyError:
+        pass
+    try:
+        images = variableDict['PostWhiteImages']
+        index += images
+        sequence.append(('data_white', index))
+    except KeyError:
+        pass
+
+    json_sequence = json.dumps(sequence)
+    key = uuid.uuid4()
+    COMMAND="python " + verifier_dir + "server_verifier.py " + conf + ", " + report_file + ", " + json_sequence + \
+            ", " + port + ", " + key
+
+    ssh = subprocess.Popen(["ssh", "%s" % HOST, COMMAND],
+                           shell=False,
+                           stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE)
+
+    # key will be used to stop verifier
+    return key
+
+    #ssh usr32idc@txmtwo "python /home/beams/USR32IDC/temp/server_verifier.py conf, report_file, sequence, port, key"
+
+
+def stop_verifier(host, port, key):
+    """
+    This method creates RemoteController instance that has a connection with remote server. Using this connection
+    the code calls a 'stop_process' method on the remote server that will stop the verifier process.
+    Then the connection is closed.
+    Parameters
+    ----------
+    key : str
+        a string generated in start_verifier method, user as authentication key
+    Returns
+    -------
+    None
+    """
+
+    class RemoteController:
+        def QueueServerClient(self, host, port, AUTHKEY):
+            class QueueManager(SyncManager):
+                pass
+            QueueManager.register('stop_process')
+            self.manager = QueueManager(address = (host, port), authkey = AUTHKEY)
+            self.manager.connect()
+
+        def stop_remote_process(self):
+            self.manager.stop_process()
+            try:
+                conn = self.manager._Client(address = (host, port), authkey = key)
+                conn.close()
+            except Exception:
+                pass
+
+    remote_controller = RemoteController()
+
+    # this will connect to the server
+    remote_controller.QueueServerClient(host, port, key)
+
+    # this will execute command on the server
+    remote_controller.stop_remote_process()
+
+    Contact GitHub API Training Shop Blog About 
+
+def cleanup(global_PVs, variableDict, host, port, keys):
+	# stop remote process and wait for a second
+	stop_verifier(host, int(port), keys[0])
+	time.sleep(1)
 	global_PVs['TIFF1_AutoSave'].put('No')
 	global_PVs['TIFF1_Capture'].put(0)
 	global_PVs['HDF1_Capture'].put(0)
