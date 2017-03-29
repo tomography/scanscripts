@@ -157,7 +157,7 @@ def full_tomo_scan():
 		cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
 		return
 	#start verifier on remote machine
-        keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT))
+        ver_keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT))
 	#collect interferometer
 	interf_arrs = []
 	if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
