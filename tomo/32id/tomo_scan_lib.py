@@ -181,12 +181,14 @@ def start_verifier(conf, report_file, variableDict, remote_command, host, port, 
         a dictionary defining sequence of data type scanning
     host : str
         a remote computer
-    port : int
+    port : str
         a port on which the remote server will listen
-    Returns
-    -------
     key : str
         a random string used for authentication
+	
+    Returns
+    -------
+    none
     """
 
     sequence = []
