@@ -168,7 +168,7 @@ def init_general_PVs(global_PVs, variableDict):
 	global_PVs['DCMputEnergy'] = PV('32ida:BraggEAO.VAL')
 
 
-def start_verifier(conf, report_file, variableDict, verifier_dir, host, port):
+def start_verifier(conf, report_file, variableDict, remote_command, host, port, key:
     """
     This function starts a real-time verifier application on a remote machine. It first starts a server that controls
     starting and stopping of the verifier. On starting the server this method will pass verifier arguments:
@@ -181,6 +181,10 @@ def start_verifier(conf, report_file, variableDict, verifier_dir, host, port):
         name of the report file that will be stored on the remote machine
     variableDict : dict
         a dictionary defining sequence of data type scanning
+    host : str
+        a remote computer
+    port : int
+        a port on which the remote server will listen
     Returns
     -------
     key : str
@@ -221,17 +225,13 @@ def start_verifier(conf, report_file, variableDict, verifier_dir, host, port):
         pass
 
     json_sequence = json.dumps(sequence)
-    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
 
-    COMMAND="python " + verifier_dir + "server_verifier.py " + conf + ", None, " + json_sequence + ", " + port + ", " + key
+    COMMAND="source " + remote_command + " " + conf + " None '" + json_sequence + "' " + port + " " + key
 
     ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
                            shell=False,
                            stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE)
-
-    # key will be used to stop verifier
-    return key
 
     #ssh usr32idc@txmtwo "python /home/beams/USR32IDC/temp/server_verifier.py conf, report_file, sequence, port, key"
 
@@ -243,25 +243,30 @@ def stop_verifier(host, port, key):
     Then the connection is closed.
     Parameters
     ----------
+    host : str
+        a remote computer
+    port : int
+        a port on which the remote server will listen
     key : str
         a string generated in start_verifier method, user as authentication key
+	
     Returns
     -------
-    None
+    none
     """
 
     class RemoteController:
-        def QueueServerClient(self, host, port, AUTHKEY):
+        def QueueServerClient(self, host, port, key):
             class QueueManager(SyncManager):
                 pass
-            QueueManager.register('stop_process')
-            self.manager = QueueManager(address = (host, port), authkey = AUTHKEY)
+            QueueManager.register('stop_verifier_process')
+            self.manager = QueueManager(address = (host, port), authkey = key)
             self.manager.connect()
 
         def stop_remote_process(self):            
             try:
                 conn = self.manager._Client(address = (host, port), authkey = key)
-                self.manager.stop_process()
+                self.manager.stop_verifier_process()
                 conn.close()
             except Exception:
                 pass
@@ -273,8 +278,7 @@ def stop_verifier(host, port, key):
 
     # this will execute command on the server
     remote_controller.stop_remote_process()
-
-    #Contact GitHub API Training Shop Blog About 
+		   
 
 def cleanup(global_PVs, variableDict, host, port, keys):
 	# stop remote process and wait for a second
