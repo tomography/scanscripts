@@ -12,6 +12,8 @@ import os
 import imp
 import traceback
 import signal
+import random
+import string
 
 from tomo_scan_lib import *
 
@@ -150,14 +152,14 @@ def mirror_fly_scan(rev=False):
 	return interf_arr
 
 
-def full_tomo_scan():
+def full_tomo_scan(key):
 	print 'start_scan()'
 	init_general_PVs(global_PVs, variableDict)
 	if variableDict.has_key('StopTheScan'):
-		cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
+		cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
 		return
 	#start verifier on remote machine
-        ver_keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT))
+        start_verifier(INSTRUMENT, None, variableDict, REMOTE_COMMAND, VER_HOST, VER_PORT, key)
 	#collect interferometer
 	interf_arrs = []
 	if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
@@ -198,15 +200,16 @@ def full_tomo_scan():
 	#move_dataset_to_run_dir()
 
 
-def main():
+def main(key):
 	update_variable_dict(variableDict)
-	full_tomo_scan()
+	full_tomo_scan(key)
 
 if __name__ == '__main__':
+    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
     def on_exit(sig, func=None):
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
+        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
         sys.exit(0)
     set_exit_handler(on_exit)
 
-    main()
+    main(key)
 
