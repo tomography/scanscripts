@@ -11,8 +11,6 @@ import shutil
 import os
 import imp
 import traceback
-import random
-import string
 import subprocess
 
 ShutterA_Open_Value = 0
