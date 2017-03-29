@@ -11,6 +11,9 @@ import shutil
 import os
 import imp
 import traceback
+import random
+import string
+import subprocess
 
 ShutterA_Open_Value = 0
 ShutterA_Close_Value = 1
@@ -218,9 +221,9 @@ def start_verifier(conf, report_file, variableDict, verifier_dir, host, port):
         pass
 
     json_sequence = json.dumps(sequence)
-    key = uuid.uuid4()
-    COMMAND="python " + verifier_dir + "server_verifier.py " + conf + ", " + report_file + ", " + json_sequence + \
-            ", " + port + ", " + key
+    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
+
+    COMMAND="python " + verifier_dir + "server_verifier.py " + conf + ", None, " + json_sequence + ", " + port + ", " + key
 
     ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
                            shell=False,
@@ -255,10 +258,10 @@ def stop_verifier(host, port, key):
             self.manager = QueueManager(address = (host, port), authkey = AUTHKEY)
             self.manager.connect()
 
-        def stop_remote_process(self):
-            self.manager.stop_process()
+        def stop_remote_process(self):            
             try:
                 conn = self.manager._Client(address = (host, port), authkey = key)
+                self.manager.stop_process()
                 conn.close()
             except Exception:
                 pass
@@ -271,7 +274,7 @@ def stop_verifier(host, port, key):
     # this will execute command on the server
     remote_controller.stop_remote_process()
 
-    Contact GitHub API Training Shop Blog About 
+    #Contact GitHub API Training Shop Blog About 
 
 def cleanup(global_PVs, variableDict, host, port, keys):
 	# stop remote process and wait for a second
