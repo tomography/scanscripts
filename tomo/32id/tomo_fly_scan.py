@@ -124,7 +124,7 @@ def start_scan(variableDict, detector_filename):
 	if variableDict.has_key('StopTheScan'):
 		cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
 		return
-        keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT))
+        ver_keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT))
 	get_calculated_num_projections(variableDict)
 	global_PVs['Fly_ScanControl'].put('Custom')
 	# Start scan sleep in min so min * 60 = sec
