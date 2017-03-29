@@ -21,9 +21,8 @@ from tomo_scan_lib import *
 # hardcoded values for verifier
 VER_HOST = "txmtwo"
 VER_PORT = "5011"
-VER_DIR = "/home/beams/USR32IDC/temp/"
-INSTRUMENT = "32id_micro"
-ver_keys = []
+VER_DIR = "/local/usr32idc/conda/data-quality/controller_server.sh"
+INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
 
 global variableDict
 
