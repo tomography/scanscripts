@@ -12,6 +12,8 @@ import os
 import imp
 import traceback
 import signal
+import random
+import string
 
 from tomo_scan_lib import *
 import tomo_fly_scan
@@ -19,9 +21,9 @@ import tomo_fly_scan
 # hardcoded values for verifier
 VER_HOST = "txmtwo"
 VER_PORT = "5011"
-VER_DIR = "/home/beams/USR32IDC/temp/"
-INSTRUMENT = "32id_micro"
-ver_keys = []
+VER_DIR = "/local/usr32idc/conda/data-quality/controller_server.sh"
+INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
+
 
 global variableDict
 
@@ -62,13 +64,13 @@ def set_exit_handler(func):
 def getVariableDict():
 	return variableDict
 
-def main():
+def main(key):
     update_variable_dict(variableDict)
     init_general_PVs(global_PVs, variableDict)
     if variableDict.has_key('StopTheScan'):
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
+        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
         return
-    ver_keys.append(start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT))
+    start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
     global_PVs['Fly_ScanControl'].put('Custom')
     FileName = global_PVs['HDF1_FileName'].get(as_string=True)
     FileTemplate = global_PVs['HDF1_FileTemplate'].get(as_string=True)
