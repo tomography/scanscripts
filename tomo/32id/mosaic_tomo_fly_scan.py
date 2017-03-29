@@ -105,10 +105,11 @@ def main(key):
 
 
 if __name__ == '__main__':
-    def on_exit(sig, func=None):
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, ver_keys)
+   key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
+   def on_exit(sig, func=None):
+        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
         sys.exit(0)
     set_exit_handler(on_exit)
 
-    main()
+    main(key)
 
