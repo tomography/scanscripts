@@ -21,7 +21,7 @@ from tomo_scan_lib import *
 # hardcoded values for verifier
 VER_HOST = "txmtwo"
 VER_PORT = "5011"
-VER_DIR = "/local/usr32idc/conda/data-quality/controller_server.sh"
+VER_DIR = "/local/usr32idc/conda/data-quality/"
 INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
 
 global variableDict
@@ -158,7 +158,7 @@ def full_tomo_scan(key):
 		cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
 		return
 	#start verifier on remote machine
-        start_verifier(INSTRUMENT, None, variableDict, REMOTE_COMMAND, VER_HOST, VER_PORT, key)
+        start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
 	#collect interferometer
 	interf_arrs = []
 	if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
