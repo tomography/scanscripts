@@ -20,7 +20,7 @@ from tomo_scan_lib import *
 # hardcoded values for verifier
 VER_HOST = "txmtwo"
 VER_PORT = "5011"
-VER_DIR = "/local/usr32idc/conda/data-quality/controller_server.sh"
+VER_DIR = "/local/usr32idc/conda/data-quality/"
 INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
 
 global variableDict
@@ -125,7 +125,7 @@ def start_scan(variableDict, detector_filename, key):
 	if variableDict.has_key('StopTheScan'):
 		cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
 		return
-        start_verifier(INSTRUMENT, None, variableDict, REMOTE_COMMAND, VER_HOST, VER_PORT, key)
+        start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
 	get_calculated_num_projections(variableDict)
 	global_PVs['Fly_ScanControl'].put('Custom')
 	# Start scan sleep in min so min * 60 = sec
