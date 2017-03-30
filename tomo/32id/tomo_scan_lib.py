@@ -166,7 +166,7 @@ def init_general_PVs(global_PVs, variableDict):
 	global_PVs['DCMputEnergy'] = PV('32ida:BraggEAO.VAL')
 
 
-def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key:
+def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
     """
     This function starts a real-time verifier application on a remote machine. It first starts a server that controls
     starting and stopping of the verifier. On starting the server this method will pass verifier arguments:
