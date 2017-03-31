@@ -11,7 +11,10 @@ import shutil
 import os
 import imp
 import traceback
+#import math
+#import numpy as np
 import subprocess
+from multiprocessing.managers import SyncManager
 
 ShutterA_Open_Value = 0
 ShutterA_Close_Value = 1
@@ -89,7 +92,7 @@ def init_general_PVs(global_PVs, variableDict):
 	#motor pv's
 	global_PVs['Motor_SampleX'] = PV('32idcTXM:mcs:c1:m2.VAL')
 	global_PVs['Motor_SampleY'] = PV('32idcTXM:xps:c1:m7.VAL')
-#	global_PVs['Motor_SampleRot'] = PV('32idcTXM:hydra:c0:m1.VAL')
+	#	global_PVs['Motor_SampleRot'] = PV('32idcTXM:hydra:c0:m1.VAL')
 	global_PVs['Motor_SampleRot'] = PV('32idcTXM:ens:c1:m1.VAL')
 	global_PVs['Motor_SampleZ'] = PV('32idcTXM:mcs:c1:m1.VAL')
 	global_PVs['Motor_X_Tile'] = PV('32idc01:m33.VAL')
@@ -158,7 +161,7 @@ def init_general_PVs(global_PVs, variableDict):
 	global_PVs['TIFF1_FileNumber'] = PV(variableDict['IOC_Prefix'] + 'TIFF1:FileNumber')
 	global_PVs['TIFF1_FileName'] = PV(variableDict['IOC_Prefix'] + 'TIFF1:FileName')
 	global_PVs['TIFF1_ArrayPort'] = PV(variableDict['IOC_Prefix'] + 'TIFF1:NDArrayPort')
-	
+
 	#energy
 	global_PVs['DCMmvt'] = PV('32ida:KohzuModeBO.VAL')
 	global_PVs['GAPputEnergy'] = PV('32id:ID32us_energy')
@@ -167,7 +170,7 @@ def init_general_PVs(global_PVs, variableDict):
 
 
 def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
-    """
+	"""
     This function starts a real-time verifier application on a remote machine. It first starts a server that controls
     starting and stopping of the verifier. On starting the server this method will pass verifier arguments:
     configuration file, report file, and sequence, and server arguments: port, and key.
@@ -187,59 +190,59 @@ def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
         a port on which the remote server will listen
     key : str
         a random string used for authentication
-	
+
     Returns
     -------
     none
     """
 
-    sequence = []
-    index = -1
-    try:
-        images = variableDict['PreDarkImages']
-        index += images
-        sequence.append(('data_dark', index))
-    except KeyError:
-        pass
-    try:
-        images = variableDict['PreWhiteImages']
-        index += images
-        sequence.append(('data_white', index))
-    except KeyError:
-        pass
-    try:
-        images = variableDict['Projections']
-        index += images
-        sequence.append(('data', index))
-    except KeyError:
-        pass
-    try:
-        images = variableDict['PostDarkImages']
-        index += images
-        sequence.append(('data_dark', index))
-    except KeyError:
-        pass
-    try:
-        images = variableDict['PostWhiteImages']
-        index += images
-        sequence.append(('data_white', index))
-    except KeyError:
-        pass
+	sequence = []
+	index = -1
+	try:
+		images = variableDict['PreDarkImages']
+		index += images
+		sequence.append(('data_dark', index))
+	except KeyError:
+		pass
+	try:
+		images = variableDict['PreWhiteImages']
+		index += images
+		sequence.append(('data_white', index))
+	except KeyError:
+		pass
+	try:
+		images = variableDict['Projections']
+		index += images
+		sequence.append(('data', index))
+	except KeyError:
+		pass
+	try:
+		images = variableDict['PostDarkImages']
+		index += images
+		sequence.append(('data_dark', index))
+	except KeyError:
+		pass
+	try:
+		images = variableDict['PostWhiteImages']
+		index += images
+		sequence.append(('data_white', index))
+	except KeyError:
+		pass
 
-    json_sequence = json.dumps(sequence).strip()
+	json_sequence = json.dumps(sequence).strip()
 
-    COMMAND="source " + ver_dir + "controller_server.sh " + ver_dir + " " + conf + " None '" + json_sequence + "' " + port + " " + key
+	COMMAND="source " + ver_dir + "controller_server.sh " + ver_dir + " " + conf + " None '" + json_sequence + "' " + port + " " + key
 
-    ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
-                           shell=False,
-                           stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE)
+	ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
+						   shell=False,
+						   stdout=subprocess.PIPE,
+						   stderr=subprocess.PIPE)
 
-    #ssh usr32idc@txmtwo "python /home/beams/USR32IDC/temp/server_verifier.py conf, report_file, sequence, port, key"
+    # ssh usr32idc@txmtwo "python /home/beams/USR32IDC/temp/server_verifier.py conf, report_file, sequence, port, key"
 
 
 def stop_verifier(host, port, key):
-    """
+	"""
     This method creates RemoteController instance that has a connection with remote server. Using this connection
     the code calls a 'stop_process' method on the remote server that will stop the verifier process.
     Then the connection is closed.
@@ -251,36 +254,36 @@ def stop_verifier(host, port, key):
         a port on which the remote server will listen
     key : str
         a string generated in start_verifier method, user as authentication key
-	
+
     Returns
     -------
     none
     """
 
-    class RemoteController:
-        def QueueServerClient(self, host, port, key):
-            class QueueManager(SyncManager):
-                pass
-            QueueManager.register('stop_verifier_process')
-            self.manager = QueueManager(address = (host, port), authkey = key)
-            self.manager.connect()
+	class RemoteController:
+		def QueueServerClient(self, host, port, key):
+			class QueueManager(SyncManager):
+				pass
+			QueueManager.register('stop_verifier_process')
+			self.manager = QueueManager(address = (host, port), authkey = key)
+			self.manager.connect()
 
-        def stop_remote_process(self):            
-            try:
-                conn = self.manager._Client(address = (host, port), authkey = key)
-                self.manager.stop_verifier_process()
-                conn.close()
-            except Exception:
-                pass
+		def stop_remote_process(self):
+			try:
+				conn = self.manager._Client(address = (host, port), authkey = key)
+				self.manager.stop_verifier_process()
+				conn.close()
+			except Exception:
+				pass
 
-    remote_controller = RemoteController()
+	remote_controller = RemoteController()
 
-    # this will connect to the server
-    remote_controller.QueueServerClient(host, port, key)
+	# this will connect to the server
+	remote_controller.QueueServerClient(host, port, key)
 
-    # this will execute command on the server
-    remote_controller.stop_remote_process()
-		   
+	# this will execute command on the server
+	remote_controller.stop_remote_process()
+
 
 def cleanup(global_PVs, variableDict, host, port, keys):
 	# stop remote process and wait for a second
@@ -337,7 +340,7 @@ def setup_writer(global_PVs, variableDict, filename=None):
 	print 'setup_writer()'
 	if variableDict.has_key('Recursive_Filter_Enabled'):
 		if variableDict['Recursive_Filter_Enabled'] == 1:
-#			global_PVs['Proc1_Callbacks'].put('Disable')
+			#			global_PVs['Proc1_Callbacks'].put('Disable')
 			global_PVs['Proc1_Callbacks'].put('Enable')
 			global_PVs['Proc1_Filter_Enable'].put('Disable')
 			global_PVs['HDF1_ArrayPort'].put('PROC1')
@@ -347,11 +350,11 @@ def setup_writer(global_PVs, variableDict, filename=None):
 			global_PVs['Proc1_AutoReset_Filter'].put( 'Yes' )
 			global_PVs['Proc1_Filter_Callbacks'].put( 'Array N only' )
 		else:
-#			global_PVs['Proc1_Callbacks'].put('Disable')
+			#			global_PVs['Proc1_Callbacks'].put('Disable')
 			global_PVs['Proc1_Filter_Enable'].put('Disable')
 			global_PVs['HDF1_ArrayPort'].put(global_PVs['Proc1_ArrayPort'].get())
 	else:
-#		global_PVs['Proc1_Callbacks'].put('Disable')
+		#		global_PVs['Proc1_Callbacks'].put('Disable')
 		global_PVs['Proc1_Filter_Enable'].put('Disable')
 		global_PVs['HDF1_ArrayPort'].put(global_PVs['Proc1_ArrayPort'].get())
 	global_PVs['HDF1_AutoSave'].put('Yes')
@@ -390,20 +393,20 @@ def capture_multiple_projections(global_PVs, variableDict, num_proj, frame_type)
 
 def move_sample_in(global_PVs, variableDict):
 	print 'move_sample_in()'
-#	global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXIn']), wait=True)
+	#	global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXIn']), wait=True)
 	global_PVs['Motor_SampleX'].put(float(variableDict['SampleXIn']), wait=True)
-#	global_PVs['Motor_SampleY'].put(float(variableDict['SampleYIn']), wait=True)
-#	global_PVs['Motor_SampleZ'].put(float(variableDict['SampleZIn']), wait=True)
+	#	global_PVs['Motor_SampleY'].put(float(variableDict['SampleYIn']), wait=True)
+	#	global_PVs['Motor_SampleZ'].put(float(variableDict['SampleZIn']), wait=True)
 	global_PVs['Motor_SampleRot'].put(0, wait=True)
 
 
 def move_sample_out(global_PVs, variableDict):
 	print 'move_sample_out()'
-#	global_PVs['Motor_SampleRot'].put(float(variableDict['SampleRotOut']), wait=True)
-#	global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXOut']), wait=True)
+	#	global_PVs['Motor_SampleRot'].put(float(variableDict['SampleRotOut']), wait=True)
+	#	global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXOut']), wait=True)
 	global_PVs['Motor_SampleX'].put(float(variableDict['SampleXOut']), wait=True)
-#	global_PVs['Motor_SampleY'].put(float(variableDict['SampleYOut']), wait=True)
-#	global_PVs['Motor_SampleZ'].put(float(variableDict['SampleZOut']), wait=True)
+	#	global_PVs['Motor_SampleY'].put(float(variableDict['SampleYOut']), wait=True)
+	#	global_PVs['Motor_SampleZ'].put(float(variableDict['SampleZOut']), wait=True)
 	global_PVs['Motor_SampleRot'].put(0, wait=True)
 
 def open_shutters(global_PVs, variableDict):
@@ -504,68 +507,68 @@ def move_energy(energy, global_PVs, variableDict):
 
 ########################## Interlaced #########################
 def bitreversed_decimal(dec_input, maxbits):
-# Description: Compute bit-reversed value of a decimal number 
-# Inputs:
-# in - Decimal input whose bit-reversed value must be computed
-# maxbits - Total number of bits in binary used to represent 'in' and 'out'.
-# Ouputs:
-# out - Bit-reversed value of 'in'.
+	# Description: Compute bit-reversed value of a decimal number
+	# Inputs:
+	# in - Decimal input whose bit-reversed value must be computed
+	# maxbits - Total number of bits in binary used to represent 'in' and 'out'.
+	# Ouputs:
+	# out - Bit-reversed value of 'in'.
 
-    if maxbits == 0:
-        bit_rev = 0
-        return
+	if maxbits == 0:
+		bit_rev = 0
+		return
 
-#    dec_input = bin(dec_input, maxbits)
-    dec_input = int(dec_input)
-    maxbits = int(maxbits)
-    
-    dec_input = bin(dec_input)
-    dec_input = dec_input[2:]
-    if len(dec_input)<maxbits:
-        dec_input = '0'*(maxbits-len(dec_input))+dec_input
-#    bit_rev = '0'*maxbits
-    bit_rev = str('')
-    for i in range(0,maxbits):
-#        print('  ** Loop #',i)
-#        print('       maxbits: ', maxbits)
-#        print('       dec_input', dec_input)
-        bit_rev = bit_rev + dec_input[maxbits-1-i]
-#        print('       bit_rev: ', bit_rev)
-    
-    bit_rev = int(bit_rev,2)
+	#    dec_input = bin(dec_input, maxbits)
+	dec_input = int(dec_input)
+	maxbits = int(maxbits)
 
-    return bit_rev
-    
+	dec_input = bin(dec_input)
+	dec_input = dec_input[2:]
+	if len(dec_input)<maxbits:
+		dec_input = '0'*(maxbits-len(dec_input))+dec_input
+	#    bit_rev = '0'*maxbits
+	bit_rev = str('')
+	for i in range(0,maxbits):
+		#        print('  ** Loop #',i)
+		#        print('       maxbits: ', maxbits)
+		#        print('       dec_input', dec_input)
+		bit_rev = bit_rev + dec_input[maxbits-1-i]
+	#        print('       bit_rev: ', bit_rev)
+
+	bit_rev = int(bit_rev,2)
+
+	return bit_rev
+
 
 def gen_interlaced_views(N, K, N_p):
-# Description: Generate interlaced view angles
-# Formula: the_views[n] = [(n mod(N/K))K + Br(floor(nK/N) mod(K))]*pi/N;
-#          mod denotes modulo, floor gives the lowest integer value, Br denotes bit-reversal 
-# Input: 
-# N - Total number of distinct view angles in a frame
-# K - Number of interlaced sub-frames in each frame
-# N_p - Total number of view angles (Note that angles repeat from frame to frame)
-# Output:
-# the_views - Interlaced view angles
+	# Description: Generate interlaced view angles
+	# Formula: the_views[n] = [(n mod(N/K))K + Br(floor(nK/N) mod(K))]*pi/N;
+	#          mod denotes modulo, floor gives the lowest integer value, Br denotes bit-reversal
+	# Input:
+	# N - Total number of distinct view angles in a frame
+	# K - Number of interlaced sub-frames in each frame
+	# N_p - Total number of view angles (Note that angles repeat from frame to frame)
+	# Output:
+	# the_views - Interlaced view angles
 
-    k = int(np.log2(K))
-    L = N/K # Number of equi-spaced view angles in a sub-frame
-    delta_theta = 180/N # Determines scaling of output
-    
-#    print(k, L, K)
-    
-    the_views = np.zeros((N_p))
-    buf1 = np.zeros((N_p))
-    buf2 = np.zeros((N_p))
-    
-    for i in range(0,N_p):
-#        print('**** Main loop #', i)
-        buf1[i] = np.mod(i,L)*K
-        buf2[i] = bitreversed_decimal(np.mod(np.floor(i/L), K), k)
-        the_views[i] = buf1[i] + buf2[i]
-        the_views[i] = the_views[i]*delta_theta
-    
-    return the_views
+	k = int(np.log2(K))
+	L = N/K # Number of equi-spaced view angles in a sub-frame
+	delta_theta = 180/N # Determines scaling of output
+
+	#    print(k, L, K)
+
+	the_views = np.zeros((N_p))
+	buf1 = np.zeros((N_p))
+	buf2 = np.zeros((N_p))
+
+	for i in range(0,N_p):
+		#        print('**** Main loop #', i)
+		buf1[i] = np.mod(i,L)*K
+		buf2[i] = bitreversed_decimal(np.mod(np.floor(i/L), K), k)
+		the_views[i] = buf1[i] + buf2[i]
+		the_views[i] = the_views[i]*delta_theta
+
+	return the_views
 
 
 ## Example:

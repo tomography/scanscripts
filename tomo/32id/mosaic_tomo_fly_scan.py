@@ -33,9 +33,9 @@ variableDict = {'PreDarkImages': 5,
                 'PostDarkImages': 5,
                 'PostWhiteImages': 10,
                 'SampleXOut': 10,
-#                'SampleYOut': 0.0,
+                #                'SampleYOut': 0.0,
                 'SampleXIn': 0.0,
-#                'SampleYIn': -10.0,
+                #                'SampleYIn': -10.0,
                 'SampleStartPos': 0.0,
                 'SampleEndPos': 180.0,
                 'StartSleep_min': 0,
@@ -50,7 +50,7 @@ variableDict = {'PreDarkImages': 5,
                 'Y_Start': 1.24,
                 'Y_NumTiles': 4,
                 'Y_Stop': 3.1,
-#                'SampleMoveSleep': 0.0,
+                #                'SampleMoveSleep': 0.0,
                 'MosaicMoveSleep': 5.0,
                 'UseInterferometer': 0
                 }
@@ -62,7 +62,7 @@ def set_exit_handler(func):
     signal.signal(signal.SIGTERM, func)
 
 def getVariableDict():
-	return variableDict
+    return variableDict
 
 def main(key):
     update_variable_dict(variableDict)
@@ -105,8 +105,8 @@ def main(key):
 
 
 if __name__ == '__main__':
-   key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
-   def on_exit(sig, func=None):
+    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
+    def on_exit(sig, func=None):
         cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
         sys.exit(0)
     set_exit_handler(on_exit)
