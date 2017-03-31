@@ -229,7 +229,7 @@ def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
 	except KeyError:
 		pass
 
-	json_sequence = json.dumps(sequence).strip()
+	json_sequence = json.dumps(sequence).replace(" ","")
 
 	COMMAND="source " + ver_dir + "controller_server.sh " + ver_dir + " " + conf + " None '" + json_sequence + "' " + port + " " + key
 
