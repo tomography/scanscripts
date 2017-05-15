@@ -231,7 +231,7 @@ def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
 
 	json_sequence = json.dumps(sequence).replace(" ","")
 
-	COMMAND="source " + ver_dir + "controller_server.sh " + ver_dir + " " + conf + " None '" + json_sequence + "' " + port + " " + key
+	COMMAND="bash && " + "source " + ver_dir + "controller_server.sh " + ver_dir + " " + conf + " None '" + json_sequence + "' " + port + " " + key
 
 	ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
 						   shell=False,
