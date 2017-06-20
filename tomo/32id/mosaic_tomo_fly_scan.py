@@ -11,9 +11,19 @@ import shutil
 import os
 import imp
 import traceback
+import signal
+import random
+import string
 
 from tomo_scan_lib import *
 import tomo_fly_scan
+
+# hardcoded values for verifier
+VER_HOST = "txmtwo"
+VER_PORT = "5011"
+VER_DIR = "/local/usr32idc/conda/data-quality/controller_server.sh"
+INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
+
 
 global variableDict
 
@@ -23,9 +33,9 @@ variableDict = {'PreDarkImages': 5,
                 'PostDarkImages': 5,
                 'PostWhiteImages': 10,
                 'SampleXOut': 10,
-#                'SampleYOut': 0.0,
+                #                'SampleYOut': 0.0,
                 'SampleXIn': 0.0,
-#                'SampleYIn': -10.0,
+                #                'SampleYIn': -10.0,
                 'SampleStartPos': 0.0,
                 'SampleEndPos': 180.0,
                 'StartSleep_min': 0,
@@ -40,7 +50,7 @@ variableDict = {'PreDarkImages': 5,
                 'Y_Start': 1.24,
                 'Y_NumTiles': 4,
                 'Y_Stop': 3.1,
-#                'SampleMoveSleep': 0.0,
+                #                'SampleMoveSleep': 0.0,
                 'MosaicMoveSleep': 5.0,
                 'UseInterferometer': 0
                 }
@@ -48,15 +58,19 @@ variableDict = {'PreDarkImages': 5,
 
 global_PVs = {}
 
-def getVariableDict():
-	return variableDict
+def set_exit_handler(func):
+    signal.signal(signal.SIGTERM, func)
 
-def main():
+def getVariableDict():
+    return variableDict
+
+def main(key):
     update_variable_dict(variableDict)
     init_general_PVs(global_PVs, variableDict)
     if variableDict.has_key('StopTheScan'):
-        stop_scan(global_PVs, variableDict)
+        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
         return
+    start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
     global_PVs['Fly_ScanControl'].put('Custom')
     FileName = global_PVs['HDF1_FileName'].get(as_string=True)
     FileTemplate = global_PVs['HDF1_FileTemplate'].get(as_string=True)
@@ -91,5 +105,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
+    def on_exit(sig, func=None):
+        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
+        sys.exit(0)
+    set_exit_handler(on_exit)
+
+    main(key)
 
