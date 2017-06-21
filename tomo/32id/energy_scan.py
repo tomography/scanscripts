@@ -1,10 +1,10 @@
 #######################
 ##### To be tested!
-##### for each energy step, a projection and then a flat field is being acquired
-##### The script is calling the move move_energy function from tomo_scan_lib
 
-'''
-TomoScan for Sector 32 ID C
+'''For each energy step, a projection and then a flat field is being
+acquired. The script calls the move move_energy function from
+tomo_scan_lib.
+
 '''
 
 import sys

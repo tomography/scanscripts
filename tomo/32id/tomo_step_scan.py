@@ -32,26 +32,26 @@ variableDict = {'PreDarkImages': 5,
                 'PostDarkImages': 0,
                 'PostWhiteImages': 5,
                 'SampleXOut': 0.05,
-                #		'SampleYOut': 0.1,
-                #		'SampleZOut': 0,
-                #		'SampleRotOut': 90.0,
+                # 'SampleYOut': 0.1,
+                # 'SampleZOut': 0,
+                # 'SampleRotOut': 90.0,
                 'SampleXIn': 0.0,
-                #		'SampleYIn': 0.1,
-                #		'SampleZIn': 0.0,
+                # 'SampleYIn': 0.1,
+                # 'SampleZIn': 0.0,
                 'SampleStart_Rot': 0.0,
                 'SampleEnd_Rot': 180.0,
                 'StartSleep_min': 0,
                 'StabilizeSleep_ms': 1,
                 'ExposureTime': 3,
-                #		'ShutterOpenDelay': 0.05,
+                # 'ShutterOpenDelay': 0.05,
                 'IOC_Prefix': '32idcPG3:',
-                #		'ExternalShutter': 0,
+                # 'ExternalShutter': 0,
                 'FileWriteMode': 'Stream',
                 'rot_speed_deg_per_s': 0.5,
                 'Recursive_Filter_Enabled': 0,
                 'Recursive_Filter_N_Images': 2,
                 'Recursive_Filter_Type': 'RecursiveAve'
-                #		'UseInterferometer': 0
+                # 'UseInterferometer': 0
                 }
 
 global_PVs = {}
@@ -192,8 +192,8 @@ def full_tomo_scan(key):
         close_shutters(global_PVs, variableDict)
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostDarkImages']), FrameTypeDark)
     close_shutters(global_PVs, variableDict)
-    #if int(variableDict['ExternalShutter']) == 1:
-    #	global_PVs['SetSoftGlueForStep'].put('0')
+    # if int(variableDict['ExternalShutter']) == 1:
+    #     global_PVs['SetSoftGlueForStep'].put('0')
     add_extra_hdf5(global_PVs, variableDict, theta, interf_arrs)
     reset_CCD(global_PVs, variableDict)
     # move_dataset_to_run_dir()
@@ -209,6 +209,6 @@ if __name__ == '__main__':
         cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
         sys.exit(0)
     set_exit_handler(on_exit)
-
+    
     main(key)
 
