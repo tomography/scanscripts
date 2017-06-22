@@ -370,7 +370,16 @@ def setup_writer(global_PVs, variableDict, filename=None):
     global_PVs['HDF1_DeleteDriverFile'].put('No')
     global_PVs['HDF1_EnableCallbacks'].put('Enable')
     global_PVs['HDF1_BlockingCallbacks'].put('No')
-    totalProj = int(variableDict['PreDarkImages']) + int(variableDict['PreWhiteImages']) + int(variableDict['Projections']) + int(variableDict['PostDarkImages']) + int(variableDict['PostWhiteImages'])
+    # Count total number of projections needed
+    proj_vars = ['PreDarkImages', 'PreWhiteImages',
+                 'PostDarkImages', 'PostWhiteImages']
+    totalProj = 0
+    for var in proj_vars:
+        totalProj += int(variableDict.get(var, 0))
+    # Add number for actual sample projections
+    n_proj = int(variableDict.get('Projections', 0))
+    proj_per_rot = int(variableDict.get('ProjectionsPerRot', 1))
+    tota1lProj += n_proj * proj_per_rot
     global_PVs['HDF1_NumCapture'].put(totalProj)
     global_PVs['HDF1_FileWriteMode'].put(str(variableDict['FileWriteMode']), wait=True)
     if not filename == None:
@@ -553,7 +562,7 @@ def bitreversed_decimal(dec_input, maxbits):
         # print('       maxbits: ', maxbits)
         # print('       dec_input', dec_input)
         bit_rev = bit_rev + dec_input[maxbits-1-i]
-        #        print('       bit_rev: ', bit_rev)
+        # print('       bit_rev: ', bit_rev)
     
     bit_rev = int(bit_rev,2)
     

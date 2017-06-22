@@ -136,7 +136,6 @@ def start_scan():
         return
     # Start scan sleep in min so min * 60 = sec
     time.sleep(float(variableDict['StartSleep_min']) * 60.0)
-    setup_detector_energy_scan(global_PVs, variableDict)
     setup_writer(global_PVs, variableDict)
     if int(variableDict['PreDarkImages']) > 0:
         close_shutters(global_PVs, variableDict)
