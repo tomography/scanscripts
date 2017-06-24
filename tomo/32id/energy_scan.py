@@ -20,6 +20,7 @@ import logging
 import h5py
 from epics import PV
 from tomo_scan_lib import *
+from txm import TXM
 
 global variableDict
 variableDict = {
@@ -54,7 +55,16 @@ def getVariableDict():
     return variableDict
 
 
-def energy_scan():
+def energy_scan(txm):
+    """Conduct a scan across a range of X-ray energies.
+    
+    At each energy collect micrographs.
+    
+    Parameters
+    ----------
+    txm : TXM
+      An instance of the TXM() class.
+    """
     log.debug("energy_scan() called.")
     # Extract variables from variableDict:
     Energy_Start = float(variableDict['Energy_Start'])
@@ -73,17 +83,17 @@ def energy_scan():
     wait_pv(global_PVs['EnergyWait'], 0.05)
     energy = Energy_Start
     num_iters = int( (Energy_End - Energy_Start) / Energy_Step ) +1
-    print 'Capturing ', num_iters, 'energies'
+    log.info('Capturing %d energies', num_iters)
     for i in range(num_iters):
-        print 'Energy ', energy
-        print 'Stabilize Sleep (ms)', StabilizeSleep_ms
+        log.debug('Capturing energy: %f kEV', energy)
+        log.debug('Stabilize Sleep %f ms', StabilizeSleep_ms)
         time.sleep(StabilizeSleep_ms / 1000.0)
         
         variableDict.update({'new_Energy': energy})
         # Call move energy function: adjust ZP (& CCD position if constant mag is checked)
         move_energy(global_PVs, variableDict)
         
-        print 'Stabilize Sleep (ms)', variableDict['StabilizeSleep_ms']
+        log.debug('Stabilize Sleep %f ms', StabilizeSleep_ms)
         time.sleep(StabilizeSleep_ms / 1000.0)
         
         # save theta to array
@@ -128,21 +138,27 @@ def add_energy_arr(energy_arr):
         traceback.print_exc(file=sys.stdout)
 
 
-def start_scan():
+def start_scan(txm):
     log.debug('start_scan() called')
-    init_general_PVs(global_PVs, variableDict)
     if variableDict.has_key('StopTheScan'): # stopping the scan in a clean way
         stop_scan(global_PVs, variableDict)
         return
     # Start scan sleep in min so min * 60 = sec
+    log.debug("Sleeping for %f min", float(variableDict['StartSleep_min']))
     time.sleep(float(variableDict['StartSleep_min']) * 60.0)
-    setup_writer(global_PVs, variableDict)
+    # setup_writer(global_PVs, variableDict)
+    txm.setup_writer(variableDict)
     if int(variableDict['PreDarkImages']) > 0:
         close_shutters(global_PVs, variableDict)
         log.info('Capturing Pre Dark Field')
         capture_multiple_projections(int(variableDict['PreDarkImages']), FrameTypeDark)
-    move_sample_in(global_PVs, variableDict)
-    open_shutters(global_PVs, variableDict)
+    sample_pos = (variableDict.get('SampleXIn', None),
+                  variableDict.get('SampleYIn', None),
+                  variableDict.get('SampleZIn', None))
+    txm.move_sample(*sample_pos)
+    # move_sample_in(global_PVs, variableDict)
+    txm.open_shutters()
+    # open_shutters(global_PVs, variableDict)
     energy_arr = []
     # global_PVs['Cam1_FrameType'].put(FrameTypeWhite, wait=True)
     energy_arr += energy_scan()
@@ -156,8 +172,14 @@ def start_scan():
 
 def main():
     update_variable_dict()
-    start_scan()
+    # Create the microscope object
+    txm = TXM()
+    start_scan(txm=txm)
 
 
 if __name__ == '__main__':
+    # Set up default stream logging
+    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
+    logging.basicConfig(level=logging.DEBUG)
+    # Enter the main script function
     main()

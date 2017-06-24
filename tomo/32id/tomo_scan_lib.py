@@ -6,8 +6,6 @@ Microscope.
 import sys
 import json
 import time
-from epics import PV
-import h5py
 import shutil
 import os
 import imp
@@ -16,6 +14,14 @@ import traceback
 #import numpy as np
 import subprocess
 from multiprocessing.managers import SyncManager
+import logging
+import warnings
+
+from epics import PV
+import h5py
+
+from txm import TXM
+
 
 ShutterA_Open_Value = 0
 ShutterA_Close_Value = 1
@@ -31,6 +37,11 @@ UseShutterB = 1
 PG_Trigger_External_Trigger = 1
 Recursive_Filter_Type = 'RecursiveAve'
 
+has_permit = (UseShutterA or UseShutterB)
+
+
+log = logging.getLogger(__name__)
+
 
 def update_variable_dict(variableDict):
     argDic = {}
@@ -43,28 +54,18 @@ def update_variable_dict(variableDict):
     print 'new variable dict', variableDict
 
 
-#wait on a pv to be a value until max_timeout (default forever)
 def wait_pv(pv, wait_val, max_timeout_sec=-1):
-    print 'wait_pv(', pv.pvname, wait_val, max_timeout_sec, ')'
-    #delay for pv to change
-    time.sleep(.01)
-    startTime = time.time()
-    while(True):
-        pv_val = pv.get()
-        if (pv_val != wait_val):
-            if max_timeout_sec > -1:
-                curTime = time.time()
-                diffTime = curTime - startTime
-                if diffTime >= max_timeout_sec:
-                    return False
-            time.sleep(.01)
-        else:
-            return True
+    """wait on a pv to be a value until max_timeout (default forever)"""
+    # Let the user know that there's a better way
+    txm = TXM()
+    txm.has_permit = True
+    return txm.wait_pv(pv=pv, target_val=wait_val, timeout=max_timeout_sec)
 
 
 def init_general_PVs(global_PVs, variableDict):
-    print 'init_PVs()'
-    #init detector pv's
+    log.debug('init_PVs() called')
+    warnings.warn('Should not call the init_general_PVs method.', RuntimeWarning)
+    # init detector pv's
     global_PVs['Cam1_ImageMode'] = PV(variableDict['IOC_Prefix'] + 'cam1:ImageMode')
     global_PVs['Cam1_ArrayCallbacks'] = PV(variableDict['IOC_Prefix'] + 'cam1:ArrayCallbacks')
     global_PVs['Cam1_AcquirePeriod'] = PV(variableDict['IOC_Prefix'] + 'cam1:AcquirePeriod')
@@ -283,6 +284,7 @@ def stop_verifier(host, port, key):
             except Exception:
                 pass
     
+    log.debug("Creating remote controller")
     remote_controller = RemoteController()
     
     # this will connect to the server
@@ -346,46 +348,7 @@ def setup_detector(global_PVs, variableDict):
 
 
 def setup_writer(global_PVs, variableDict, filename=None):
-    print 'setup_writer()'
-    if variableDict.has_key('Recursive_Filter_Enabled'):
-        if variableDict['Recursive_Filter_Enabled'] == 1:
-            # global_PVs['Proc1_Callbacks'].put('Disable')
-            global_PVs['Proc1_Callbacks'].put('Enable')
-            global_PVs['Proc1_Filter_Enable'].put('Disable')
-            global_PVs['HDF1_ArrayPort'].put('PROC1')
-            global_PVs['Proc1_Filter_Type'].put( Recursive_Filter_Type )
-            global_PVs['Proc1_Num_Filter'].put( int( variableDict['Recursive_Filter_N_Images'] ) )
-            global_PVs['Proc1_Reset_Filter'].put( 1 )
-            global_PVs['Proc1_AutoReset_Filter'].put( 'Yes' )
-            global_PVs['Proc1_Filter_Callbacks'].put( 'Array N only' )
-        else:
-            # global_PVs['Proc1_Callbacks'].put('Disable')
-            global_PVs['Proc1_Filter_Enable'].put('Disable')
-            global_PVs['HDF1_ArrayPort'].put(global_PVs['Proc1_ArrayPort'].get())
-    else:
-        # global_PVs['Proc1_Callbacks'].put('Disable')
-        global_PVs['Proc1_Filter_Enable'].put('Disable')
-        global_PVs['HDF1_ArrayPort'].put(global_PVs['Proc1_ArrayPort'].get())
-    global_PVs['HDF1_AutoSave'].put('Yes')
-    global_PVs['HDF1_DeleteDriverFile'].put('No')
-    global_PVs['HDF1_EnableCallbacks'].put('Enable')
-    global_PVs['HDF1_BlockingCallbacks'].put('No')
-    # Count total number of projections needed
-    proj_vars = ['PreDarkImages', 'PreWhiteImages',
-                 'PostDarkImages', 'PostWhiteImages']
-    totalProj = 0
-    for var in proj_vars:
-        totalProj += int(variableDict.get(var, 0))
-    # Add number for actual sample projections
-    n_proj = int(variableDict.get('Projections', 0))
-    proj_per_rot = int(variableDict.get('ProjectionsPerRot', 1))
-    tota1lProj += n_proj * proj_per_rot
-    global_PVs['HDF1_NumCapture'].put(totalProj)
-    global_PVs['HDF1_FileWriteMode'].put(str(variableDict['FileWriteMode']), wait=True)
-    if not filename == None:
-        global_PVs['HDF1_FileName'].put(filename)
-    global_PVs['HDF1_Capture'].put(1)
-    wait_pv(global_PVs['HDF1_Capture'], 1)
+    assert False
 
 
 def capture_multiple_projections(global_PVs, variableDict, num_proj, frame_type):
@@ -411,42 +374,54 @@ def capture_multiple_projections(global_PVs, variableDict, num_proj, frame_type)
 
 
 def move_sample_in(global_PVs, variableDict):
-    print 'move_sample_in()'
+    log.debug('move_sample_in() called')
+    # Get the relevant x, y and z components
+    x = float(variableDict['SampleXIn'])
+    # y = float(variableDict['SampleYIn'])
+    # z = float(variableDict['SampleZIn'])
     # global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXIn']), wait=True)
-    global_PVs['Motor_SampleX'].put(float(variableDict['SampleXIn']), wait=True)
+    global_PVs['Motor_SampleX'].put(x, wait=True)
     # global_PVs['Motor_SampleY'].put(float(variableDict['SampleYIn']), wait=True)
     # global_PVs['Motor_SampleZ'].put(float(variableDict['SampleZIn']), wait=True)
     global_PVs['Motor_SampleRot'].put(0, wait=True)
+    log.info("Sample moved in to (x=%f)", x)
 
 
 def move_sample_out(global_PVs, variableDict):
-    print 'move_sample_out()'
+    log.debug('move_sample_out() called')
+    # Get the relevant x, y and z components
+    x = float(variableDict['SampleXOut'])
+    y = float(variableDict['SampleYOut'])
+    z = float(variableDict['SampleZOut'])
     # global_PVs['Motor_SampleRot'].put(float(variableDict['SampleRotOut']), wait=True)
     # global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXOut']), wait=True)
     global_PVs['Motor_SampleX'].put(float(variableDict['SampleXOut']), wait=True)
     # global_PVs['Motor_SampleY'].put(float(variableDict['SampleYOut']), wait=True)
     # global_PVs['Motor_SampleZ'].put(float(variableDict['SampleZOut']), wait=True)
     global_PVs['Motor_SampleRot'].put(0, wait=True)
+    log.info("Sample moved out to (%f, %f, %f)", x, y, z)
 
 
 def open_shutters(global_PVs, variableDict):
-    print 'open_shutters()'
+    log.debug('Opening shutters...')
     if UseShutterA > 0:
         global_PVs['ShutterA_Open'].put(1, wait=True)
         wait_pv(global_PVs['ShutterA_Move_Status'], ShutterA_Open_Value)
     if UseShutterB > 0:
         global_PVs['ShutterB_Open'].put(1, wait=True)
         wait_pv(global_PVs['ShutterB_Move_Status'], ShutterB_Open_Value)
+    log.info('Shutters opened.')
 
 
 def close_shutters(global_PVs, variableDict):
-    print 'close_shutters()'
+    log.debug('Closing shutters...')
     if UseShutterA > 0:
         global_PVs['ShutterA_Close'].put(1, wait=True)
         wait_pv(global_PVs['ShutterA_Move_Status'], ShutterA_Close_Value)
     if UseShutterB > 0:
         global_PVs['ShutterB_Close'].put(1, wait=True)
         wait_pv(global_PVs['ShutterB_Move_Status'], ShutterB_Close_Value)
+    log.info("Shutters closed")
 
 
 def add_theta(global_PVs, variableDict, theta_arr):
