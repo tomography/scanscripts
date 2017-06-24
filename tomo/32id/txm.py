@@ -87,9 +87,7 @@ class TxmPV(object):
         if txm.is_attached and permit_clear:
             pv = self.get_epics_PV(txm)
             pv.put(val)
-    
-    def __set_name__(self, obj):
-        print(obj)
+
 
 class permit_required():
     """Decorates a method so it can only open with a permit.
@@ -269,8 +267,8 @@ class TXM():
     
     def __init__(self, has_permit=False, is_attached=True, ioc_prefix="",
                  use_shutter_A=False, use_shutter_B=False):
-        self.has_permit = has_permit
         self.is_attached = is_attached
+        self.has_permit = has_permit
         self.ioc_prefix = ioc_prefix
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
@@ -287,17 +285,13 @@ class TXM():
         - ``self.has_permit`` has not been set to ``True``
         
         """
-        # decision = self.is_attached and self._has_permit
-        # decision = self.has_permit
-        # print(decision)
-        assert False
-        decision = False
-        print(decision)
+        if self._has_permit and not self.is_attached:
+            log.debug('Denying permit: TXM not attached.')
+        decision = self.is_attached and self._has_permit
         return decision
     
     @has_permit.setter
     def has_permit(self, val):
-        print(val)
         self._has_permit = val
     
     @permit_required(return_value=True)

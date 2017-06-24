@@ -142,6 +142,10 @@ class TXMTestCase(unittest.TestCase):
         txm.is_attached = True
         txm.has_permit = False
         self.assertFalse(txm.has_permit)
+        # If the device has permit but is not attached
+        txm.is_attached = False
+        txm.has_permit = True
+        self.assertFalse(txm.has_permit)
         # Now if the device has permit
         txm.is_attached = True
         txm.has_permit = True

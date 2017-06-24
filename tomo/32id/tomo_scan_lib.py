@@ -3,6 +3,7 @@ Microscope.
 
 '''
 
+from __future__ import print_function
 import sys
 import json
 import time
@@ -48,10 +49,10 @@ def update_variable_dict(variableDict):
     if len(sys.argv) > 1:
         strArgv = sys.argv[1]
         argDic = json.loads(strArgv)
-    print 'orig variable dict', variableDict
+    print('orig variable dict', variableDict)
     for k,v in argDic.iteritems():
         variableDict[k] = v
-    print 'new variable dict', variableDict
+    print('new variable dict', variableDict)
 
 
 def wait_pv(pv, wait_val, max_timeout_sec=-1):
@@ -316,7 +317,7 @@ def reset_CCD(global_PVs, variableDict):
 
 
 def setup_detector(global_PVs, variableDict):
-    print 'setup_detector()'
+    print('setup_detector()')
     global_PVs['Cam1_ImageMode'].put('Multiple')
     global_PVs['Cam1_ArrayCallbacks'].put('Enable')
     #global_PVs['Image1_Callbacks'].put('Enable')
@@ -352,7 +353,7 @@ def setup_writer(global_PVs, variableDict, filename=None):
 
 
 def capture_multiple_projections(global_PVs, variableDict, num_proj, frame_type):
-    print 'capture_multiple_projections(', num_proj, ')'
+    print('capture_multiple_projections(', num_proj, ')')
     wait_time_sec = int(variableDict['ExposureTime']) + 5
     global_PVs['Cam1_ImageMode'].put('Multiple')
     global_PVs['Cam1_FrameType'].put(frame_type)
@@ -425,7 +426,7 @@ def close_shutters(global_PVs, variableDict):
 
 
 def add_theta(global_PVs, variableDict, theta_arr):
-    print 'add_theta()'
+    print('add_theta()')
     fullname = global_PVs['HDF1_FullFileName_RBV'].get(as_string=True)
     try:
         hdf_f = h5py.File(fullname, mode='a')
@@ -438,11 +439,11 @@ def add_theta(global_PVs, variableDict, theta_arr):
 
 
 def add_extra_hdf5(global_PVs, variableDict, theta_arr, interf_arrs):
-    print 'add_extra_hdf5()'
+    print('add_extra_hdf5()')
     wait_pv(global_PVs['HDF1_Capture_RBV'], 0, 10.0)
     fullname = global_PVs['HDF1_FullFileName_RBV'].get(as_string=True)
     try:
-        print 'Opening hdf5 file ',fullname
+        print('Opening hdf5 file ',fullname)
         hdf_f = h5py.File(fullname, mode='a')
         theta_ds = hdf_f.create_dataset('/exchange/theta', (len(theta_arr),))
         theta_ds[:] = theta_arr[:]
@@ -457,7 +458,7 @@ def add_extra_hdf5(global_PVs, variableDict, theta_arr, interf_arrs):
 
 
 def move_dataset_to_run_dir(global_PVs, variableDict):
-    print 'move_dataset_to_run_dir()'
+    print('move_dataset_to_run_dir()')
     try:
         txm_ui = imp.load_source('txm_ui', '/local/usr32idc/DMagic/doc/demo/txm_ui.py')
         run_dir = txm_ui.directory()
@@ -466,11 +467,11 @@ def move_dataset_to_run_dir(global_PVs, variableDict):
         run_full_path = run_dir + '/' + base_name
         shutil.move(full_path, run_full_path)
     except:
-        print 'error moving dataset to run directory'
+        print('error moving dataset to run directory')
 
 
 def move_energy(energy, global_PVs, variableDict):
-    print 'move_energy()', energy
+    print('move_energy()', energy)
     prev_energy = float(global_PVs['DCMputEnergy'].get())
     curr_CCD_location = float(global_PVs['CCD_Motor'].get())
     
@@ -478,7 +479,7 @@ def move_energy(energy, global_PVs, variableDict):
     ZP_focal = ZP_diameter * drn / (1000.0 * landa)
     D = (curr_CCD_location + math.sqrt(curr_CCD_location * curr_CCD_location - 4.0 * curr_CCD_location * ZP_focal) ) / 2.0
     Mag = (D - ZP_focal) / ZP_focal
-    print 'mag', Mag
+    print('mag', Mag)
     global_PVs['DCMmvt'].put(1)
     
     landa = 1240.0 / (energy * 1000.0)
@@ -486,9 +487,9 @@ def move_energy(energy, global_PVs, variableDict):
     dist_ZP_ccd = Mag * ZP_focal + ZP_focal
     ZP_WD = dist_ZP_ccd * ZP_focal / (dist_ZP_ccd - ZP_focal)
     CCD_location = ZP_WD + dist_ZP_ccd
-    print 'move ccd ', CCD_location
+    print('move ccd ', CCD_location)
     global_PVs['CCD_Motor'].put(CCD_location, wait=True)
-    print 'move zp ', ZP_WD
+    print('move zp ', ZP_WD)
     global_PVs['ZpLocation'].put(ZP_WD, wait=True)
     
     global_PVs['DCMputEnergy'].put(energy, wait=True)

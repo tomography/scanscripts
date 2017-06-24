@@ -140,7 +140,7 @@ def add_energy_arr(energy_arr):
 
 def start_scan(txm):
     log.debug('start_scan() called')
-    if variableDict.has_key('StopTheScan'): # stopping the scan in a clean way
+    if 'StopTheScan' in variableDict.keys(): # stopping the scan in a clean way
         stop_scan(global_PVs, variableDict)
         return
     # Start scan sleep in min so min * 60 = sec
@@ -161,7 +161,7 @@ def start_scan(txm):
     # open_shutters(global_PVs, variableDict)
     energy_arr = []
     # global_PVs['Cam1_FrameType'].put(FrameTypeWhite, wait=True)
-    energy_arr += energy_scan()
+    energy_arr += energy_scan(txm)
     # move_sample_out()
     # global_PVs['Cam1_FrameType'].put(FrameTypeData, wait=True)
     # energy_scan()
