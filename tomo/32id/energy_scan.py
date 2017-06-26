@@ -34,19 +34,22 @@ variableDict = {
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 0.5,
-    'IOC_Prefix': '32idcPG3:',
+    # 'IOC_Prefix': '32idcPG3:',
     'FileWriteMode': 'Stream',
     'Energy_Start': 6.7,
     'Energy_End': 6.8, # Inclusive
     'Energy_Step': 0.001,
     'ZP_diameter': 180,
-    'ShutterPermit': 0,
+    # 'ShutterPermit': 0,
     'drn': 60,
     'constant_mag': 1, # 1 means CCD will move to maintain constant magnification
     'Offset': 0.15,
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
 }
+
+IOC_PREFIX = '32idcPG3'
+SHUTTER_PERMIT = False
 
 log = logging.getLogger(__name__)
 
@@ -103,12 +106,13 @@ def energy_scan(txm):
         # Pause for a moment to allow the beam to stabilize
         log.debug('Stabilize Sleep %f ms', StabilizeSleep_ms)
         time.sleep(StabilizeSleep_ms / 1000.0)
+
         with txm.wait_pvs():
             txm.move_sample(*sample_pos)
-            txm.move_energy(energy, gap_offset=offset)
+            txm.move_energy(energy, gap_offset=offset)\
         log.debug('Stabilize Sleep %f ms', StabilizeSleep_ms)
         time.sleep(StabilizeSleep_ms / 1000.0)
-       
+     
         # Sample projection acquisition:
         #-------------------------------
         log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
@@ -136,8 +140,21 @@ def energy_scan(txm):
     return energies
 
 
+open_shutters(variableDict, global_PVs)
+txm.open_shutters()
+
+global_PVs['CCD_Motor'].put(1)
+txm.CCD_Motor = 1
+
+float(global_PVs['CCD_Motor'].get())
+txm.CCD_Motor
+
+
 def start_scan(txm):
     log.debug('start_scan() called')
+    txm.move_sample(x=0.1)
+    return
+
     start_time = time.time()
     if 'StopTheScan' in variableDict.keys(): # stopping the scan in a clean way
         stop_scan(global_PVs, variableDict)
@@ -174,8 +191,10 @@ def start_scan(txm):
 def main():
     update_variable_dict()
     # Create the microscope object
-    has_permit = variableDict('ShutterPermit')
-    txm = TXM(has_permit=has_permit, is_attached=True)
+    has_permit = False # variableDict('ShutterPermit')
+    txm = TXM(has_permit=has_permit, is_attached=True,
+              ioc_prefix=IOC_PREFIX, use_shutter_A=False,
+              use_shutter_B=True)
     # Launch the scan
     start_scan(txm=txm)
 
@@ -183,7 +202,7 @@ def main():
 if __name__ == '__main__':
     # Set up default stream logging
     # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.WARNING)
     logging.captureWarnings(True)
     # Enter the main script function
     main()

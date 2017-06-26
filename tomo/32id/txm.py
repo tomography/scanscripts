@@ -1,7 +1,16 @@
 # -*- coding: utf-8 -*-
 
-"""Defines a TXM class for controlling the Transmission X-ray
-Microscope at Advanced Photon Source beamline 32-ID-C."""
+"""Defines TXM classes for controlling the Transmission X-ray
+Microscope at Advanced Photon Source beamline 32-ID-C.
+
+TxmPV
+  A decorator for the process variables used by the microscopes.
+TXM
+  A nano-CT transmission X-ray microscope.
+MicroCT
+  Similar to the nano-CT but for micro-CT.
+
+"""
 
 import time
 import math
@@ -86,12 +95,15 @@ class TxmPV(object):
         if txm.is_attached:
             pv = self.get_epics_PV(txm)
             self.curr_value = pv.get(**self.get_kwargs)
+            log.debug("Getting PV value %s", self.curr_value)
         # Return the most recently retrieved value
         if self.dtype is not None:
             self.curr_value = self.dtype(self.curr_value)
         return self.curr_value
     
-    def complete_put(self, txm):
+    def complete_put(self, data, pvname):
+        txm = data
+        log.debug("Completed put on %s", pvname)
         if txm.is_attached:
             is_not_done = True
         else:
@@ -103,6 +115,7 @@ class TxmPV(object):
         self.put_complete = True
     
     def __set__(self, txm, val):
+        log.debug("Setting PV value %s: %s", self, val)
         self.txm = txm
         # Check that the TXM has shutter permit if required for this PV
         if txm.is_attached and self.permit_required and not txm.has_permit:
@@ -125,16 +138,16 @@ class TxmPV(object):
                 self.complete_put()
             else:
                 # Non-blocking version
-                pv.put(val, callback=self.complete_put, callback_data=(txm,))
+                pv.put(val, callback=self.complete_put, callback_data=txm)
         elif not txm.is_attached:
             # Simulate a completed put call, because the callback isn't run
             self.put_complete = True
-    
-    def __set_name__(self, obj, name):
+
+    def __set_name__(self, txm, name):
         self.name = name
     
     def __str__(self):
-        return self.name
+        return getattr(self, 'name', self._namestring)
 
     def __repr__(self):
         return "<TxmPV: {}>".format(self._namestring)
@@ -158,7 +171,8 @@ def permit_required(real_func):
         if obj.has_permit:
             ret = real_func(obj, *args, **kwargs)
         else:
-            raise exceptions_.PermitError()
+            msg = "Shutter permit not granted."
+            raise exceptions_.PermitError(msg)
         return ret
     return wrapped_func
 
@@ -190,7 +204,11 @@ class txm_required():
         return wrapped_func
 
 
-class TXM():
+
+############################
+# Main TXM Class definition
+############################
+class TXM(object):
     """A class representing the Transmission X-ray Microscope at sector 32-ID-C.
     
     Attributes
@@ -220,7 +238,7 @@ class TXM():
     pv_queue = []
     SHUTTER_OPEN = 0
     SHUTTER_CLOSED = 1
-    E_RANGE = (5, 10) # How far can the X-ray energy be changed (in keV)
+    E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
     
     # Process variables
@@ -230,6 +248,8 @@ class TXM():
     Cam1_ImageMode = TxmPV('{ioc_prefix}cam1:ImageMode')
     Cam1_ArrayCallbacks = TxmPV('{ioc_prefix}cam1:ArrayCallbacks')
     Cam1_AcquirePeriod = TxmPV('{ioc_prefix}cam1:AcquirePeriod')
+    Cam1_FrameRate_on_off = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
+    Cam1_FrameRate_val = TxmPV('{ioc_prefix}cam1:FrameRateValAbs')
     Cam1_TriggerMode = TxmPV('{ioc_prefix}cam1:TriggerMode')
     Cam1_SoftwareTrigger = TxmPV('{ioc_prefix}cam1:SoftwareTrigger')
     Cam1_AcquireTime = TxmPV('{ioc_prefix}cam1:AcquireTime')
@@ -237,7 +257,7 @@ class TXM():
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
     Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire')
-    CCD_Motor = TxmPV('WHAT GOES HERE!?', default=500)
+    Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -250,18 +270,46 @@ class TXM():
     HDF1_Capture_RBV = TxmPV('{ioc_prefix}HDF1:Capture_RBV')
     HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName')
     HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV',
-                                  dtype=str, default='')
+                               dtype=str, default='')
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
+    HDF1_NextFile = TxmPV('{ioc_prefix}HDF1:FileNumber')
+    
+    # Tiff writer PV's
+    TIFF1_AutoSave = TxmPV('{ioc_prefix}TIFF1:AutoSave')
+    TIFF1_DeleteDriverFile = TxmPV('{ioc_prefix}TIFF1:DeleteDriverFile')
+    TIFF1_EnableCallbacks = TxmPV('{ioc_prefix}TIFF1:EnableCallbacks')
+    TIFF1_BlockingCallbacks = TxmPV('{ioc_prefix}TIFF1:BlockingCallbacks')
+    TIFF1_FileWriteMode = TxmPV('{ioc_prefix}TIFF1:FileWriteMode')
+    TIFF1_NumCapture = TxmPV('{ioc_prefix}TIFF1:NumCapture')
+    TIFF1_Capture = TxmPV('{ioc_prefix}TIFF1:Capture')
+    TIFF1_Capture_RBV = TxmPV('{ioc_prefix}TIFF1:Capture_RBV')
+    TIFF1_FileName = TxmPV('{ioc_prefix}TIFF1:FileName')
+    TIFF1_FullFileName_RBV = TxmPV('{ioc_prefix}TIFF1:FullFileName_RBV')
+    TIFF1_FileTemplate = TxmPV('{ioc_prefix}TIFF1:FileTemplate')
+    TIFF1_ArrayPort = TxmPV('{ioc_prefix}TIFF1:NDArrayPort')
     
     # Motor PV's
-    Motor_SampleX = TxmPV('32idcTXM:mcs:c1:m2.VAL')
-    Motor_SampleY = TxmPV('32idcTXM:xps:c1:m7.VAL')
-    # Motor_SampleRot = TxmPV('32idcTXM:hydra:c0:m1.VAL')
-    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL')
-    Motor_SampleZ = TxmPV('32idcTXM:mcs:c1:m1.VAL')
-    Motor_X_Tile = TxmPV('32idc01:m33.VAL')
-    Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
+    Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL')
+    Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL') # for the TXM
+    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL') # Professional Instrument air bearing rotary stage
+    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL') # Smaract XZ TXM set
+    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c1:m8.VAL') # Smaract XZ TXM set
+    # Motor_X_Tile = TxmPV('32idc01:m33.VAL')
+    # Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
+    
+    # Zone plate:
+    zone_plate_x = TxmPV('32idcTXM:mcs:c2:m2.VAL')
+    zone_plate_y = TxmPV('32idc01:m110.VAL')
+    zone_plate_z = TxmPV('32idcTXM:mcs:c2:m3.VAL')
+    # MST2 = vertical axis
+    Smaract_mode = TxmPV('32idcTXM:mcsAsyn1.AOUT') # pv.Smaract_mode.put(':MST3,100,500,100')
+    zone_plate_2_x = TxmPV('32idcTXM:mcs:c0:m3.VAL')
+    zone_plate_2_y = TxmPV('32idcTXM:mcs:c0:m1.VAL')
+    zone_plate_2_z = TxmPV('32idcTXM:mcs:c0:m2.VAL')
+    
+    # CCD motors:
+    CCD_Motor = TxmPV('32idcTXM:mxv:c1:m6.VAL', float, default=3200)
     
     # Shutter PV's
     ShutterA_Open = TxmPV('32idb:rshtrA:Open', permit_required=True)
@@ -271,18 +319,21 @@ class TXM():
     ShutterB_Close = TxmPV('32idb:fbShutter:Close.PROC', permit_required=True)
     ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL', default=0)
     ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
+    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control') # State 0 = Close, 1 = Open
     
-    # Fly macro PV's
-    Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')
-    Fly_StartPos = TxmPV('32idcTXM:eFly:startPos')
-    Fly_EndPos = TxmPV('32idcTXM:eFly:endPos')
-    Fly_SlewSpeed = TxmPV('32idcTXM:eFly:slewSpeed')
-    Fly_Taxi = TxmPV('32idcTXM:eFly:taxi')
-    Fly_Run = TxmPV('32idcTXM:eFly:fly')
-    Fly_ScanControl = TxmPV('32idcTXM:eFly:scanControl')
-    Fly_Calc_Projections = TxmPV('32idcTXM:eFly:calcNumTriggers')
+    # Fly scan PV's for nano-ct TXM using Profession Instrument air-bearing stage
+    Fly_ScanDelta = TxmPV('32idcTXM:PSOFly3:scanDelta')
+    Fly_StartPos = TxmPV('32idcTXM:PSOFly3:startPos')
+    Fly_EndPos = TxmPV('32idcTXM:PSOFly3:endPos')
+    Fly_SlewSpeed = TxmPV('32idcTXM:PSOFly3:slewSpeed')
+    Fly_Taxi = TxmPV('32idcTXM:PSOFly3:taxi')
+    Fly_Run = TxmPV('32idcTXM:PSOFly3:fly')
+    Fly_ScanControl = TxmPV('32idcTXM:PSOFly3:scanControl')
+    Fly_Calc_Projections = TxmPV('32idcTXM:PSOFly3:numTriggers')
+    Theta_Array = TxmPV('32idcTXM:PSOFly3:motorPos.AVAL')
+    Fly_Set_Encoder_Pos = TxmPV('32idcTXM:eFly:EncoderPos')
     
-    # Theta control PV's
+    # Theta controls
     Reset_Theta = TxmPV('32idcTXM:SG_RdCntr:reset.PROC')
     Proc_Theta = TxmPV('32idcTXM:SG_RdCntr:cVals.PROC')
     Theta_Array = TxmPV('32idcTXM:eFly:motorPos.AVAL')
@@ -303,7 +354,7 @@ class TXM():
     Interferometer_Val = TxmPV('32idcTXM:userAve4.VAL')
     Interferometer_Mode = TxmPV('32idcTXM:userAve4_mode.VAL')
     Interferometer_Acquire = TxmPV('32idcTXM:userAve4_acquire.PROC')
-
+    
     # Proc1 PV's
     Proc1_Callbacks = TxmPV('{ioc_prefix}Proc1:EnableCallbacks')
     Proc1_ArrayPort = TxmPV('{ioc_prefix}Proc1:NDArrayPort')
@@ -314,27 +365,24 @@ class TXM():
     Proc1_AutoReset_Filter = TxmPV('{ioc_prefix}Proc1:AutoResetFilter')
     Proc1_Filter_Callbacks = TxmPV('{ioc_prefix}Proc1:FilterCallbacks')
     
-    # TIFF writer PV's
-    TIFF1_AutoSave = TxmPV('{ioc_prefix}TIFF1:AutoSave')
-    TIFF1_DeleteDriverFile = TxmPV('{ioc_prefix}TIFF1:DeleteDriverFile')
-    TIFF1_EnableCallbacks = TxmPV('{ioc_prefix}TIFF1:EnableCallbacks')
-    TIFF1_BlockingCallbacks = TxmPV('{ioc_prefix}TIFF1:BlockingCallbacks')
-    TIFF1_FileWriteMode = TxmPV('{ioc_prefix}TIFF1:FileWriteMode')
-    TIFF1_NumCapture = TxmPV('{ioc_prefix}TIFF1:NumCapture')
-    TIFF1_Capture = TxmPV('{ioc_prefix}TIFF1:Capture')
-    TIFF1_FullFileName_RBV = TxmPV('{ioc_prefix}TIFF1:FullFileName_RBV')
-    TIFF1_FileNumber = TxmPV('{ioc_prefix}TIFF1:FileNumber')
-    TIFF1_FileName = TxmPV('{ioc_prefix}TIFF1:FileName')
-    TIFF1_ArrayPort = TxmPV('{ioc_prefix}TIFF1:NDArrayPort')
-    
     # Energy PV's
     DCMmvt = TxmPV('32ida:KohzuModeBO.VAL', permit_required=True)
     GAPputEnergy = TxmPV('32id:ID32us_energy', permit_required=True, wait=False)
     EnergyWait = TxmPV('ID32us:Busy')
-    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', float, default=8.6, permit_required=True,)
+    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', float, default=8.6, permit_required=True)
+    
+    #interlaced
+    Interlaced_PROC = TxmPV('32idcTXM:iFly:interlaceFlySub.PROC')
+    Interlaced_Theta_Arr = TxmPV('32idcTXM:iFly:interlaceFlySub.VALC')
+    Interlaced_Num_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.C')
+    Interlaced_Num_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALH')
+    Interlaced_Images_Per_Cycle = TxmPV('32idcTXM:iFly:interlaceFlySub.A')
+    Interlaced_Images_Per_Cycle_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALF')
+    Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
+    Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
     def __init__(self, has_permit=False, is_attached=True, ioc_prefix="",
-                 use_shutter_A=False, use_shutter_B=False, zp_diameter=180,
+                 use_shutter_A=False, use_shutter_B=True, zp_diameter=180,
                  drn=60):
         self.is_attached = is_attached
         self.has_permit = has_permit
@@ -343,7 +391,7 @@ class TXM():
         self.use_shutter_B = use_shutter_B
         self.zp_diameter = zp_diameter
         self.drn = drn
-   
+    
     @contextmanager
     def wait_pvs(self):
         """Context manager that allows for setting multiple PVS
@@ -351,8 +399,10 @@ class TXM():
         
         This manager creates an empty queue for PV objects. After
         exiting the inner code, it then waits until all the PV's are
-        finished before returning.
-        
+        finished before returning. It is strongly discoraged to set
+        the same PV twice during this context manager, as only the
+        first one will complete.
+
         """
         # Make sure there are no pending PV changes
         self.flush_pvs()
@@ -408,7 +458,8 @@ class TXM():
         startTime = time.time()
         # Enter into infinite loop polling the PV status
         while(True and self.is_attached):
-            pv_val = getattr(self, pv_name)
+            real_PV = self.__class__.__dict__[pv_name]
+            pv_val = real_PV.__get__(self)
             if (pv_val != target_val):
                 if timeout > -1:
                     curTime = time.time()
@@ -417,14 +468,12 @@ class TXM():
                         msg = "Timed out '{}' ({}) after {}s"
                         msg = msg.format(pv_name, target_val, timeout)
                         raise exceptions_.TimeoutError(msg)
-                        # log.debug("Timeout wait_pv()")
-                        # return False
                 time.sleep(.01)
             else:
                 log.debug("Ended wait_pv()")
                 return True
     
-    def move_sample(self, x=None, y=None, z=None):
+    def move_sample(self, x=None, y=None, z=None, theta=None):
         """Move the sample to the given (x, y, z) position.
 
         This method is non-blocking.
@@ -433,21 +482,24 @@ class TXM():
         ----------
         x, y, z : float, optional
           The new position to move the sample to.
-        
+        theta : float, optional
+          Rotation axis angle to set to.
         """
         log.debug('Moving sample to (%s, %s, %s)', x, y, z)
         if x is not None:
-            self.Motor_SampleX = float(x)
+            self.Motor_Sample_Top_X = float(x)
         if y is not None:
             self.Motor_SampleY = float(y)
         if z is not None:
-            self.Motor_SampleZ = float(z)
-        self.Motor_SampleRot = 0
-        log.debug("Sample moved to (x=%s, y=%s, z=%s, θ=0°)", x, y, z)
+            self.Motor_Sample_Top_Z = float(z)
+        if theta is not None:
+            self.Motor_SampleRot = theta
+        log.debug("Sample moved to (x=%f, y=%f, z=%f, θ=%f°)", x, y, z, theta)
         return True
     
     @permit_required
-    def move_energy(self, energy, constant_mag=True, gap_offset=0.):
+    def move_energy(self, energy, constant_mag=True, gap_offset=0., 
+                    correct_backlash=True):
         """Change the energy of the X-ray source and optics.
         
         The undulator gap, monochromator, zone-plate and (optionally)
@@ -462,7 +514,9 @@ class TXM():
           the change in focal length.
         gap_offset : float, optional
           Extra energy to add to the value sent to the undulator gap.
-
+        correct_backlash : bool, optional
+          If enabled, this method will correct for slop in the GAP
+          motors. Only needed for large changes (>0.1 keV)
         """
         # Check that the energy given is valid for this instrument
         in_range = self.E_RANGE[0] <= energy <= self.E_RANGE[1]
@@ -504,6 +558,7 @@ class TXM():
             self.GAPputEnergy = energy + gap_offset
         self.wait_pv('EnergyWait', 0, timeout=20)
         self.DCMmvt = 0
+        log.info("Changed energy to %.4f keV.", energy)
         
     
     def open_shutters(self):
@@ -601,3 +656,29 @@ class TXM():
         global_PVs['HDF1_Capture'].put(1)
         wait_pv(global_PVs['HDF1_Capture'], 1)
         log.debug("Finished setting up HDF writer.")
+
+
+class MicroCT(TXM):
+    """TXM operating with the front micro-CT stage."""
+    # Flyscan PV's
+    Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')
+    Fly_StartPos = TxmPV('32idcTXM:eFly:startPos')
+    Fly_EndPos = TxmPV('32idcTXM:eFly:endPos')
+    Fly_SlewSpeed = TxmPV('32idcTXM:eFly:slewSpeed')
+    Fly_Taxi = TxmPV('32idcTXM:eFly:taxi')
+    Fly_Run = TxmPV('32idcTXM:eFly:fly')
+    Fly_ScanControl = TxmPV('32idcTXM:eFly:scanControl')
+    Fly_Calc_Projections = TxmPV('32idcTXM:eFly:calcNumTriggers')
+    Fly_Set_Encoder_Pos = TxmPV('32idcTXM:eFly:EncoderPos')
+    Theta_Array = TxmPV('32idcTXM:eFly:motorPos.AVAL')
+
+    # Motor PVs
+    Motor_SampleX = TxmPV('32idc01:m33.VAL')
+    Motor_SampleY = TxmPV('32idc02:m15.VAL') # for the micro-CT system
+    Motor_SampleRot = TxmPV('32idcTXM:hydra:c0:m1.VAL') # PI Micos air bearing rotary stage
+    Motor_SampleZ = TxmPV('32idcTXM:mcs:c1:m1.VAL')
+    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c1:m2.VAL') # Smaract XZ micro-CT set
+    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c1:m1.VAL') # Smaract XZ micro-CT set
+    Motor_X_Tile = TxmPV('32idc01:m33.VAL')
+    Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
+

@@ -143,6 +143,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         test_pv.curr_value = 4
         test_pv.complete_put(txm)
         self.assertTrue(test_pv.put_complete)
+        assert False, "Write a test for when multiple puts are called in succession."
     
     def test_pv_name(self):
         txm = self.FakeTXM()
@@ -189,7 +190,8 @@ class TXMTestCase(unittest.TestCase):
         # Check that the PVs are set properly
         txm.EnergyWait = 0
         txm.move_energy(8.6)
-    
+        assert False, "Add corrections for backlash"
+
     def test_open_shutters(self):
         txm = TXM(is_attached=False, has_permit=True)
         with warnings.catch_warnings(record=True) as w:
