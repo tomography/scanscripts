@@ -7,12 +7,11 @@ import time
 import math
 import logging
 import warnings
-import asyncio
 from contextlib import contextmanager
 
 from epics import PV as EpicsPV, get_pv
 
-import exceptions
+import exceptions_
 
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 
@@ -159,7 +158,7 @@ def permit_required(real_func):
         if obj.has_permit:
             ret = real_func(obj, *args, **kwargs)
         else:
-            raise exceptions.PermitError()
+            raise exceptions_.PermitError()
         return ret
     return wrapped_func
 
@@ -417,7 +416,7 @@ class TXM():
                     if diffTime >= timeout:
                         msg = "Timed out '{}' ({}) after {}s"
                         msg = msg.format(pv_name, target_val, timeout)
-                        raise exceptions.TimeoutError(msg)
+                        raise exceptions_.TimeoutError(msg)
                         # log.debug("Timeout wait_pv()")
                         # return False
                 time.sleep(.01)
@@ -471,7 +470,7 @@ class TXM():
             msg = "Energy {energy} keV not in range {lower} - {upper} keV"
             msg = msg.format(energy=energy, lower=self.E_RANGE[0],
                              upper=self.E_RANGE[1])
-            raise exceptions.EnergyError(msg)
+            raise exceptions_.EnergyError(msg)
         # Get the current values
         prev_energy = self.DCMputEnergy
         curr_CCD = self.CCD_Motor

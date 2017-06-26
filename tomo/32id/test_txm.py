@@ -3,13 +3,17 @@
 import logging
 logging.basicConfig(level=logging.WARNING)
 
+import six
 import time
 import unittest
-import mock
+if six.PY2:
+    import mock
+else:
+    from unittest import mock
 import warnings
 
 from txm import TXM, permit_required, txm_required, TxmPV
-import exceptions
+import exceptions_
 
 log = logging.getLogger(__name__)
 log.debug('Beginning tests in {}'.format(__name__))
@@ -33,7 +37,7 @@ class PermitDecoratorsTestCase(unittest.TestCase):
         txm = self.FakeTXM()
         txm.has_permit = False
         txm.test_value = False
-        with self.assertRaises(exceptions.PermitError):
+        with self.assertRaises(exceptions_.PermitError):
             txm.permit_func()
         # Now check that it *is* set when permit is available
         txm.has_permit = True
@@ -180,7 +184,7 @@ class TXMTestCase(unittest.TestCase):
     def test_move_energy(self):
         txm = TXM(is_attached=False, has_permit=True)
         # Check what happens if we accidentally give the energy in eV
-        with self.assertRaises(exceptions.EnergyError):
+        with self.assertRaises(exceptions_.EnergyError):
             txm.move_energy(8500)
         # Check that the PVs are set properly
         txm.EnergyWait = 0
