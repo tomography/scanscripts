@@ -4,13 +4,19 @@
 Microscope at Advanced Photon Source beamline 32-ID-C."""
 
 import time
+import math
 import logging
 import warnings
+import asyncio
+from contextlib import contextmanager
 
-from epics import PV as EpicsPV
+from epics import PV as EpicsPV, get_pv
+
+import exceptions
+
+DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 
 log = logging.getLogger(__name__)
-
 
 class TxmPV(object):
     """A descriptor representing a process variable in the EPICS system.
@@ -19,6 +25,11 @@ class TxmPV(object):
     attributes. If the descriptor owner (ie. TXM) is not attached,
     this descriptor performs like a regular attribute. Optionally,
     this can also be done for objects that have no shutter permit.
+    
+    Attributes
+    ----------
+    put_complete : bool
+      If False, there is a pending put operation.
     
     Parameters
     ----------
@@ -36,25 +47,34 @@ class TxmPV(object):
       If truthy, data will only be sent if the owner `has_permit`
       attribute is true. Reading of process variable is still enabled
       either way.
+    wait : bool, optional
+      If truthy, setting this descriptor will block until the
+      operation succeeds.
     
     """
     _epicsPV = None
+    put_complete = True
     
     def __init__(self, pv_name, dtype=None, default=None,
-                 permit_required=False):
+                 permit_required=False, wait=False, get_kwargs={}):
+        # Make sure the dtype and float are compatible
+        if dtype is not None:
+            dtype(default)
+        # Set default values
         self._namestring = pv_name
         self.curr_value = default
         self.dtype = dtype
         self.permit_required = permit_required
-        # Create the epics PV object
+        self.wait = wait
+        self.get_kwargs = get_kwargs
     
-    def get_epics_PV(self, obj):
+    def get_epics_PV(self, txm):
         # Only create a PV if one doesn't exist or the IOC prefix has changed
         is_cached = (self._epicsPV is not None and
-                     self.ioc_prefix == obj.ioc_prefix)
+                     self.ioc_prefix == txm.ioc_prefix)
         if not is_cached:
-            self.ioc_prefix = obj.ioc_prefix
-            pv_name = self.pv_name(obj)
+            self.ioc_prefix = txm.ioc_prefix
+            pv_name = self.pv_name(txm)
             self._epicsPV = EpicsPV(pv_name)
         return self._epicsPV
     
@@ -66,13 +86,25 @@ class TxmPV(object):
         # Ask the PV for an updated value if possible
         if txm.is_attached:
             pv = self.get_epics_PV(txm)
-            self.curr_value = pv.get()
+            self.curr_value = pv.get(**self.get_kwargs)
         # Return the most recently retrieved value
         if self.dtype is not None:
             self.curr_value = self.dtype(self.curr_value)
         return self.curr_value
     
+    def complete_put(self, txm):
+        if txm.is_attached:
+            is_not_done = True
+        else:
+            is_not_done = False
+        while is_not_done and self.wait:
+            time.sleep(0.01) # Give the PV a chance to settle
+            curr_val = self.get_epics_PV(txm).get()
+            is_not_done = (curr_val != self.curr_value)
+        self.put_complete = True
+    
     def __set__(self, txm, val):
+        self.txm = txm
         # Check that the TXM has shutter permit if required for this PV
         if txm.is_attached and self.permit_required and not txm.has_permit:
             # There's a valid TXM but we can't operate this PV
@@ -86,10 +118,30 @@ class TxmPV(object):
         # Set the PV (only if the TXM is attached and has permit)
         if txm.is_attached and permit_clear:
             pv = self.get_epics_PV(txm)
-            pv.put(val)
+            self.put_complete = False
+            txm.pv_queue.append(self)
+            if self.wait:
+                # Blocking version
+                pv.put(val, wait=self.wait)
+                self.complete_put()
+            else:
+                # Non-blocking version
+                pv.put(val, callback=self.complete_put, callback_data=(txm,))
+        elif not txm.is_attached:
+            # Simulate a completed put call, because the callback isn't run
+            self.put_complete = True
+    
+    def __set_name__(self, obj, name):
+        self.name = name
+    
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return "<TxmPV: {}>".format(self._namestring)
 
 
-class permit_required():
+def permit_required(real_func):
     """Decorates a method so it can only open with a permit.
     
     This method decorator ensures that the decorated method can only
@@ -98,22 +150,18 @@ class permit_required():
     
     Parameters
     ----------
-    return_value
+    return_value : optional
       Will be returned if the method is mocked.
     
     """
-    def __init__(self, return_value):
-        self.return_value = return_value
-    
-    def __call__(self, real_func):
-        def wrapped_func(obj, *args, **kwargs):
-            # Inner function that checks the status of permit
-            if obj.has_permit and obj.is_attached:
-                ret = real_func(obj, *args, **kwargs)
-            else:
-                ret = self.return_value
-            return ret
-        return wrapped_func
+    def wrapped_func(obj, *args, **kwargs):
+        # Inner function that checks the status of permit
+        if obj.has_permit:
+            ret = real_func(obj, *args, **kwargs)
+        else:
+            raise exceptions.PermitError()
+        return ret
+    return wrapped_func
 
 
 class txm_required():
@@ -144,7 +192,6 @@ class txm_required():
 
 
 class TXM():
-
     """A class representing the Transmission X-ray Microscope at sector 32-ID-C.
     
     Attributes
@@ -156,7 +203,27 @@ class TXM():
       Is the instrument authorized to open shutters and change the
       X-ray source. Could be false for any number of reasons, most
       likely the beamline is set for hutch B to operate.
+    ioc_prefix : str, optional
+      The prefix to use for the camera's I/O controller when conneting
+      certain PV's. PV descriptor's can then use "{ioc_prefix}" in
+      their PV nam and have it format automatically.
+    use_shutter_A : bool, optional
+      Whether shutter A should be used when getting light.
+    use_shutter_B : bool, optional
+      Whether shutter B should be used when getting light.
+    zp_diameter : float, optional
+      The diameter (in nanometers) of the zone-plate currently
+      installed in the instrument.
+    drn : float, optional
+      The width of the zoneplate's outermost diffraction zone.
+    
     """
+    pv_queue = []
+    SHUTTER_OPEN = 0
+    SHUTTER_CLOSED = 1
+    E_RANGE = (5, 10) # How far can the X-ray energy be changed (in keV)
+    POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
+    
     # Process variables
     # -----------------
     #
@@ -171,6 +238,7 @@ class TXM():
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
     Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire')
+    CCD_Motor = TxmPV('WHAT GOES HERE!?', default=500)
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -182,7 +250,8 @@ class TXM():
     HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture')
     HDF1_Capture_RBV = TxmPV('{ioc_prefix}HDF1:Capture_RBV')
     HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName')
-    HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV')
+    HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV',
+                                  dtype=str, default='')
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
     
@@ -196,13 +265,13 @@ class TXM():
     Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
     
     # Shutter PV's
-    ShutterA_Open = TxmPV('32idb:rshtrA:Open')
-    ShutterA_Close = TxmPV('32idb:rshtrA:Close')
-    ShutterA_Move_Status = TxmPV('PB:32ID:STA_A_FES_CLSD_PL')
-    ShutterB_Open = TxmPV('32idb:fbShutter:Open.PROC')
-    ShutterB_Close = TxmPV('32idb:fbShutter:Close.PROC')
-    ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL')
-    ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go')
+    ShutterA_Open = TxmPV('32idb:rshtrA:Open', permit_required=True)
+    ShutterA_Close = TxmPV('32idb:rshtrA:Close', permit_required=True)
+    ShutterA_Move_Status = TxmPV('PB:32ID:STA_A_FES_CLSD_PL', default=0)
+    ShutterB_Open = TxmPV('32idb:fbShutter:Open.PROC', permit_required=True)
+    ShutterB_Close = TxmPV('32idb:fbShutter:Close.PROC', permit_required=True)
+    ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL', default=0)
+    ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
     
     # Fly macro PV's
     Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')
@@ -260,42 +329,53 @@ class TXM():
     TIFF1_ArrayPort = TxmPV('{ioc_prefix}TIFF1:NDArrayPort')
     
     # Energy PV's
-    DCMmvt = TxmPV('32ida:KohzuModeBO.VAL')
-    GAPputEnergy = TxmPV('32id:ID32us_energy')
+    DCMmvt = TxmPV('32ida:KohzuModeBO.VAL', permit_required=True)
+    GAPputEnergy = TxmPV('32id:ID32us_energy', permit_required=True, wait=False)
     EnergyWait = TxmPV('ID32us:Busy')
-    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL')
+    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', float, default=8.6, permit_required=True,)
     
     def __init__(self, has_permit=False, is_attached=True, ioc_prefix="",
-                 use_shutter_A=False, use_shutter_B=False):
+                 use_shutter_A=False, use_shutter_B=False, zp_diameter=180,
+                 drn=60):
         self.is_attached = is_attached
         self.has_permit = has_permit
         self.ioc_prefix = ioc_prefix
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
-    
-    @property
-    def has_permit(self):
-        """Does the TXM has authorization to open the shutters.
+        self.zp_diameter = zp_diameter
+        self.drn = drn
+   
+    @contextmanager
+    def wait_pvs(self):
+        """Context manager that allows for setting multiple PVS
+        asynchronously.
         
-        Compares a variety of inputs and if all are clear then issues
-        a decision on whether the shutters can be opened and the X-ray
-        source can be tuned. Possible causes for no permit:
-        
-        - No instrument is attached
-        - ``self.has_permit`` has not been set to ``True``
+        This manager creates an empty queue for PV objects. After
+        exiting the inner code, it then waits until all the PV's are
+        finished before returning.
         
         """
-        if self._has_permit and not self.is_attached:
-            log.debug('Denying permit: TXM not attached.')
-        decision = self.is_attached and self._has_permit
-        return decision
+        # Make sure there are no pending PV changes
+        self.flush_pvs()
+        # Set up an event loop
+        self.pv_queue = []
+        # Return execution to the calling script
+        yield None
+        # Wait for all the PVs to be finished
+        self.flush_pvs()
     
-    @has_permit.setter
-    def has_permit(self, val):
-        self._has_permit = val
+    def flush_pvs(self):
+        """This method blocks until all the PV's in the pv_queue have reached
+        their target values, then clears the queue.
+        
+        """
+        while not all([pv.put_complete for pv in self.pv_queue]):
+            time.sleep(0.01)
+        # Reset the PV queue for next time
+        log.debug("Flushed PV queue: %s", self.pv_queue)
+        self.pv_queue = []
     
-    @permit_required(return_value=True)
-    def wait_pv(self, pv, target_val, timeout=-1):
+    def wait_pv(self, pv_name, target_val, timeout=DEFAULT_TIMEOUT):
         """Wait for a process variable to reach given value.
         
         This function polls the process variable (PV) and blocks until
@@ -321,22 +401,25 @@ class TXM():
           before the target value was reached.
         
         """
-        log_msg = "called wait_pv({name}, {val}, {timeout})"
-        log.debug(log_msg.format(name=pv, val=target_val,
+        log_msg = "called wait_pv({name}, {val}, timeout={timeout})"
+        log.debug(log_msg.format(name=pv_name, val=target_val,
                                  timeout=timeout))
-        #delay for pv to change
-        time.sleep(.01)
+        # Delay for pv to change
+        time.sleep(self.POLL_INTERVAL)
         startTime = time.time()
         # Enter into infinite loop polling the PV status
-        while(True):
-            pv_val = pv.get()
+        while(True and self.is_attached):
+            pv_val = getattr(self, pv_name)
             if (pv_val != target_val):
                 if timeout > -1:
                     curTime = time.time()
                     diffTime = curTime - startTime
                     if diffTime >= timeout:
-                        log.debug("Timeout wait_pv()")
-                        return False
+                        msg = "Timed out '{}' ({}) after {}s"
+                        msg = msg.format(pv_name, target_val, timeout)
+                        raise exceptions.TimeoutError(msg)
+                        # log.debug("Timeout wait_pv()")
+                        # return False
                 time.sleep(.01)
             else:
                 log.debug("Ended wait_pv()")
@@ -344,6 +427,8 @@ class TXM():
     
     def move_sample(self, x=None, y=None, z=None):
         """Move the sample to the given (x, y, z) position.
+
+        This method is non-blocking.
         
         Parameters
         ----------
@@ -359,19 +444,106 @@ class TXM():
         if z is not None:
             self.Motor_SampleZ = float(z)
         self.Motor_SampleRot = 0
-        log.info("Sample moved to (x=%s, y=%s, z=%s, θ=0°)", x, y, z)
+        log.debug("Sample moved to (x=%s, y=%s, z=%s, θ=0°)", x, y, z)
+        return True
+    
+    @permit_required
+    def move_energy(self, energy, constant_mag=True, gap_offset=0.):
+        """Change the energy of the X-ray source and optics.
+        
+        The undulator gap, monochromator, zone-plate and (optionally)
+        detector will be moved.
+        
+        Parameters
+        ----------
+        energy : float
+          The new energy (in kEV) for the X-ray source.
+        constant_mag : bool, optional
+          If truthy, the detector will also be moved to correct for
+          the change in focal length.
+        gap_offset : float, optional
+          Extra energy to add to the value sent to the undulator gap.
+
+        """
+        # Check that the energy given is valid for this instrument
+        in_range = self.E_RANGE[0] <= energy <= self.E_RANGE[1]
+        if not in_range:
+            msg = "Energy {energy} keV not in range {lower} - {upper} keV"
+            msg = msg.format(energy=energy, lower=self.E_RANGE[0],
+                             upper=self.E_RANGE[1])
+            raise exceptions.EnergyError(msg)
+        # Get the current values
+        prev_energy = self.DCMputEnergy
+        curr_CCD = self.CCD_Motor
+        # Calculate target values
+        landa = 1240.0 / (prev_energy * 1000.0)
+        ZP_focal = self.zp_diameter * self.drn / (1000.0 * landa)
+        inner =  math.sqrt(curr_CCD**2 - 4.0 * curr_CCD * ZP_focal)
+        D = (curr_CCD + inner) / 2.0
+        mag = (D - ZP_focal) / ZP_focal
+        log.debug("Magnification: %.2f", mag)
+        self.DCMmvt = 1
+        landa = 1240.0 / (energy * 1000.0)
+        ZP_focal = self.zp_diameter * self.drn / (1000.0 * landa)
+        dist_ZP_ccd = mag * ZP_focal + ZP_focal
+        ZP_WD = dist_ZP_ccd * ZP_focal / (dist_ZP_ccd - ZP_focal)
+        new_CCD = ZP_WD + dist_ZP_ccd
+        # Move the CCD to achieve constant magnification
+        if constant_mag:
+            log.debug("New CCD z-position: %f", new_CCD)
+            self.CCD_Motor = new_CCD
+        # Move the motors
+        with self.wait_pvs():
+            log.debug("New zoneplate z-position: %f", ZP_WD)
+            self.ZpLocation = ZP_WD
+            log.debug("New DCM Energy and Gap Energy: %f", energy)
+            self.DCMputEnergy = energy
+            self.GAPputEnergy = energy
+        self.wait_pv('EnergyWait', 0, timeout=20)
+        # Apply the offset to make sure the ID gap is correct
+        with self.wait_pvs():
+            self.GAPputEnergy = energy + gap_offset
+        self.wait_pv('EnergyWait', 0, timeout=20)
+        self.DCMmvt = 0
+        
     
     def open_shutters(self):
-        log.debug("Opening shutters...")
+        """Open the shutters to allow light in. The specific shutter(s) that
+        opens depends on the values of ``self.use_shutter_A`` and
+        ``self.use_shutter_B``.
+        
+        """
         if self.use_shutter_A:
+            log.debug("Opening shutter A")
             self.ShutterA_Open = 1 # wait=True
-            # wait_pv(global_PVs['ShutterA_Move_Status'], ShutterA_Open_Value)
+            self.wait_pv('ShutterA_Move_Status', self.SHUTTER_OPEN)
         if self.use_shutter_B:
-            global_PVs['ShutterB_Open'].put(1, wait=True)
-            wait_pv(global_PVs['ShutterB_Move_Status'], ShutterB_Open_Value)
+            log.debug("Opening shutter B")
+            self.ShutterB_Open = 1
+            self.wait_pv('ShutterB_Move_Status', self.SHUTTER_OPEN)
         # Display a logging info
-        if self.use_shutter_A or self.use_shutter_B:
+        if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
             log.info('Shutters opened.')
+        else:
+            warnings.warn("Neither shutter A nor B enabled.")
+
+    def close_shutters(self):
+        """Close the shutters to stop light in. The specific shutter(s) that
+        closes depends on the values of ``self.use_shutter_A`` and
+        ``self.use_shutter_B``.
+        
+        """
+        if self.use_shutter_A:
+            log.debug("Closing shutter A")
+            self.ShutterA_Close = 1 # wait=True
+            self.wait_pv('ShutterA_Move_Status', self.SHUTTER_CLOSED)
+        if self.use_shutter_B:
+            log.debug("Closing shutter B")
+            self.ShutterB_Close = 1
+            self.wait_pv('ShutterB_Move_Status', self.SHUTTER_CLOSED)
+        # Display a logging info
+        if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
+            log.info('Shutters closed.')
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     

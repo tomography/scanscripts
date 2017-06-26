@@ -49,17 +49,16 @@ def update_variable_dict(variableDict):
     if len(sys.argv) > 1:
         strArgv = sys.argv[1]
         argDic = json.loads(strArgv)
-    print('orig variable dict', variableDict)
+    log.debug('orig variable dict: %s', variableDict)
     for k,v in argDic.iteritems():
         variableDict[k] = v
-    print('new variable dict', variableDict)
+    log.debug('new variable dict: %s', variableDict)
 
 
 def wait_pv(pv, wait_val, max_timeout_sec=-1):
     """wait on a pv to be a value until max_timeout (default forever)"""
     # Let the user know that there's a better way
-    txm = TXM()
-    txm.has_permit = True
+    txm = TXM(has_permit=True, is_attached=True)
     return txm.wait_pv(pv=pv, target_val=wait_val, timeout=max_timeout_sec)
 
 
