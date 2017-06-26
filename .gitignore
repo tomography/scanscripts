@@ -85,5 +85,8 @@ ENV/
 # Spyder project settings
 .spyderproject
 
+# Emacs temporary files
+*~
+
 # Rope project settings
 .ropeproject
