@@ -68,7 +68,7 @@ class TxmPV(object):
         result = None
     
     def __init__(self, pv_name, dtype=None, default=None,
-                 permit_required=False, wait=False, get_kwargs={}):
+                 permit_required=False, wait=True, get_kwargs={}):
         # Make sure the dtype and float are compatible
         if dtype is not None:
             dtype(default)
@@ -242,10 +242,12 @@ class TXM(object):
     
     """
     pv_queue = []
+    hdf_writer_ready = False
     SHUTTER_OPEN = 0
     SHUTTER_CLOSED = 1
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
+    RECURSIVE_FILTER_TYPE = "RecursiveAve"
     
     # Process variables
     # -----------------
@@ -616,61 +618,54 @@ class TXM(object):
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
-    def setup_writer(self, variableDict, filename=None):
-        log.warning('setup_writer not implemented')
-        return False
+    def setup_hdf_writer(self, filename, num_projections,
+                         write_mode="Stream", recursive_filter=1):
         """Prepare the HDF file writer to accept data.
         
         Parameters
         ----------
-        variableDict : dict
-          The arguments passed in by the calling GUI.
-        filename : str, optional
+        filename : str
           The name of the HDF file to save data to.
+        num_projections : int
+          Total number of projections to collect at one time.
+        write_mode : str, optional
+          What mode to use for the HDF writer. Gets passed to a PV.
+        recursive_filter : int, optional
+          How many images to use in the recursive filter. If 1
+          (default), recursive filtering will be disabled.
         
         """
         log.debug('setup_writer() called')
-        if variableDict.has_key('Recursive_Filter_Enabled'):
-            if variableDict['Recursive_Filter_Enabled'] == 1:
-                # self.PVs['Proc1_Callbacks'].put('Disable')
-                global_PVs['Proc1_Callbacks'].put('Enable')
-                global_PVs['Proc1_Filter_Enable'].put('Disable')
-                global_PVs['HDF1_ArrayPort'].put('PROC1')
-                global_PVs['Proc1_Filter_Type'].put( Recursive_Filter_Type )
-                n_images = int(variableDict['Recursive_Filter_N_Images'])
-                global_PVs['Proc1_Num_Filter'].put(n_images)
-                global_PVs['Proc1_Reset_Filter'].put( 1 )
-                global_PVs['Proc1_AutoReset_Filter'].put( 'Yes' )
-                global_PVs['Proc1_Filter_Callbacks'].put( 'Array N only' )
-            else:
-                # global_PVs['Proc1_Callbacks'].put('Disable')
-                global_PVs['Proc1_Filter_Enable'].put('Disable')
-                global_PVs['HDF1_ArrayPort'].put(global_PVs['Proc1_ArrayPort'].get())
+        if recursive_filter > 1:
+            # Enable recursive filter
+            self.Proc1_Callbacks = 'Enable'
+            self.Proc1_Filter_Enable = 'Disable'
+            self.HDF1_ArrayPort = 'PROC1'
+            self.Proc1_Filter_Type = self.RECURSIVE_FILTER_TYPE
+            self.Proc1_Num_Filter = recursive_filter
+            self.Proc1_Reset_Filter = 1
+            self.Proc1_AutoReset_Filter = 'Yes'
+            self.Proc1_Filter_Callbacks = 'Array N only'
         else:
+            # No recursive filter, just 1 image
             # global_PVs['Proc1_Callbacks'].put('Disable')
-            global_PVs['Proc1_Filter_Enable'].put('Disable')
-            global_PVs['HDF1_ArrayPort'].put(global_PVs['Proc1_ArrayPort'].get())
-        global_PVs['HDF1_AutoSave'].put('Yes')
-        global_PVs['HDF1_DeleteDriverFile'].put('No')
-        global_PVs['HDF1_EnableCallbacks'].put('Enable')
-        global_PVs['HDF1_BlockingCallbacks'].put('No')
+            self.Proc1_Filter_Enable = 'Disable'
+            self.HDF1_ArrayPort = self.Proc1_ArrayPort
+        # Other HDF parameters
+        # global_PVs['HDF1_AutoSave'].put('Yes')
+        # global_PVs['HDF1_DeleteDriverFile'].put('No')
+        # global_PVs['HDF1_EnableCallbacks'].put('Enable')
+        # global_PVs['HDF1_BlockingCallbacks'].put('No')
         # Count total number of projections needed
-        proj_vars = ['PreDarkImages', 'PreWhiteImages',
-                     'PostDarkImages', 'PostWhiteImages']
-        totalProj = 0
-        for var in proj_vars:
-            totalProj += int(variableDict.get(var, 0))
-        # Add number for actual sample projections
-        n_proj = int(variableDict.get('Projections', 0))
-        proj_per_rot = int(variableDict.get('ProjectionsPerRot', 1))
-        totalProj += n_proj * proj_per_rot
-        global_PVs['HDF1_NumCapture'].put(totalProj)
-        global_PVs['HDF1_FileWriteMode'].put(str(variableDict['FileWriteMode']), wait=True)
-        if not filename == None:
-            global_PVs['HDF1_FileName'].put(filename)
-        global_PVs['HDF1_Capture'].put(1)
-        wait_pv(global_PVs['HDF1_Capture'], 1)
-        log.debug("Finished setting up HDF writer.")
+        self.HDF1_NumCapture = num_projections
+        self.HDF1_FileWriteMode = write_mode
+        self.HDF1_FileName = filename
+        self.HDF1_Capture = 1
+        # ?? Is this wait_pv really necessary?
+        self.wait_pv('HDF1_Capture', 1)
+        # Clean up and set some status variables
+        log.debug("Finished setting up writer for %s.", filename)
+        self.hdf_writer_ready = True
 
 
 class MicroCT(TXM):

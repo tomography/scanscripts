@@ -197,6 +197,40 @@ class TXMTestCase(unittest.TestCase):
         txm.move_energy(8.6)
         self.assertEqual(txm.DCMmvt, 14)
     
+    def test_setup_hdf_writer(self):
+        txm = TXM(is_attached=False, has_permit=True)
+        txm.Proc1_ArrayPort = "test_value"
+        txm.setup_hdf_writer(filename="testfile.h5",
+                             num_projections=3, write_mode="stream")
+        # Test without recursive filter
+        self.assertEqual(txm.Proc1_Filter_Enable, "Disable")
+        self.assertEqual(txm.HDF1_ArrayPort, 'test_value')
+        self.assertEqual(txm.HDF1_NumCapture, 3)
+        self.assertEqual(txm.HDF1_FileWriteMode, 'stream')
+        self.assertEqual(txm.HDF1_FileName, 'testfile.h5')
+        self.assertEqual(txm.HDF1_Capture, 1)
+        self.assertTrue(txm.hdf_writer_ready)
+
+    def test_setup_hdf_writer_recursive(self):
+        txm = TXM(is_attached=False, has_permit=True)
+        txm.Proc1_ArrayPort = "test_value"
+        txm.setup_hdf_writer(filename="testfile.h5", recursive_filter=3,
+                             num_projections=3, write_mode="stream")
+        # Test with recursive filter
+        self.assertEqual(txm.Proc1_Callbacks, "Enable")
+        self.assertEqual(txm.Proc1_Filter_Enable, "Disable")
+        self.assertEqual(txm.Proc1_Filter_Type, txm.RECURSIVE_FILTER_TYPE)
+        self.assertEqual(txm.HDF1_ArrayPort, 'PROC1')
+        self.assertEqual(txm.Proc1_Num_Filter, 3)
+        self.assertEqual(txm.Proc1_Reset_Filter, 1)
+        self.assertEqual(txm.Proc1_AutoReset_Filter, 'Yes')
+        self.assertEqual(txm.Proc1_Filter_Callbacks, 'Array N only')
+        # These should be the same regardless of recursion filter
+        self.assertEqual(txm.HDF1_FileWriteMode, 'stream')
+        self.assertEqual(txm.HDF1_FileName, 'testfile.h5')
+        self.assertEqual(txm.HDF1_Capture, 1)
+        self.assertTrue(txm.hdf_writer_ready)
+    
     @mock.patch('txm.EpicsPV')
     def test_open_shutters(self, EpicsPV):
         txm = TXM(is_attached=False, has_permit=True)
