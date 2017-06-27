@@ -1,7 +1,7 @@
 """Tests for the transmission x-ray microscope `TXM()` class."""
 
 import logging
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.DEBUG)
 
 import six
 import time
@@ -72,7 +72,7 @@ class PVDescriptorTestCase(unittest.TestCase):
     class FakeTXM(object):
         pv_queue = []
         ioc_prefix = ''
-        ring_current = TxmPV('ring_curr')
+        ring_current = TxmPV('ring_curr', wait=True)
         default_current = TxmPV('current', default=7)
         shutter_state = TxmPV('shutter', permit_required=True)
         ioc_state = TxmPV('{ioc_prefix}_state')
@@ -86,13 +86,37 @@ class PVDescriptorTestCase(unittest.TestCase):
         self.assertEqual(txm.default_current, 3)
     
     @mock.patch('txm.EpicsPV')
+    def test_pv_promise(self, EpicsPV):
+        txm = self.FakeTXM()
+        txm.is_attached = True
+        # Mock the Epics PV object so we can test it for real
+        test_pv = txm.__class__.__dict__['ring_current']
+        epics_pv = test_pv.get_epics_PV(txm)
+        # If the TXM has no queue, then the PV should be
+        # called with ``put(wait=True)``
+        txm.pv_queue = None
+        test_pv.__set__(txm, 5)
+        epics_pv.put.assert_called_with(5, wait=True)
+        # If the TXM has a queue, then the PV should add a promise
+        txm.pv_queue = []
+        test_pv.__set__(txm, 6)
+        self.assertEqual(len(txm.pv_queue), 1)
+        promise = txm.pv_queue[0]
+        self.assertIsInstance(promise, test_pv.PVPromise)
+        epics_pv.put.assert_called_with(6, callback=test_pv.complete_put,
+                                        callback_data=promise)
+        # Now check that completing the put changes the promises state
+        test_pv.complete_put(promise, pvname='ring_current')
+        self.assertTrue(promise.is_complete)
+        
+    @mock.patch('txm.EpicsPV')
     def test_actual_pv(self, EpicsPV):
         txm = self.FakeTXM()
         txm.is_attached = False
         # Mock the Epics PV object so we can test it for real
         test_pv = txm.__class__.__dict__['ring_current']
         epics_pv = test_pv.get_epics_PV(txm)
-        # Make sure that the PV is not used when TXM is unattached
+        # Make sure that the PV is not used when TXM is unattached 
         txm.ring_current
         txm.ring_current = 19
         epics_pv.get.assert_not_called()
@@ -102,12 +126,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         txm.ring_current
         epics_pv.get.assert_called()
         txm.ring_current = 27
-        epics_pv.put.assert_called_with(27,
-                                        callback=test_pv.complete_put,
-                                        callback_data=(txm,))
-        # Check that the PV was added to the queue
-        self.assertEqual(len(txm.pv_queue), 1)
-        self.assertIs(txm.pv_queue[0], test_pv)
+        epics_pv.put.assert_called()
     
     @mock.patch('txm.EpicsPV')
     def test_permit_required(self, EpicsPV):
@@ -129,22 +148,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         txm.has_permit = True
         txm.shutter_state = True
         epics_pv.put.assert_called()
-    
-    @mock.patch('txm.EpicsPV')
-    def test_complete_put(self, EpicsPV):
-        txm = self.FakeTXM()
-        txm.is_attached = True
-        txm.has_permit = False
-        test_pv = txm.__class__.__dict__['ioc_state']
-        # Give it a wrong value and see if it stays not complete
-        test_pv.put_complete = False
-        epics_pv = test_pv.get_epics_PV(txm)
-        epics_pv.get = mock.MagicMock(return_value=4)
-        test_pv.curr_value = 4
-        test_pv.complete_put(txm)
-        self.assertTrue(test_pv.put_complete)
-        assert False, "Write a test for when multiple puts are called in succession."
-    
+   
     def test_pv_name(self):
         txm = self.FakeTXM()
         txm.ioc_prefix = 'myIOC'
@@ -178,9 +182,9 @@ class TXMTestCase(unittest.TestCase):
         txm.Motor_SampleZ = None
         self.assertEqual(txm.Motor_SampleX, None)
         txm.move_sample(1, 2, 3)
-        self.assertEqual(txm.Motor_SampleX, 1)
+        self.assertEqual(txm.Motor_Sample_Top_X, 1)
         self.assertEqual(txm.Motor_SampleY, 2)
-        self.assertEqual(txm.Motor_SampleZ, 3)
+        self.assertEqual(txm.Motor_Sample_Top_Z, 3)
     
     def test_move_energy(self):
         txm = TXM(is_attached=False, has_permit=True)
@@ -190,12 +194,15 @@ class TXMTestCase(unittest.TestCase):
         # Check that the PVs are set properly
         txm.EnergyWait = 0
         txm.move_energy(8.6)
+        
         assert False, "Add corrections for backlash"
-
-    def test_open_shutters(self):
+    
+    @mock.patch('txm.EpicsPV')
+    def test_open_shutters(self, EpicsPV):
         txm = TXM(is_attached=False, has_permit=True)
         with warnings.catch_warnings(record=True) as w:
             txm.is_attached = True
+            txm.use_shutter_B = False
             txm.open_shutters()
             txm.is_attached = False
             self.assertEqual(len(w), 1)
@@ -217,12 +224,14 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.ShutterA_Open, None)
         self.assertEqual(txm.ShutterB_Open, 1)
     
-    def test_close_shutters(self):
+    @mock.patch('txm.EpicsPV')
+    def test_close_shutters(self, EpicsPV):
         txm = TXM(is_attached=False, has_permit=True)
         with warnings.catch_warnings(record=True) as w:
             txm.ShutterA_Move_Status = 1
             txm.ShutterB_Move_Status = 1
             txm.is_attached = True
+            txm.use_shutter_B = False
             txm.close_shutters()
             txm.is_attached = False
             self.assertEqual(len(w), 1)
@@ -246,8 +255,19 @@ class TXMTestCase(unittest.TestCase):
         """Check that the ``wait_pvs`` context manager waits."""
         txm = TXM(is_attached=False)
         test_pv = txm.__class__.__dict__['DCMmvt']
-        txm.pv_queue = [test_pv]
-        with txm.wait_pvs() as w:
+        txm.pv_queue = 'outer_value'
+        with txm.wait_pvs() as q:
+            self.assertEqual(q, [])
             # Check that it resets the pv_queue
-            self.assertEqual(txm.pv_queue, [])
-        # TODO: There should probably be more/better tests here...
+            self.assertEqual(txm.pv_queue, q)
+            # Add a pv promise
+            promise = TxmPV.PVPromise()
+            promise.is_complete = True
+            txm.pv_queue.append(promise)
+        # Was the previous queue restored?
+        self.assertEqual(txm.pv_queue, 'outer_value')
+        # Now does it work in non-blocking mode?
+        with txm.wait_pvs(block=False) as q:
+            promise = TxmPV.PVPromise()
+            promise.is_complete = False
+            txm.pv_queue.append(promise)

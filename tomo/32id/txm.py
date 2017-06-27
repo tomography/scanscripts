@@ -63,6 +63,10 @@ class TxmPV(object):
     _epicsPV = None
     put_complete = True
     
+    class PVPromise():
+        is_complete = False
+        result = None
+    
     def __init__(self, pv_name, dtype=None, default=None,
                  permit_required=False, wait=False, get_kwargs={}):
         # Make sure the dtype and float are compatible
@@ -95,24 +99,25 @@ class TxmPV(object):
         if txm.is_attached:
             pv = self.get_epics_PV(txm)
             self.curr_value = pv.get(**self.get_kwargs)
-            log.debug("Getting PV value %s", self.curr_value)
         # Return the most recently retrieved value
         if self.dtype is not None:
             self.curr_value = self.dtype(self.curr_value)
         return self.curr_value
     
-    def complete_put(self, data, pvname):
-        txm = data
-        log.debug("Completed put on %s", pvname)
-        if txm.is_attached:
-            is_not_done = True
-        else:
-            is_not_done = False
-        while is_not_done and self.wait:
-            time.sleep(0.01) # Give the PV a chance to settle
-            curr_val = self.get_epics_PV(txm).get()
-            is_not_done = (curr_val != self.curr_value)
-        self.put_complete = True
+    def complete_put(self, promise, pvname):
+        log.debug("Completed put for %s", self)
+        promise.is_complete = True
+        # txm = data
+        # log.debug("Completed put on %s", pvname)
+        # if txm.is_attached:
+        #     is_not_done = True
+        # else:
+        #     is_not_done = False
+        # while is_not_done and self.wait:
+        #     time.sleep(0.01) # Give the PV a chance to settle
+        #     curr_val = self.get_epics_PV(txm).get()
+        #     is_not_done = (curr_val != self.curr_value)
+        # self.put_complete = True
     
     def __set__(self, txm, val):
         log.debug("Setting PV value %s: %s", self, val)
@@ -130,18 +135,19 @@ class TxmPV(object):
         # Set the PV (only if the TXM is attached and has permit)
         if txm.is_attached and permit_clear:
             pv = self.get_epics_PV(txm)
-            self.put_complete = False
-            txm.pv_queue.append(self)
-            if self.wait:
+            # How should be handle waiting?
+            in_context = txm.pv_queue is not None
+            if not in_context:
                 # Blocking version
                 pv.put(val, wait=self.wait)
-                self.complete_put()
             else:
                 # Non-blocking version
-                pv.put(val, callback=self.complete_put, callback_data=txm)
+                promise = self.PVPromise()
+                txm.pv_queue.append(promise)
+                pv.put(val, callback=self.complete_put, callback_data=promise)
         elif not txm.is_attached:
             # Simulate a completed put call, because the callback isn't run
-            self.put_complete = True
+            self.curr_value = val
 
     def __set_name__(self, txm, name):
         self.name = name
@@ -393,35 +399,35 @@ class TXM(object):
         self.drn = drn
     
     @contextmanager
-    def wait_pvs(self):
-        """Context manager that allows for setting multiple PVS
+    def wait_pvs(self, block=True):
+        """Context manager that allows for setting multiple PVs
         asynchronously.
         
         This manager creates an empty queue for PV objects. After
-        exiting the inner code, it then waits until all the PV's are
-        finished before returning. It is strongly discoraged to set
-        the same PV twice during this context manager, as only the
-        first one will complete.
-
+        exiting the inner code, it then waits until all the PV's to be
+        finished before returning. This method is tightly coupled with
+        the settings of the relevant ``TxmPV`` objects.
+        
         """
-        # Make sure there are no pending PV changes
-        self.flush_pvs()
+        # Save old queue to resore it later on
+        old_queue = self.pv_queue
         # Set up an event loop
         self.pv_queue = []
         # Return execution to the calling script
-        yield None
+        yield self.pv_queue
         # Wait for all the PVs to be finished
-        self.flush_pvs()
+        num_promises = len(self.pv_queue)
+        while block and not all([pv.is_complete for pv in self.pv_queue]):
+            time.sleep(0.01)
+        log.debug("Completed %d queued PV's", num_promises)
+        # Restore the old PV queue
+        self.pv_queue = old_queue
     
     def flush_pvs(self):
         """This method blocks until all the PV's in the pv_queue have reached
         their target values, then clears the queue.
         
         """
-        while not all([pv.put_complete for pv in self.pv_queue]):
-            time.sleep(0.01)
-        # Reset the PV queue for next time
-        log.debug("Flushed PV queue: %s", self.pv_queue)
         self.pv_queue = []
     
     def wait_pv(self, pv_name, target_val, timeout=DEFAULT_TIMEOUT):
@@ -475,7 +481,7 @@ class TXM(object):
     
     def move_sample(self, x=None, y=None, z=None, theta=None):
         """Move the sample to the given (x, y, z) position.
-
+        
         This method is non-blocking.
         
         Parameters
