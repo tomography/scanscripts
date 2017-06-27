@@ -193,9 +193,9 @@ class TXMTestCase(unittest.TestCase):
             txm.move_energy(8500)
         # Check that the PVs are set properly
         txm.EnergyWait = 0
+        txm.DCMmvt = 14
         txm.move_energy(8.6)
-        
-        assert False, "Add corrections for backlash"
+        self.assertEqual(txm.DCMmvt, 14)
     
     @mock.patch('txm.EpicsPV')
     def test_open_shutters(self, EpicsPV):

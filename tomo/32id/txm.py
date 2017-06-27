@@ -522,8 +522,10 @@ class TXM(object):
           Extra energy to add to the value sent to the undulator gap.
         correct_backlash : bool, optional
           If enabled, this method will correct for slop in the GAP
-          motors. Only needed for large changes (>0.1 keV)
+          motors. Only needed for large changes (eg >0.01 keV)
         """
+        # Helper function for converting energy to wavelength
+        kev_to_nm = lambda kev: 1240. / (kev * 1000.)
         # Check that the energy given is valid for this instrument
         in_range = self.E_RANGE[0] <= energy <= self.E_RANGE[1]
         if not in_range:
@@ -532,40 +534,47 @@ class TXM(object):
                              upper=self.E_RANGE[1])
             raise exceptions_.EnergyError(msg)
         # Get the current values
-        prev_energy = self.DCMputEnergy
-        curr_CCD = self.CCD_Motor
+        old_energy = self.DCMputEnergy
+        old_CCD = self.CCD_Motor
+        old_wavelength = kev_to_nm(old_energy)
+        old_ZP_focal = self.zp_diameter * self.drn / (1000.0 * old_wavelength)
+        inner =  math.sqrt(old_CCD**2 - 4.0 * old_CCD * old_ZP_focal)
+        old_D = (old_CCD + inner) / 2.0
         # Calculate target values
-        landa = 1240.0 / (prev_energy * 1000.0)
-        ZP_focal = self.zp_diameter * self.drn / (1000.0 * landa)
-        inner =  math.sqrt(curr_CCD**2 - 4.0 * curr_CCD * ZP_focal)
-        D = (curr_CCD + inner) / 2.0
-        mag = (D - ZP_focal) / ZP_focal
-        log.debug("Magnification: %.2f", mag)
+        new_wavelength = 1240.0 / kev_to_nm(energy)
+        new_ZP_focal = self.zp_diameter * self.drn / (1000.0 * new_wavelength)
+        # Prepare the instrument for moving energy
+        old_DCM_mode = self.DCMmvt
         self.DCMmvt = 1
-        landa = 1240.0 / (energy * 1000.0)
-        ZP_focal = self.zp_diameter * self.drn / (1000.0 * landa)
-        dist_ZP_ccd = mag * ZP_focal + ZP_focal
-        ZP_WD = dist_ZP_ccd * ZP_focal / (dist_ZP_ccd - ZP_focal)
-        new_CCD = ZP_WD + dist_ZP_ccd
-        # Move the CCD to achieve constant magnification
+        # Move the detector and objective optics
         if constant_mag:
-            log.debug("New CCD z-position: %f", new_CCD)
-            self.CCD_Motor = new_CCD
-        # Move the motors
-        with self.wait_pvs():
-            log.debug("New zoneplate z-position: %f", ZP_WD)
-            self.ZpLocation = ZP_WD
-            log.debug("New DCM Energy and Gap Energy: %f", energy)
-            self.DCMputEnergy = energy
+            # Calculate target values
+            mag = (old_D - old_ZP_focal) / old_ZP_focal
+            dist_ZP_ccd = mag * new_ZP_focal + new_ZP_focal
+            ZP_WD = dist_ZP_ccd * new_ZP_focal / (dist_ZP_ccd - new_ZP_focal)
+            new_CCD_position = ZP_WD + dist_ZP_ccd
+            # Log new values
+            log.debug("Constant magnification: %.2f", mag)
+            log.debug("New CCD z-position: %f", new_CCD_position)
+            # Execute motor movement
+            self.CCD_Motor = new_CCD_position
+        else: # Varying magnification
+            new_D = (old_CCD + math.sqrt(old_CCD * old_CCD - 4.0 * old_CCD * ZP_focal) ) / 2.0
+            ZP_WD = new_D * new_ZP_focal / (new_D - ZP_focal)
+            new_mag = (old_D - old_ZP_focal) / old_ZP_focal
+            log.debug("New magnification: %.2f", new_mag)
+        # Move the zoneplate
+        log.debug("New zoneplate z-position: %.5f", ZP_WD)
+        self.zone_plate_z = ZP_WD
+        # Move the upstream source/optics
+        log.debug("New DCM Energy and Gap Energy: %f", energy)
+        self.DCMputEnergy = energy
+        if correct_backlash:
+            # Come up from below to correct for motor slop
             self.GAPputEnergy = energy
-        self.wait_pv('EnergyWait', 0, timeout=20)
-        # Apply the offset to make sure the ID gap is correct
-        with self.wait_pvs():
-            self.GAPputEnergy = energy + gap_offset
-        self.wait_pv('EnergyWait', 0, timeout=20)
-        self.DCMmvt = 0
+        self.GAPputEnergy = energy + gap_offset
+        self.DCMmvt = old_DCM_mode
         log.info("Changed energy to %.4f keV.", energy)
-        
     
     def open_shutters(self):
         """Open the shutters to allow light in. The specific shutter(s) that
@@ -586,7 +595,7 @@ class TXM(object):
             log.info('Shutters opened.')
         else:
             warnings.warn("Neither shutter A nor B enabled.")
-
+    
     def close_shutters(self):
         """Close the shutters to stop light in. The specific shutter(s) that
         closes depends on the values of ``self.use_shutter_A`` and
