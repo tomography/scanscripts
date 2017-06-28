@@ -248,6 +248,8 @@ class TXM(object):
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
     RECURSIVE_FILTER_TYPE = "RecursiveAve"
+    CAPTURE_ENABLED = 1
+    CAPTURE_DISABLED = 0
     
     # Process variables
     # -----------------
@@ -502,8 +504,7 @@ class TXM(object):
             self.Motor_Sample_Top_Z = float(z)
         if theta is not None:
             self.Motor_SampleRot = theta
-        log.debug("Sample moved to (x=%f, y=%f, z=%f, θ=%f°)", x, y, z, theta)
-        return True
+        log.debug("Sample moved to (x=%s, y=%s, z=%s, θ=%s°)", x, y, z, theta)
     
     @permit_required
     def move_energy(self, energy, constant_mag=True, gap_offset=0., 
@@ -619,7 +620,7 @@ class TXM(object):
             warnings.warn("Neither shutter A nor B enabled.")
     
     def setup_hdf_writer(self, filename, num_projections,
-                         write_mode="Stream", recursive_filter=1):
+                         write_mode="Stream", num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
         
         Parameters
@@ -630,19 +631,19 @@ class TXM(object):
           Total number of projections to collect at one time.
         write_mode : str, optional
           What mode to use for the HDF writer. Gets passed to a PV.
-        recursive_filter : int, optional
+        num_recursive_images : int, optional
           How many images to use in the recursive filter. If 1
           (default), recursive filtering will be disabled.
         
         """
-        log.debug('setup_writer() called')
-        if recursive_filter > 1:
+        log.debug('setup_hdf_writer() called')
+        if num_recursive_images > 1:
             # Enable recursive filter
             self.Proc1_Callbacks = 'Enable'
             self.Proc1_Filter_Enable = 'Disable'
             self.HDF1_ArrayPort = 'PROC1'
             self.Proc1_Filter_Type = self.RECURSIVE_FILTER_TYPE
-            self.Proc1_Num_Filter = recursive_filter
+            self.Proc1_Num_Filter = num_recursive_images
             self.Proc1_Reset_Filter = 1
             self.Proc1_AutoReset_Filter = 'Yes'
             self.Proc1_Filter_Callbacks = 'Array N only'
@@ -660,12 +661,52 @@ class TXM(object):
         self.HDF1_NumCapture = num_projections
         self.HDF1_FileWriteMode = write_mode
         self.HDF1_FileName = filename
-        self.HDF1_Capture = 1
+        self.HDF1_Capture = self.CAPTURE_ENABLED
         # ?? Is this wait_pv really necessary?
-        self.wait_pv('HDF1_Capture', 1)
+        self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
-        log.debug("Finished setting up writer for %s.", filename)
+        log.debug("Finished setting up HDF writer for %s.", filename)
         self.hdf_writer_ready = True
+    
+    def setup_tiff_writer(self, filename, num_projections=1,
+                          write_mode="Stream", num_recursive_images=1):
+        """Prepare the TIFF file writer to accept data.
+        
+        Parameters
+        ----------
+        filename : str
+          The name of the HDF file to save data to.
+        num_projections : int
+          Total number of projections to collect at one time.
+        write_mode : str, optional
+          What mode to use for the HDF writer. Gets passed to a PV.
+        num_recursive_images : int, optional
+          How many images to use in the recursive filter. If 1
+          (default), recursive filtering will be disabled.
+        
+        """
+        log.debug('setup_tiff_writer() called')
+        if num_recursive_images > 1:
+            # Recursive filter enabled
+            self.Proc1_Callbacks = 'Enable'
+            self.Proc1_Filter_Enable = 'Disable'
+            self.TIFF1_ArrayPort = 'PROC1'
+            self.Proc1_Filter_Type = self.RECURSIVE_FILTER_TYPE
+            self.Proc1_Num_Filter = num_recursive_images
+            self.Proc1_Reset_Filter = 1
+            self.Proc1_AutoReset_Filter = 'Yes'
+            self.Proc1_Filter_Callbacks = 'Array N only'
+        self.TIFF1_AutoSave = 'Yes'
+        self.TIFF1_DeleteDriverFile = 'No'
+        self.TIFF1_EnableCallbacks = 'Enable'
+        self.TIFF1_BlockingCallbacks = 'No'
+        self.TIFF1_NumCapture = num_projections
+        self.TIFF1_FileWriteMode = write_mode
+        self.TIFF1_FileName = filename
+        self.TIFF1_Capture = self.CAPTURE_ENABLED
+        # ?? Is this wait_pv really necessary?
+        self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
+        log.debug("Finished setting up TIFF writer for %s.", filename)
 
 
 class MicroCT(TXM):
