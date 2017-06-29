@@ -53,7 +53,7 @@ def update_variable_dict(variableDict):
     print('orig variable dict: %s' % variableDict)
     for k,v in argDic.iteritems():
         variableDict[k] = v
-    print('new variable dict: %s' % variableDict)
+    print(' new variable dict: %s' % variableDict)
 
 
 def wait_pv(pv, wait_val, max_timeout_sec=-1):

@@ -25,6 +25,7 @@ class EnergyScanTests(unittest.TestCase):
                        has_permit=True)
     
     def tearDown(self):
+        # Get rid of the temporary HDF5 file
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')
     
@@ -40,7 +41,7 @@ class EnergyScanTests(unittest.TestCase):
         txm.capture_white_field = mock.MagicMock()
         # Launch the script
         energy_scan.variableDict['PreDarkImages'] = 4
-        energy_scan.start_scan(txm)
+        energy_scan.energy_scan(txm)
         # Check that what happened was done correctly
         self.assertEqual(txm.capture_projections.call_count, 101)
         txm.capture_projections.assert_called_with(exposure=0.001)

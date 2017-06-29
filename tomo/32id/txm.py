@@ -661,6 +661,10 @@ class TXM(object):
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
+    @property
+    def hdf_filename(self):
+        return self.HDF1_FullFileName_RBV
+    
     def setup_hdf_writer(self, filename=None, num_projections=1,
                          write_mode="Stream", num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
@@ -779,6 +783,7 @@ class TXM(object):
     
     def _trigger_single_projection(self, exposure):
         """Trigger the detector to capture just one projection."""
+        self.Cam1_NumImages = 1
         # Start detector acquire
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         # wait for acquire to finish
