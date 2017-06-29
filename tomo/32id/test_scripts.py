@@ -1,6 +1,8 @@
+"""This file tests the actual execution scripts themselves."""
+
 # Logging
 import logging
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.CRITICAL)
 
 import unittest
 import mock
@@ -22,8 +24,25 @@ class EnergyScanTests(unittest.TestCase):
         self.txm = TXM(is_attached=False,
                        has_permit=True)
     
+    def tearDown(self):
+        if os.path.exists('/tmp/test_file.h5'):
+            os.remove('/tmp/test_file.h5')
+    
     def test_start_scan(self, *args):
+        # Get rid of any old files hanging around
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')
         self.txm.HDF1_FullFileName_RBV = '/tmp/test_file.h5'
-        energy_scan.start_scan(self.txm)
+        # Set some mocked functions for testing
+        txm = self.txm
+        txm.capture_projections = mock.MagicMock()
+        txm.capture_dark_field = mock.MagicMock()
+        txm.capture_white_field = mock.MagicMock()
+        # Launch the script
+        energy_scan.variableDict['PreDarkImages'] = 4
+        energy_scan.start_scan(txm)
+        # Check that what happened was done correctly
+        self.assertEqual(txm.capture_projections.call_count, 101)
+        txm.capture_projections.assert_called_with(exposure=0.001)
+        txm.capture_dark_field.assert_called_once_with(
+            exposure=0.001, num_projections=4)

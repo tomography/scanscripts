@@ -148,13 +148,13 @@ class TxmPV(object):
         elif not txm.is_attached:
             # Simulate a completed put call, because the callback isn't run
             self.curr_value = val
-
+    
     def __set_name__(self, txm, name):
         self.name = name
     
     def __str__(self):
         return getattr(self, 'name', self._namestring)
-
+    
     def __repr__(self):
         return "<TxmPV: {}>".format(self._namestring)
 
@@ -210,7 +210,6 @@ class txm_required():
         return wrapped_func
 
 
-
 ############################
 # Main TXM Class definition
 ############################
@@ -243,13 +242,22 @@ class TXM(object):
     """
     pv_queue = []
     hdf_writer_ready = False
-    SHUTTER_OPEN = 0
-    SHUTTER_CLOSED = 1
+    tiff_writer_ready = False
+    pg_external_trigger = True
+    shutters_are_open = False
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
+    # Commonly used flags for PVs
+    SHUTTER_OPEN = 0
+    SHUTTER_CLOSED = 1
     RECURSIVE_FILTER_TYPE = "RecursiveAve"
     CAPTURE_ENABLED = 1
     CAPTURE_DISABLED = 0
+    FRAME_DATA = 0
+    FRAME_WHITE = 1
+    FRAME_DARK = 2
+    DETECTOR_IDLE = 0
+    DETECTOR_ACQUIRE = 1
     
     # Process variables
     # -----------------
@@ -302,9 +310,12 @@ class TXM(object):
     # Motor PV's
     Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL')
     Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL') # for the TXM
-    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL') # Professional Instrument air bearing rotary stage
-    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL') # Smaract XZ TXM set
-    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c1:m8.VAL') # Smaract XZ TXM set
+    # Professional Instrument air bearing rotary stage
+    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL')
+    # Smaract XZ TXM set
+    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL')
+    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c1:m8.VAL')
+    # # Mosaic scanning axes
     # Motor_X_Tile = TxmPV('32idc01:m33.VAL')
     # Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
     
@@ -313,7 +324,8 @@ class TXM(object):
     zone_plate_y = TxmPV('32idc01:m110.VAL')
     zone_plate_z = TxmPV('32idcTXM:mcs:c2:m3.VAL')
     # MST2 = vertical axis
-    Smaract_mode = TxmPV('32idcTXM:mcsAsyn1.AOUT') # pv.Smaract_mode.put(':MST3,100,500,100')
+    # pv.Smaract_mode.put(':MST3,100,500,100')
+    Smaract_mode = TxmPV('32idcTXM:mcsAsyn1.AOUT')
     zone_plate_2_x = TxmPV('32idcTXM:mcs:c0:m3.VAL')
     zone_plate_2_y = TxmPV('32idcTXM:mcs:c0:m1.VAL')
     zone_plate_2_z = TxmPV('32idcTXM:mcs:c0:m2.VAL')
@@ -329,7 +341,8 @@ class TXM(object):
     ShutterB_Close = TxmPV('32idb:fbShutter:Close.PROC', permit_required=True)
     ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL', default=0)
     ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
-    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control') # State 0 = Close, 1 = Open
+    # State 0 = Close, 1 = Open
+    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control')
     
     # Fly scan PV's for nano-ct TXM using Profession Instrument air-bearing stage
     Fly_ScanDelta = TxmPV('32idcTXM:PSOFly3:scanDelta')
@@ -379,7 +392,8 @@ class TXM(object):
     DCMmvt = TxmPV('32ida:KohzuModeBO.VAL', permit_required=True)
     GAPputEnergy = TxmPV('32id:ID32us_energy', permit_required=True, wait=False)
     EnergyWait = TxmPV('ID32us:Busy')
-    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', float, default=8.6, permit_required=True)
+    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', float, default=8.6,
+                         permit_required=True)
     
     #interlaced
     Interlaced_PROC = TxmPV('32idcTXM:iFly:interlaceFlySub.PROC')
@@ -544,7 +558,7 @@ class TXM(object):
         inner =  math.sqrt(old_CCD**2 - 4.0 * old_CCD * old_ZP_focal)
         old_D = (old_CCD + inner) / 2.0
         # Calculate target values
-        new_wavelength = 1240.0 / kev_to_nm(energy)
+        new_wavelength = kev_to_nm(energy)
         new_ZP_focal = self.zp_diameter * self.drn / (1000.0 * new_wavelength)
         # Prepare the instrument for moving energy
         old_DCM_mode = self.DCMmvt
@@ -574,10 +588,11 @@ class TXM(object):
         self.DCMputEnergy = energy
         if correct_backlash:
             # Come up from below to correct for motor slop
+            log.debug("Correcting backlash")
             self.GAPputEnergy = energy
         self.GAPputEnergy = energy + gap_offset
         self.DCMmvt = old_DCM_mode
-        log.info("Changed energy to %.4f keV.", energy)
+        log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
     def open_shutters(self):
         """Open the shutters to allow light in. The specific shutter(s) that
@@ -585,6 +600,7 @@ class TXM(object):
         ``self.use_shutter_B``.
         
         """
+        starttime = time.time()
         if self.use_shutter_A:
             log.debug("Opening shutter A")
             self.ShutterA_Open = 1 # wait=True
@@ -593,9 +609,23 @@ class TXM(object):
             log.debug("Opening shutter B")
             self.ShutterB_Open = 1
             self.wait_pv('ShutterB_Move_Status', self.SHUTTER_OPEN)
-        # Display a logging info
+        # Set status flags
+        if self.use_shutter_A or self.use_shutter_B:
+            self.shutters_are_open = True
+        else:
+            self.shutters_are_open = False
+        # Log results info
+        if self.use_shutter_A and self.use_shutter_B:
+            which_shutters = "shutters A and B"
+        elif self.use_shutter_A:
+            which_shutters = "shutter A"
+        elif self.use_shutter_B:
+            which_shutters = "shutter B"
+        else:
+            which_shutters = "no shutters"
         if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
-            log.info('Shutters opened.')
+            duration = time.time() - starttime
+            log.info("Opened %s in %.2f sec", which_shutters, duration)
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
@@ -605,6 +635,7 @@ class TXM(object):
         ``self.use_shutter_B``.
         
         """
+        starttime = time.time()
         if self.use_shutter_A:
             log.debug("Closing shutter A")
             self.ShutterA_Close = 1 # wait=True
@@ -613,13 +644,24 @@ class TXM(object):
             log.debug("Closing shutter B")
             self.ShutterB_Close = 1
             self.wait_pv('ShutterB_Move_Status', self.SHUTTER_CLOSED)
-        # Display a logging info
+        # Set status flags
+        self.shutters_are_open = False
+        # Log results info
+        if self.use_shutter_A and self.use_shutter_B:
+            which_shutters = "shutters A and B"
+        elif self.use_shutter_A:
+            which_shutters = "shutter A"
+        elif self.use_shutter_B:
+            which_shutters = "shutter B"
+        else:
+            which_shutters = "no shutters"
         if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
-            log.info('Shutters closed.')
+            duration = time.time() - starttime
+            log.info("Closed %s in %.2f sec", which_shutters, duration)
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
-    def setup_hdf_writer(self, filename, num_projections,
+    def setup_hdf_writer(self, filename=None, num_projections=1,
                          write_mode="Stream", num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
         
@@ -660,12 +702,13 @@ class TXM(object):
         # Count total number of projections needed
         self.HDF1_NumCapture = num_projections
         self.HDF1_FileWriteMode = write_mode
-        self.HDF1_FileName = filename
+        if filename is not None:
+            self.HDF1_FileName = filename
         self.HDF1_Capture = self.CAPTURE_ENABLED
         # ?? Is this wait_pv really necessary?
         self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
-        log.debug("Finished setting up HDF writer for %s.", filename)
+        log.debug("Finished setting up HDF writer for %s.", self.HDF1_FileName)
         self.hdf_writer_ready = True
     
     def setup_tiff_writer(self, filename, num_projections=1,
@@ -707,6 +750,120 @@ class TXM(object):
         # ?? Is this wait_pv really necessary?
         self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
         log.debug("Finished setting up TIFF writer for %s.", filename)
+    
+    def _trigger_multiple_projections(self, exposure, num_projections):
+        """Trigger the detector to capture multiple projections one after
+        another."""
+        starttime = time.time()
+        self.Cam1_ImageMode = 'Multiple'
+        if self.pg_external_trigger:
+            # Set external trigger mode
+            self.Cam1_TriggerMode = 'Overlapped'
+            self.Cam1_NumImages = 1
+            for i in range(num_projections):
+                # Trigger each projection one at a time
+                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+                self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, timeout=2)
+                self.Cam1_SoftwareTrigger = 1
+                self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, timeout=exposure + 5)
+        else:
+            # Trigger the projections all at once
+            self.Cam1_TriggerMode = 'Internal'
+            self.Cam1_NumImages = num_projections
+            self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+            timeout = num_projections * exposure + 5
+            self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, timeout=timeout)
+        # Log the results
+        duration = time.time() - starttime
+        log.info("Captured %d projections in %.3f sec", num_projections, duration)
+    
+    def _trigger_single_projection(self, exposure):
+        """Trigger the detector to capture just one projection."""
+        # Start detector acquire
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        # wait for acquire to finish
+        self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE,
+                    timeout=exposure * 2)
+    
+    def capture_projections(self, num_projections=1, exposure=0.5):
+        """Trigger the capturing of projection images from the detector.
+        
+        Parameters
+        ----------
+        num_projections : int, optional
+          How many projections to acquire.
+        exposure : float, optional
+          Exposure time for each frame in seconds.
+        
+        """
+        # Raise a warning if the shutters are closed
+        if not self.shutters_are_open:
+            msg = "Collecting projections with shutters closed."
+            warnings.warn(msg, RuntimeWarning)
+            log.warning(msg)
+        # Set frame type
+        self.Cam1_FrameType = self.FRAME_DATA
+        # Collect the data
+        if num_projections == 1:
+            ret = self._trigger_single_projection(exposure=exposure)
+        else:
+            ret = self._trigger_multiple_projections(
+                num_projections=num_projections, exposure=exposure)
+        return ret
+    
+    def capture_white_field(self, num_projections=1, exposure=0.5):
+        """Trigger the capturing of projection images from the detector with
+        the shutters open and no sample present.
+        
+        Parameters
+        ----------
+        num_projections : int, optional
+          How many projections to acquire.
+        exposure : float, optional
+          Exposure time for each frame in seconds.
+        
+        """
+        # Raise a warning if the shutters are closed.
+        if not self.shutters_are_open:
+            msg = "Collecting white field with shutters closed."
+            warnings.warn(msg, RuntimeWarning)
+            log.warning(msg)
+        self.Cam1_FrameType = self.FRAME_WHITE
+        # Collect the data
+        if num_projections == 1:
+            ret = self._trigger_single_projection(exposure=exposure)
+        else:
+            ret = self._trigger_multiple_projections(
+                num_projections=num_projections, exposure=exposure)
+        return ret
+    
+    def capture_dark_field(self, num_projections=1, exposure=0.5):
+        """Trigger the capturing of projection images from the detector with
+        the shutters closed.
+        
+        The shutter should be closed before calling this method.
+        
+        Parameters
+        ----------
+        num_projections : int, optional
+          How many projections to acquire.
+        exposure : float, optional
+          Exposure time for each frame in seconds.
+        
+        """
+        # Raise a warning if the shutters are open.
+        if self.shutters_are_open:
+            msg = "Collecting dark field with shutters open."
+            warnings.warn(msg, RuntimeWarning)
+            log.warning(msg)
+        self.Cam1_FrameType = self.FRAME_DARK
+        # Collect the data
+        if num_projections == 1:
+            ret = self._trigger_single_projection(exposure=exposure)
+        else:
+            ret = self._trigger_multiple_projections(
+                num_projections=num_projections, exposure=exposure)
+        return ret
 
 
 class MicroCT(TXM):

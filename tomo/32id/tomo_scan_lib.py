@@ -39,7 +39,6 @@ PG_Trigger_External_Trigger = 1
 Recursive_Filter_Type = 'RecursiveAve'
 
 if UseShutterA == 0 & UseShutterB ==0:
-    log.warning("Shutters are deactivated.")
     print('### WARNING: shutters are deactivated during the scans !!!!')
 
 
@@ -568,7 +567,7 @@ def move_sample_in(global_PVs, variableDict):
 
 
 def move_sample_out(global_PVs, variableDict):
-    print 'move_sample_out()'
+    print('move_sample_out()')
     # global_PVs['Motor_SampleRot'].put(float(variableDict['SampleRotOut']), wait=True)
     # global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXOut']), wait=True)
     # global_PVs['Motor_SampleX'].put(float(variableDict['SampleXOut']), wait=True)

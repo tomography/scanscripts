@@ -21,7 +21,7 @@ import logging
 import numpy as np
 import h5py
 from epics import PV
-from tomo_scan_lib import *
+# from tomo_scan_lib import *
 from txm import TXM
 
 global variableDict
@@ -90,6 +90,7 @@ def energy_scan(txm):
     ZP_diameter = float(variableDict['ZP_diameter'])
     offset = float(variableDict['Offset'])
     drn = float(variableDict['drn'])
+    exposure = float(variableDict['ExposureTime'])
     StabilizeSleep_ms = float(variableDict['StabilizeSleep_ms'])
     # Prepare the camera and monochromator
     txm.Cam1_NumImages = 1
@@ -101,15 +102,15 @@ def energy_scan(txm):
     # Calculate the array of energies that will be scanned
     energies = np.arange(Energy_Start, Energy_End+Energy_Step, Energy_Step)
     log.info('Capturing %d energies', len(energies))
+    # Collect each energy frame
     for energy in energies:
         log.debug('Capturing energy: %f keV', energy)
         # Pause for a moment to allow the beam to stabilize
         log.debug('Stabilize Sleep %f ms', StabilizeSleep_ms)
         time.sleep(StabilizeSleep_ms / 1000.0)
-
         with txm.wait_pvs():
             txm.move_sample(*sample_pos)
-            txm.move_energy(energy, gap_offset=offset)\
+            txm.move_energy(energy, gap_offset=offset)
         log.debug('Stabilize Sleep %f ms', StabilizeSleep_ms)
         time.sleep(StabilizeSleep_ms / 1000.0)
      
@@ -117,12 +118,7 @@ def energy_scan(txm):
         #-------------------------------
         log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
         # Prepare datatype for the hdf5 file: next proj will be a sample proj
-        txm.Cam1_FrameType = FrameTypeData
-        # start detector acquire
-        txm.Cam1_Acquire = DetectorAcquire
-        # wait for acquire to finish
-        txm.wait_pv('Cam1_Acquire', DetectorIdle,
-                    timeout=variableDict['ExposureTime'] * 2)
+        txm.capture_projections(exposure=exposure)
         
         # Flat-field projection acquisition:
         #-------------------------------
@@ -130,44 +126,35 @@ def energy_scan(txm):
         with txm.wait_pvs():
             txm.move_sample(*out_pos)
         # Prepare datatype for the hdf5 file: next proj will be a flat-field
-        txm.Cam1_FrameType = FrameTypeWhite
+        txm.Cam1_FrameType = txm.FRAME_WHITE
         # Start detector acquire
-        txm.Cam1_Acquire = DetectorAcquire
-        # wait for acquire to finish
-        txm.wait_pv('Cam1_Acquire', DetectorIdle)
+        txm.Cam1_Acquire = txm.DETECTOR_ACQUIRE
+        # Wait for acquire to finish
+        txm.wait_pv('Cam1_Acquire', txm.DETECTOR_IDLE)
         
     txm.DCMmvt = 0
     return energies
 
 
-open_shutters(variableDict, global_PVs)
-txm.open_shutters()
-
-global_PVs['CCD_Motor'].put(1)
-txm.CCD_Motor = 1
-
-float(global_PVs['CCD_Motor'].get())
-txm.CCD_Motor
-
-
 def start_scan(txm):
     log.debug('start_scan() called')
-    txm.move_sample(x=0.1)
-    return
-
     start_time = time.time()
     if 'StopTheScan' in variableDict.keys(): # stopping the scan in a clean way
         stop_scan(global_PVs, variableDict)
         return
+    # Extract scan parameters from the variable dictionary
+    exposure = float(variableDict['ExposureTime'])
     # Start scan sleep in min so min * 60 = sec
-    log.debug("Sleeping for %f min", float(variableDict['StartSleep_min']))
-    time.sleep(float(variableDict['StartSleep_min']) * 60.0)
-    # setup_writer(global_PVs, variableDict)
-    txm.setup_writer(variableDict)
-    if int(variableDict['PreDarkImages']) > 0:
-        close_shutters(global_PVs, variableDict)
-        log.info('Capturing Pre Dark Field')
-        capture_multiple_projections(int(variableDict['PreDarkImages']), FrameTypeDark)
+    sleep_min = float(variableDict['StartSleep_min'])
+    log.debug("Sleeping for %f min", sleep_min)
+    time.sleep(sleep_min * 60.0)
+    txm.setup_hdf_writer()
+    # Capture pre dark field images
+    n_pre_dark = int(variableDict['PreDarkImages'])
+    if n_pre_dark > 0:
+        txm.close_shutters()
+        log.info('Capturing %d Pre Dark Field images', n_pre_dark)
+        txm.capture_dark_field(num_projections=n_pre_dark, exposure=exposure)
     sample_pos = (variableDict.get('SampleXIn', None),
                   variableDict.get('SampleYIn', None),
                   variableDict.get('SampleZIn', None))
@@ -177,7 +164,7 @@ def start_scan(txm):
     # Add the energy array to the active HDF file
     txm.close_shutters()
     log.debug('add_energy_arr() called')
-    fullname = txm.HDF1_FullFileName_RBV # ?? original: PV.get(as_string=True)
+    fullname = txm.HDF1_FullFileName_RBV
     log.debug('Saving energies to file: %s', fullname)
     with h5py.File(fullname) as hdf_f:
         hdf_f.create_dataset('/exchange/energy',

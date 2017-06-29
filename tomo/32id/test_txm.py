@@ -1,7 +1,7 @@
 """Tests for the transmission x-ray microscope `TXM()` class."""
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.CRITICAL)
 
 import six
 import time
@@ -272,20 +272,27 @@ class TXMTestCase(unittest.TestCase):
         txm = TXM(is_attached=False, has_permit=True)
         with warnings.catch_warnings(record=True) as w:
             txm.is_attached = True
+            txm.use_shutter_A = False
             txm.use_shutter_B = False
+            txm.shutters_are_open = True
             txm.open_shutters()
             txm.is_attached = False
             self.assertEqual(len(w), 1)
+            self.assertFalse(txm.shutters_are_open)
         # Now check with only shutter A
         txm = TXM(is_attached=False,
                   has_permit=True,
                   use_shutter_A=True,
                   use_shutter_B=False)
         txm.ShutterA_Move_Status = 0
+        txm.ShutterA_Open = None
         txm.ShutterB_Move_Status = 0
+        txm.ShutterB_Open = None
+        txm.shutters_are_open = False
         txm.open_shutters()
         self.assertEqual(txm.ShutterA_Open, 1)
         self.assertEqual(txm.ShutterB_Open, None)
+        self.assertTrue(txm.shutters_are_open)
         # Now check with only shutter B
         txm.ShutterA_Open = None
         txm.use_shutter_A = False
@@ -300,16 +307,21 @@ class TXMTestCase(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             txm.ShutterA_Move_Status = 1
             txm.ShutterB_Move_Status = 1
+            txm.shutters_are_open = True
             txm.is_attached = True
+            txm.use_shutter_A = False
             txm.use_shutter_B = False
             txm.close_shutters()
             txm.is_attached = False
             self.assertEqual(len(w), 1)
+            self.assertFalse(txm.shutters_are_open)
         # Now check with only shutter A
         txm = TXM(is_attached=False,
                   has_permit=True,
                   use_shutter_A=True,
                   use_shutter_B=False)
+        txm.ShutterA_Close = None
+        txm.ShutterB_Close = None
         txm.close_shutters()
         self.assertEqual(txm.ShutterA_Close, 1)
         self.assertEqual(txm.ShutterB_Close, None)
@@ -341,3 +353,88 @@ class TXMTestCase(unittest.TestCase):
             promise = TxmPV.PVPromise()
             promise.is_complete = False
             txm.pv_queue.append(promise)
+    
+    def test_trigger_multiple_projections(self):
+        txm = TXM(is_attached=False)
+        txm.pg_external_trigger = True
+        txm._trigger_multiple_projections(exposure=0.5, num_projections=3)
+        self.assertEqual(txm.Cam1_ImageMode, 'Multiple')
+        self.assertEqual(txm.Cam1_TriggerMode, 'Overlapped')
+        self.assertEqual(txm.Cam1_NumImages, 1)
+        # Now with internal trigger
+        txm.pg_external_trigger = False
+        txm._trigger_multiple_projections(exposure=0.5, num_projections=3)
+        self.assertEqual(txm.Cam1_TriggerMode, "Internal")
+        self.assertEqual(txm.Cam1_NumImages, 3)
+    
+    def test_trigger_single_projection(self):
+        # Currently this test only checks that the method can run without error
+        txm = TXM(is_attached=False)
+        txm._trigger_single_projection(exposure=0.5)
+    
+    def test_capture_projections(self):
+        txm = TXM(is_attached=False)
+        txm._trigger_multiple_projections = mock.MagicMock()
+        txm._trigger_single_projection = mock.MagicMock()
+        # Check for warning if collecting with shutters closed
+        txm.shutters_are_open = False
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            txm.capture_projections()
+            self.assertEqual(len(w), 1, "Did not raise shutter warning")
+            self.assertIn('Collecting projections with shutters closed.', w[0].message)
+        # Test when num_projections is > 1
+        txm.shutters_are_open = True
+        txm.capture_projections(num_projections=3)
+        self.assertEqual(txm.Cam1_FrameType, txm.FRAME_DATA)
+        txm._trigger_multiple_projections.assert_called_with(exposure=0.5,
+                                                             num_projections=3)
+        # Test when num_projections == 1
+        txm.capture_projections(num_projections=1)
+        txm._trigger_single_projection.assert_called_with(exposure=0.5,)
+    
+    def test_capture_dark_field(self):
+        txm = TXM(is_attached=False)
+        txm._trigger_multiple_projections = mock.MagicMock()
+        txm._trigger_single_projection = mock.MagicMock()
+        # Check for warning if collecting with shutters open
+        txm.shutters_are_open = True
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            txm.capture_dark_field()
+            self.assertEqual(len(w), 1, "Did not raise shutter warning")
+            self.assertIn('Collecting dark field with shutters open.', w[0].message)
+        # Test when calling with multiple projections
+        txm.close_shutters()
+        txm.capture_dark_field(num_projections=3)
+        self.assertEqual(txm.Cam1_FrameType, txm.FRAME_DARK)
+        txm._trigger_multiple_projections.assert_called_with(num_projections=3,
+                                                             exposure=0.5)
+        # Test when calling only one projection
+        txm.capture_dark_field(num_projections=1)
+        txm._trigger_single_projection.assert_called_with(exposure=0.5)
+    
+    def test_capture_flat_field(self):
+        txm = TXM(is_attached=False)
+        txm._trigger_multiple_projections = mock.MagicMock()
+        txm._trigger_single_projection = mock.MagicMock()
+        # Check for warning if collecting with shutters closed
+        txm.shutters_are_open = False
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            txm.capture_white_field()
+            self.assertEqual(len(w), 1, "Did not raise shutter warning")
+            self.assertIn('Collecting white field with shutters closed.', w[0].message)
+        # Test for collecting multiple projections
+        txm.open_shutters()
+        txm._trigger_multiple_projections.reset_mock()
+        txm._trigger_single_projection.reset_mock()
+        txm.capture_white_field(num_projections=3)
+        self.assertEqual(txm.Cam1_FrameType, txm.FRAME_WHITE)
+        txm._trigger_multiple_projections.assert_called_with(num_projections=3,
+                                                             exposure=0.5)
+        # Test when calling only one projection
+        txm._trigger_multiple_projections.reset_mock()
+        txm._trigger_single_projection.reset_mock()
+        txm.capture_white_field(num_projections=1)
+        txm._trigger_single_projection.assert_called_with(exposure=0.5)
