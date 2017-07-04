@@ -1,5 +1,5 @@
 '''
-	TomoScan for Sector 32 ID C
+TomoScan for Sector 32 ID C
 
 '''
 import sys
@@ -26,33 +26,34 @@ INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
 
 global variableDict
 
-variableDict = {'PreDarkImages': 5,
-                'PreWhiteImages': 5,
-                'Projections': 361,
-                'PostDarkImages': 0,
-                'PostWhiteImages': 5,
-                'SampleXOut': 0.05,
-                # 'SampleYOut': 0.1,
-                # 'SampleZOut': 0,
-                # 'SampleRotOut': 90.0,
-                'SampleXIn': 0.0,
-                # 'SampleYIn': 0.1,
-                # 'SampleZIn': 0.0,
-                'SampleStart_Rot': 0.0,
-                'SampleEnd_Rot': 180.0,
-                'StartSleep_min': 0,
-                'StabilizeSleep_ms': 1,
-                'ExposureTime': 3,
-                # 'ShutterOpenDelay': 0.05,
-                'IOC_Prefix': '32idcPG3:',
-                # 'ExternalShutter': 0,
-                'FileWriteMode': 'Stream',
-                'rot_speed_deg_per_s': 0.5,
-                'Recursive_Filter_Enabled': 0,
-                'Recursive_Filter_N_Images': 2,
-                'Recursive_Filter_Type': 'RecursiveAve'
-                # 'UseInterferometer': 0
-                }
+variableDict = {
+    'PreDarkImages': 5,
+    'PreWhiteImages': 5,
+    'Projections': 361,
+    'PostDarkImages': 0,
+    'PostWhiteImages': 5,
+    'SampleXOut': 0.05,
+    # 'SampleYOut': 0.1,
+    # 'SampleZOut': 0,
+    # 'SampleRotOut': 90.0,
+    'SampleXIn': 0.0,
+    # 'SampleYIn': 0.1,
+    # 'SampleZIn': 0.0,
+    'SampleStart_Rot': 0.0,
+    'SampleEnd_Rot': 180.0,
+    'StartSleep_min': 0,
+    'StabilizeSleep_ms': 1,
+    'ExposureTime': 3,
+    # 'ShutterOpenDelay': 0.05,
+    'IOC_Prefix': '32idcPG3:',
+    # 'ExternalShutter': 0,
+    'FileWriteMode': 'Stream',
+    'rot_speed_deg_per_s': 0.5,
+    'Recursive_Filter_Enabled': 0,
+    'Recursive_Filter_N_Images': 2,
+    'Recursive_Filter_Type': 'RecursiveAve'
+    # 'UseInterferometer': 0
+}
 
 global_PVs = {}
 
@@ -64,7 +65,7 @@ def getVariableDict():
     return variableDict
 
 def tomo_scan():
-    print 'tomo_scan()'
+    log.debug('called tomo_scan()')
     theta = []
     interf_arr = []
     if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
@@ -78,15 +79,14 @@ def tomo_scan():
     sample_rot = float(variableDict['SampleStart_Rot'])
     if variableDict['Recursive_Filter_Enabled'] == 1:
         global_PVs['Proc1_Filter_Enable'].put('Enable')
-
     for i in range(int(variableDict['Projections'])):
         #while sample_rot <= end_pos:
-        print 'Sample Rot:', sample_rot
+        log.debug('Sample Rot: %f°', sample_rot)
         global_PVs['Motor_SampleRot'].put(sample_rot, wait=True)
         if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
             global_PVs['Interferometer_Acquire'].put(1)
             interf_arr += [global_PVs['Interferometer_Val'].get()]
-        print 'Stabilize Sleep (ms)', variableDict['StabilizeSleep_ms']
+        log.debug('Stabilize Sleep: %d ms', variableDict['StabilizeSleep_ms'])
         time.sleep(float(variableDict['StabilizeSleep_ms']) / 1000.0)
         # save theta to array
         theta += [sample_rot]
@@ -120,7 +120,7 @@ def tomo_scan():
     return theta, interf_arr
 
 def mirror_fly_scan(rev=False):
-    print 'mirror_fly_scan()'
+    log.debug('called mirror_fly_scan(rev=%r)', rev)
     interf_arr = []
     global_PVs['Interferometer_Reset'].put(1, wait=True)
     time.sleep(2.0)
@@ -137,10 +137,10 @@ def mirror_fly_scan(rev=False):
     global_PVs['Fly_SlewSpeed'].put(slew_speed)
     # num_images = ((float(variableDict['SampleEnd_Rot']) - float(variableDict['SampleStart_Rot'])) / (delta + 1.0))
     #num_images = int(variableDict['Projections'])
-    print 'Taxi'
+    log.debug('Taxi')
     global_PVs['Fly_Taxi'].put(1, wait=True)
     wait_pv(global_PVs['Fly_Taxi'], 0)
-    print 'Fly'
+    log.debug('Fly')
     global_PVs['Fly_Run'].put(1, wait=True)
     wait_pv(global_PVs['Fly_Run'], 0)
     global_PVs['Interferometer_Proc_Arr'].put(1)
@@ -152,7 +152,7 @@ def mirror_fly_scan(rev=False):
 
 
 def full_tomo_scan(key):
-    print 'start_scan()'
+    log.debug('called start_scan()')
     init_general_PVs(global_PVs, variableDict)
     if variableDict.has_key('StopTheScan'):
         cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
@@ -171,24 +171,24 @@ def full_tomo_scan(key):
     setup_writer(global_PVs, variableDict)
     if int(variableDict['PreDarkImages']) > 0:
         close_shutters(global_PVs, variableDict)
-        print 'Capturing Pre Dark Field'
+        log.debug('Capturing Pre Dark Field')
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreDarkImages']), FrameTypeDark)
     if int(variableDict['PreWhiteImages']) > 0:
-        print 'Capturing Pre White Field'
+        log.debug('Capturing Pre White Field')
         open_shutters(global_PVs, variableDict)
         move_sample_out(global_PVs, variableDict)
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreWhiteImages']), FrameTypeWhite)
     move_sample_in(global_PVs, variableDict)
-    #time.sleep(float(variableDict['StabilizeSleep_ms']) / 1000.0)
+    # time.sleep(float(variableDict['StabilizeSleep_ms']) / 1000.0)
     open_shutters(global_PVs, variableDict)
     theta, interf_step = tomo_scan()
-    #	interf_arrs += [interf_step]
+    # interf_arrs += [interf_step]
     if int(variableDict['PostWhiteImages']) > 0:
-        print 'Capturing Post White Field'
+        log.debug('Capturing Post White Field')
         move_sample_out(global_PVs, variableDict)
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostWhiteImages']), FrameTypeWhite)
     if int(variableDict['PostDarkImages']) > 0:
-        print 'Capturing Post Dark Field'
+        log.debug('Capturing Post Dark Field')
         close_shutters(global_PVs, variableDict)
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostDarkImages']), FrameTypeDark)
     close_shutters(global_PVs, variableDict)
@@ -202,6 +202,7 @@ def full_tomo_scan(key):
 def main(key):
     update_variable_dict(variableDict)
     full_tomo_scan(key)
+
 
 if __name__ == '__main__':
     key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))

@@ -19,6 +19,16 @@ log.debug('Beginning tests in {}'.format(__name__))
 energy_scan.variableDict['ExposureTime'] = 0.001
 energy_scan.variableDict['StabilizeSleep_ms'] = 0.001
 
+
+class TomoStepScanTests(unittest.TestCase):
+    def setUp(self):
+        self.txm = TXM(is_attached=False,
+                       has_permit=True)
+    
+    def test_full_tomo_scan(self):
+        pass
+
+
 class EnergyScanTests(unittest.TestCase):
     def setUp(self):
         self.txm = TXM(is_attached=False,
