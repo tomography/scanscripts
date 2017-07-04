@@ -53,8 +53,6 @@ SHUTTER_PERMIT = False
 
 log = logging.getLogger(__name__)
 
-global_PVs = {}
-
 
 def getVariableDict():
     global variableDict
@@ -66,6 +64,7 @@ def energy_scan(txm):
     start_time = time.time()
     # Stopping the scan in a clean way (currently broken)
     if 'StopTheScan' in variableDict.keys():
+        raise NotImplementedError("Cannot stop scan that way")
         stop_scan(global_PVs, variableDict)
         return
     # Extract scan parameters from the variable dictionary
@@ -133,8 +132,7 @@ def energy_scan(txm):
 def main():
     update_variable_dict(variableDict)
     # Create the microscope object
-    has_permit = False
-    txm = TXM(has_permit=has_permit, is_attached=True,
+    txm = TXM(has_permit=SHUTTER_PERMIT, is_attached=True,
               ioc_prefix=IOC_PREFIX, use_shutter_A=False,
               use_shutter_B=True)
     # Launch the scan

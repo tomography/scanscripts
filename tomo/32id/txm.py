@@ -80,7 +80,7 @@ class TxmPV(object):
         self.wait = wait
         self.get_kwargs = get_kwargs
     
-    def get_epics_PV(self, txm):
+    def epics_PV(self, txm):
         # Only create a PV if one doesn't exist or the IOC prefix has changed
         is_cached = (self._epicsPV is not None and
                      self.ioc_prefix == txm.ioc_prefix)
@@ -97,7 +97,7 @@ class TxmPV(object):
     def __get__(self, txm, type=None):
         # Ask the PV for an updated value if possible
         if txm.is_attached:
-            pv = self.get_epics_PV(txm)
+            pv = self.epics_PV(txm)
             self.curr_value = pv.get(**self.get_kwargs)
         # Return the most recently retrieved value
         if self.dtype is not None:
@@ -107,17 +107,6 @@ class TxmPV(object):
     def complete_put(self, promise, pvname):
         log.debug("Completed put for %s", self)
         promise.is_complete = True
-        # txm = data
-        # log.debug("Completed put on %s", pvname)
-        # if txm.is_attached:
-        #     is_not_done = True
-        # else:
-        #     is_not_done = False
-        # while is_not_done and self.wait:
-        #     time.sleep(0.01) # Give the PV a chance to settle
-        #     curr_val = self.get_epics_PV(txm).get()
-        #     is_not_done = (curr_val != self.curr_value)
-        # self.put_complete = True
     
     def __set__(self, txm, val):
         log.debug("Setting PV value %s: %s", self, val)
@@ -134,7 +123,7 @@ class TxmPV(object):
             self.curr_value = val
         # Set the PV (only if the TXM is attached and has permit)
         if txm.is_attached and permit_clear:
-            pv = self.get_epics_PV(txm)
+            pv = self.epics_PV(txm)
             # How should be handle waiting?
             in_context = txm.pv_queue is not None
             if not in_context:
@@ -869,6 +858,32 @@ class TXM(object):
             ret = self._trigger_multiple_projections(
                 num_projections=num_projections, exposure=exposure)
         return ret
+
+    def epics_PV(self, pv_name):
+        """Retrieve the epics process variable (PV) object for the given
+        attribute name.
+        
+        Parameters
+        ==========
+        pv_name : str
+          The name of the PV object. Should match the attribute on
+          this TXM() object.
+        
+        """
+        return self.__class__.__dict__[pv_name].epics_PV(txm=self)
+    
+    def reset_ccd(self):
+        log.debug("Resetting CCD")
+        # Sequence Internal / Overlapped / internal because of CCD bug!!
+        self.Cam1_TriggerMode = 'Internal'
+        self.Cam1_TriggerMode = 'Overlapped'
+        self.Cam1_TriggerMode = 'Internal'
+        # Other PV settings
+        self.Proc1_Filter_Callbacks = 'Every array'
+        self.Cam1_ImageMode = 'Continuous'
+        self.Cam1_Display = 1
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, timeout=2)
 
 
 class MicroCT(TXM):

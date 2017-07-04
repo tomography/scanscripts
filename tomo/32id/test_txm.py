@@ -91,7 +91,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         txm.is_attached = True
         # Mock the Epics PV object so we can test it for real
         test_pv = txm.__class__.__dict__['ring_current']
-        epics_pv = test_pv.get_epics_PV(txm)
+        epics_pv = test_pv.epics_PV(txm)
         # If the TXM has no queue, then the PV should be
         # called with ``put(wait=True)``
         txm.pv_queue = None
@@ -115,7 +115,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         txm.is_attached = False
         # Mock the Epics PV object so we can test it for real
         test_pv = txm.__class__.__dict__['ring_current']
-        epics_pv = test_pv.get_epics_PV(txm)
+        epics_pv = test_pv.epics_PV(txm)
         # Make sure that the PV is not used when TXM is unattached 
         txm.ring_current
         txm.ring_current = 19
@@ -135,7 +135,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         txm.has_permit = False
         # Mock the Epics PV object so we can test it for real
         test_pv = txm.__class__.__dict__['shutter_state']
-        epics_pv = test_pv.get_epics_PV(txm)
+        epics_pv = test_pv.epics_PV(txm)
         # Check that the permit_required PV is not changed w/o permit
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always')
@@ -382,7 +382,8 @@ class TXMTestCase(unittest.TestCase):
             warnings.simplefilter('always')
             txm.capture_projections()
             self.assertEqual(len(w), 1, "Did not raise shutter warning")
-            self.assertIn('Collecting projections with shutters closed.', w[0].message)
+            self.assertIn('Collecting projections with shutters closed.',
+                          str(w[0].message))
         # Test when num_projections is > 1
         txm.shutters_are_open = True
         txm.capture_projections(num_projections=3)
@@ -403,7 +404,8 @@ class TXMTestCase(unittest.TestCase):
             warnings.simplefilter('always')
             txm.capture_dark_field()
             self.assertEqual(len(w), 1, "Did not raise shutter warning")
-            self.assertIn('Collecting dark field with shutters open.', w[0].message)
+            self.assertIn('Collecting dark field with shutters open.',
+                          str(w[0].message))
         # Test when calling with multiple projections
         txm.close_shutters()
         txm.capture_dark_field(num_projections=3)
@@ -424,7 +426,7 @@ class TXMTestCase(unittest.TestCase):
             warnings.simplefilter('always')
             txm.capture_white_field()
             self.assertEqual(len(w), 1, "Did not raise shutter warning")
-            self.assertIn('Collecting white field with shutters closed.', w[0].message)
+            self.assertIn('Collecting white field with shutters closed.', str(w[0].message))
         # Test for collecting multiple projections
         txm.open_shutters()
         txm._trigger_multiple_projections.reset_mock()
@@ -438,3 +440,20 @@ class TXMTestCase(unittest.TestCase):
         txm._trigger_single_projection.reset_mock()
         txm.capture_white_field(num_projections=1)
         txm._trigger_single_projection.assert_called_with(exposure=0.5)
+    
+    def test_reset_ccd(self):
+        txm = TXM(is_attached=False)
+        txm.Cam1_ImageMode = mock.MagicMock()
+        # Set some fake intial values to check if they change
+        txm.Cam1_TriggerMode = "Nonsense"
+        txm.wait_pv = mock.MagicMock()
+        # txm.Proc1_Filter_Callbacks = "more nonsense"
+        txm.reset_ccd()
+        # Check that new values were set
+        self.assertEqual(txm.Cam1_TriggerMode, "Internal")
+        self.assertEqual(txm.Proc1_Filter_Callbacks, "Every array")
+        self.assertEqual(txm.Cam1_ImageMode, "Continuous")
+        self.assertEqual(txm.Cam1_Display, 1)
+        self.assertEqual(txm.Cam1_Acquire, txm.DETECTOR_ACQUIRE)
+        # Check that the method waits for cam1_acquire
+        txm.wait_pv.assert_called_once_with('Cam1_Acquire', txm.DETECTOR_ACQUIRE, timeout=2)

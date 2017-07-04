@@ -47,10 +47,10 @@ def update_variable_dict(variableDict):
     if len(sys.argv) > 1:
         strArgv = sys.argv[1]
         argDic = json.loads(strArgv)
-    log.debug('orig variable dict: %s', variableDict)
-    for k,v in argDic.iteritems():
+    log.debug('Orig variable dict: %s', variableDict)
+    for k, v in argDic.iteritems():
         variableDict[k] = v
-    log.debug(' new variable dict: %s', variableDict)
+    log.debug('New variable dict: %s', variableDict)
 
 
 def wait_pv(pv, wait_val, max_timeout_sec=-1):
@@ -380,6 +380,8 @@ def cleanup(global_PVs, variableDict, host, port, keys):
 
 
 def reset_CCD(global_PVs, variableDict):
+    log.error("Reimplement reset_CCD() method")
+    return
     # sequence Internal / Overlapped / internal because of CCD bug!!
     global_PVs['Cam1_TriggerMode'].put('Internal', wait=True)
     global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True)
@@ -599,6 +601,8 @@ def add_theta(global_PVs, variableDict, theta_arr):
 
 
 def add_extra_hdf5(global_PVs, variableDict, theta_arr, interf_arrs):
+    log.warning("add_extra_hdf5 not implemented")
+    return
     log.debug('add_extra_hdf5()')
     wait_pv(global_PVs['HDF1_Capture_RBV'], 0, 10.0)
     fullname = global_PVs['HDF1_FullFileName_RBV'].get(as_string=True)

@@ -2,7 +2,7 @@
 
 # Logging
 import logging
-logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.WARNING)
 
 import unittest
 import mock
@@ -10,6 +10,7 @@ import sys
 import os
 
 import energy_scan
+import tomo_step_scan
 from txm import TXM
 
 log = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ class TomoStepScanTests(unittest.TestCase):
                        has_permit=True)
     
     def test_full_tomo_scan(self):
-        pass
+        tomo_step_scan.full_tomo_scan(txm=self.txm)
 
 
 class EnergyScanTests(unittest.TestCase):
