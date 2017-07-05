@@ -5,7 +5,11 @@ import logging
 logging.basicConfig(level=logging.WARNING)
 
 import unittest
-import mock
+import six
+if six.PY2:
+    import mock
+else:
+    from unittest import mock
 import sys
 import os
 
@@ -22,11 +26,18 @@ energy_scan.variableDict['StabilizeSleep_ms'] = 0.001
 
 
 class TomoStepScanTests(unittest.TestCase):
+    hdf_filename = "/tmp/sector32_test.h5"
+    
     def setUp(self):
         self.txm = TXM(is_attached=False,
                        has_permit=True)
     
+    def tearDown(self):
+        if os.path.exists(self.hdf_filename):
+            os.remove(self.hdf_filename)
+    
     def test_full_tomo_scan(self):
+        self.txm.HDF1_FullFileName_RBV = self.hdf_filename
         tomo_step_scan.full_tomo_scan(txm=self.txm)
 
 

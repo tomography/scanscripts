@@ -397,14 +397,6 @@ def reset_CCD(global_PVs, variableDict):
     wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
 
 
-def setup_hdf_writer(globalPVs, variableDict):
-    log.error('setup_hdf_writer() not found.')
-
-
-def setup_detector_energy_scan(global_PVs, variableDict):
-    log.error('setup_detector_energy_scan() not found.')
-
-
 def setup_detector(global_PVs, variableDict):
     log.debug('setup_detector()')
     if variableDict.has_key('Display_live'):
@@ -601,7 +593,7 @@ def add_theta(global_PVs, variableDict, theta_arr):
 
 
 def add_extra_hdf5(global_PVs, variableDict, theta_arr, interf_arrs):
-    log.warning("add_extra_hdf5 not implemented")
+    log.error("add_extra_hdf5 is deprecated")
     return
     log.debug('add_extra_hdf5()')
     wait_pv(global_PVs['HDF1_Capture_RBV'], 0, 10.0)

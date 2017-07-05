@@ -18,6 +18,7 @@ import logging
 import warnings
 from contextlib import contextmanager
 
+import tqdm
 from epics import PV as EpicsPV, get_pv
 
 import exceptions_
@@ -429,14 +430,7 @@ class TXM(object):
         log.debug("Completed %d queued PV's", num_promises)
         # Restore the old PV queue
         self.pv_queue = old_queue
-    
-    def flush_pvs(self):
-        """This method blocks until all the PV's in the pv_queue have reached
-        their target values, then clears the queue.
-        
-        """
-        self.pv_queue = []
-    
+   
     def wait_pv(self, pv_name, target_val, timeout=DEFAULT_TIMEOUT):
         """Wait for a process variable to reach given value.
         
@@ -654,6 +648,42 @@ class TXM(object):
     def hdf_filename(self):
         return self.HDF1_FullFileName_RBV
     
+    def setup_tomo_detector(self):
+        """Prepare the detector for tomography."""
+        log.debug('setup_detector()')
+        if variableDict.has_key('Display_live'):
+            log.debug('** disable live display')
+            global_PVs['Cam1_Display'].put( int( variableDict['Display_live'] ) )
+        global_PVs['Cam1_ImageMode'].put('Multiple')
+        global_PVs['Cam1_ArrayCallbacks'].put('Enable')
+        #global_PVs['Image1_Callbacks'].put('Enable')
+        global_PVs['Cam1_AcquirePeriod'].put(float(variableDict['ExposureTime']))
+        global_PVs['Cam1_AcquireTime'].put(float(variableDict['ExposureTime']))
+        # if we are using external shutter then set the exposure time
+        global_PVs['SetSoftGlueForStep'].put('0')
+        global_PVs['Cam1_FrameRateOnOff'].put(0)
+        if int(variableDict['ExternalShutter']) == 1:
+            global_PVs['ExternShutterExposure'].put(float(variableDict['ExposureTime']))
+            global_PVs['ExternShutterDelay'].put(float(variableDict['Ext_ShutterOpenDelay']))
+            global_PVs['SetSoftGlueForStep'].put('1')
+        # if software trigger capture two frames (issue with Point grey grasshopper)
+        if PG_Trigger_External_Trigger == 1:
+            wait_time_sec = int(variableDict['ExposureTime']) + 5
+            global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True) #Ext. Standard
+            global_PVs['Cam1_NumImages'].put(1, wait=True)
+            global_PVs['Cam1_Acquire'].put(DetectorAcquire)
+            wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
+            global_PVs['Cam1_SoftwareTrigger'].put(1)
+            wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
+            global_PVs['Cam1_Acquire'].put(DetectorAcquire)
+            wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
+            global_PVs['Cam1_SoftwareTrigger'].put(1)
+            wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
+        else:
+            global_PVs['Cam1_TriggerMode'].put('Internal')
+        #global_PVs['ClearTheta'].put(1)
+        log.debug('setup_detector: Done!')
+    
     def setup_hdf_writer(self, filename=None, num_projections=1,
                          write_mode="Stream", num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
@@ -804,6 +834,46 @@ class TXM(object):
             ret = self._trigger_multiple_projections(
                 num_projections=num_projections, exposure=exposure)
         return ret
+    
+    def capture_tomogram(self, angles, num_projections=1, exposure=1.,
+                         stabilize_sleep=10):
+        """Collect data frames over a range of angles.
+
+        Parameters
+        ==========
+        angles : np.ndarray
+          An array of angles (in degrees) to use for collecting
+          projections.
+        num_projections : int, optional
+          Number of projections to average at each angle.
+        exposure : float, optional
+          How long to collect for in each image.
+        stablize_sleep : int, optional
+          How long (in milliseconds) to wait after moving the rotation
+          stage.
+        
+        """
+        log.debug('called tomo_scan()')
+        # Prepare the instrument for data collection
+        self.Cam1_FrameType = self.FRAME_DATA
+        self.Cam1_NumImages = 1
+        if num_projections > 1:
+            old_filter = self.Proc1_Filter_Enable
+            self.Proc1_Filter_Enable = 'Enable'
+        # Cycle through each angle and collect data
+        for sample_rot in tqdm.tqdm(angles, desc="Capturing tomogram"):
+            self.move_sample(theta=sample_rot)
+            log.debug('Stabilize Sleep: %d ms', stabilize_sleep)
+            time.sleep(stabilize_sleep / 1000)
+            # Trigger the camera
+            if num_projections > 1:
+                self._trigger_multiple_projections(exposure=exposure,
+                                                   num_projections=num_projections)
+            else:
+                self._trigger_single_projection(exposure=exposure)
+        # Reestore previous filter enabled state
+        if num_projections > 1:
+            self.Proc1_Filter_Enable = old_filter
     
     def capture_white_field(self, num_projections=1, exposure=0.5):
         """Trigger the capturing of projection images from the detector with

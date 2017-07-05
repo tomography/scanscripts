@@ -160,11 +160,9 @@ class PVDescriptorTestCase(unittest.TestCase):
         # Make sure the dtype is compatible with the default value
         with self.assertRaises(TypeError):
             TxmPV('', default=None, dtype=float)
-            
 
 
 class TXMTestCase(unittest.TestCase):
-
     def test_has_permit(self):
         txm = TXM()
         txm.is_attached = True
