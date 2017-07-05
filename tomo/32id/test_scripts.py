@@ -39,6 +39,7 @@ class EnergyScanTests(unittest.TestCase):
         txm.capture_projections = mock.MagicMock()
         txm.capture_dark_field = mock.MagicMock()
         txm.capture_white_field = mock.MagicMock()
+        txm.setup_hdf_writer = mock.MagicMock()
         # Launch the script
         energy_scan.variableDict['PreDarkImages'] = 4
         energy_scan.energy_scan(txm)
@@ -47,3 +48,4 @@ class EnergyScanTests(unittest.TestCase):
         txm.capture_projections.assert_called_with(exposure=0.001)
         txm.capture_dark_field.assert_called_once_with(
             exposure=0.001, num_projections=4)
+        txm.setup_hdf_writer.assert_called_once_with()
