@@ -22,7 +22,7 @@ class PermitDecoratorsTestCase(unittest.TestCase):
     class FakeTXM():
         has_permit = False
         is_attached = True
-        ioc_prefix = ''
+vv        ioc_prefix = ''
         test_value = False
         @permit_required
         def permit_func(self):
@@ -76,6 +76,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         default_current = TxmPV('current', default=7)
         shutter_state = TxmPV('shutter', permit_required=True)
         ioc_state = TxmPV('{ioc_prefix}_state')
+        args_pv = TxmPV('withargs', get_kwargs={'as_string': True})
     
     def test_unattached_values(self):
         txm = self.FakeTXM()
@@ -104,7 +105,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         promise = txm.pv_queue[0]
         self.assertIsInstance(promise, test_pv.PVPromise)
         epics_pv.put.assert_called_with(6, callback=test_pv.complete_put,
-                                        callback_data=promise)
+                                        callback_data=promise, wait=False)
         # Now check that completing the put changes the promises state
         test_pv.complete_put(promise, pvname='ring_current')
         self.assertTrue(promise.is_complete)
@@ -160,6 +161,18 @@ class PVDescriptorTestCase(unittest.TestCase):
         # Make sure the dtype is compatible with the default value
         with self.assertRaises(TypeError):
             TxmPV('', default=None, dtype=float)
+    
+    @mock.patch('txm.EpicsPV')
+    def test_extra_args(self, EpicsPV):
+        # Make sure the extra arguments given to the constructor get
+        # pass through to the actual PV.
+        txm = self.FakeTXM()
+        txm.is_attached = True
+        test_pv = txm.__class__.__dict__['args_pv']
+        self.assertEqual(test_pv.get_kwargs['as_string'], True)
+        # Check that the arguments get passed to the real PV
+        txm.args_pv
+        test_pv.get_epics_PV(txm).get.assert_called_once_with(as_string=True)
 
 
 class TXMTestCase(unittest.TestCase):
@@ -175,10 +188,10 @@ class TXMTestCase(unittest.TestCase):
     
     def test_move_sample(self):
         txm = TXM(is_attached=False)
-        txm.Motor_SampleX = None
-        txm.Motor_SampleY = None
-        txm.Motor_SampleZ = None
-        self.assertEqual(txm.Motor_SampleX, None)
+        txm.Motor_SampleX = 0.
+        txm.Motor_SampleY = 0.
+        txm.Motor_SampleZ = 0.
+        self.assertEqual(txm.Motor_SampleX, 0.)
         txm.move_sample(1, 2, 3)
         self.assertEqual(txm.Motor_Sample_Top_X, 1)
         self.assertEqual(txm.Motor_SampleY, 2)

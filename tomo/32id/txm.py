@@ -59,7 +59,8 @@ class TxmPV(object):
     wait : bool, optional
       If truthy, setting this descriptor will block until the
       operation succeeds.
-    
+    get_kwargs : dict, optional
+      Extra keyword arguments to pass to the PV's ``get`` method.
     """
     _epicsPV = None
     put_complete = True
@@ -83,10 +84,8 @@ class TxmPV(object):
     
     def epics_PV(self, txm):
         # Only create a PV if one doesn't exist or the IOC prefix has changed
-        is_cached = (self._epicsPV is not None and
-                     self.ioc_prefix == txm.ioc_prefix)
+        is_cached = (self._epicsPV is not None)
         if not is_cached:
-            self.ioc_prefix = txm.ioc_prefix
             pv_name = self.pv_name(txm)
             self._epicsPV = EpicsPV(pv_name)
         return self._epicsPV
@@ -99,26 +98,31 @@ class TxmPV(object):
         # Ask the PV for an updated value if possible
         if txm.is_attached:
             pv = self.epics_PV(txm)
+            pv = self.get_epics_PV(txm)
+            print(pv.info)
             self.curr_value = pv.get(**self.get_kwargs)
         # Return the most recently retrieved value
         if self.dtype is not None:
             self.curr_value = self.dtype(self.curr_value)
         return self.curr_value
     
-    def complete_put(self, promise, pvname):
+    def complete_put(self, data, pvname):
         log.debug("Completed put for %s", self)
+        promise = data
         promise.is_complete = True
     
     def __set__(self, txm, val):
-        log.debug("Setting PV value %s: %s", self, val)
+        pv_name = self.pv_name(txm)
+        log.debug("Setting PV value %s: %s", pv_name, val)
         self.txm = txm
         # Check that the TXM has shutter permit if required for this PV
         if txm.is_attached and self.permit_required and not txm.has_permit:
             # There's a valid TXM but we can't operate this PV
             permit_clear = False
-            msg = "PV {pv} was not set because TXM doesn't have permission."
-            msg = msg.format(pv=self.pv_name)
-            warnings.warn(msg)
+            msg = "PV {pv} was not set because TXM doesn't have beamline permit."
+            msg = msg.format(pv=pv_name)
+            warnings.warn(msg, RuntimeWarning)
+            log.warning(msg)
         else:
             permit_clear = True
             self.curr_value = val
@@ -134,7 +138,7 @@ class TxmPV(object):
                 # Non-blocking version
                 promise = self.PVPromise()
                 txm.pv_queue.append(promise)
-                pv.put(val, callback=self.complete_put, callback_data=promise)
+                pv.put(val, wait=False, callback=self.complete_put, callback_data=promise)
         elif not txm.is_attached:
             # Simulate a completed put call, because the callback isn't run
             self.curr_value = val
@@ -154,7 +158,7 @@ def permit_required(real_func):
     
     This method decorator ensures that the decorated method can only
     be called on an object that has a shutter permit. If it doesn't,
-    then nothing happens.
+    then an exceptions is raised.
     
     Parameters
     ----------
@@ -230,7 +234,7 @@ class TXM(object):
       The width of the zoneplate's outermost diffraction zone.
     
     """
-    pv_queue = []
+    pv_queue = None
     hdf_writer_ready = False
     tiff_writer_ready = False
     pg_external_trigger = True
@@ -276,9 +280,11 @@ class TXM(object):
     HDF1_NumCapture = TxmPV('{ioc_prefix}HDF1:NumCapture')
     HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture')
     HDF1_Capture_RBV = TxmPV('{ioc_prefix}HDF1:Capture_RBV')
-    HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName')
+    HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName', dtype=str,
+                          get_kwargs={'as_string': True})
     HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV',
-                               dtype=str, default='')
+                                  dtype=str, default='',
+                                  get_kwargs={'as_string': True})
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
     HDF1_NextFile = TxmPV('{ioc_prefix}HDF1:FileNumber')
@@ -298,13 +304,13 @@ class TXM(object):
     TIFF1_ArrayPort = TxmPV('{ioc_prefix}TIFF1:NDArrayPort')
     
     # Motor PV's
-    Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL')
-    Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL') # for the TXM
+    Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL', float, default=0.)
+    Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL', float, default=0.) # for the TXM
     # Professional Instrument air bearing rotary stage
-    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL')
+    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL', float, default=0.)
     # Smaract XZ TXM set
-    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL')
-    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c1:m8.VAL')
+    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL', float, default=0.)
+    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c3:m8.VAL', float, default=0.)
     # # Mosaic scanning axes
     # Motor_X_Tile = TxmPV('32idc01:m33.VAL')
     # Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
@@ -332,7 +338,7 @@ class TXM(object):
     ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL', default=0)
     ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
     # State 0 = Close, 1 = Open
-    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control')
+    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control', permit_required=True)
     
     # Fly scan PV's for nano-ct TXM using Profession Instrument air-bearing stage
     Fly_ScanDelta = TxmPV('32idcTXM:PSOFly3:scanDelta')
@@ -395,7 +401,7 @@ class TXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False, is_attached=True, ioc_prefix="",
+    def __init__(self, has_permit=False, is_attached=True, ioc_prefix="32idcPG3:",
                  use_shutter_A=False, use_shutter_B=True, zp_diameter=180,
                  drn=60):
         self.is_attached = is_attached
@@ -467,6 +473,7 @@ class TXM(object):
         while(True and self.is_attached):
             real_PV = self.__class__.__dict__[pv_name]
             pv_val = real_PV.__get__(self)
+            print(pv_val, target_val)
             if (pv_val != target_val):
                 if timeout > -1:
                     curTime = time.time()
@@ -483,8 +490,6 @@ class TXM(object):
     def move_sample(self, x=None, y=None, z=None, theta=None):
         """Move the sample to the given (x, y, z) position.
         
-        This method is non-blocking.
-        
         Parameters
         ----------
         x, y, z : float, optional
@@ -493,15 +498,21 @@ class TXM(object):
           Rotation axis angle to set to.
         """
         log.debug('Moving sample to (%s, %s, %s)', x, y, z)
+        if theta is not None:
+            self.Motor_SampleRot = theta
         if x is not None:
             self.Motor_Sample_Top_X = float(x)
         if y is not None:
             self.Motor_SampleY = float(y)
         if z is not None:
             self.Motor_Sample_Top_Z = float(z)
-        if theta is not None:
-            self.Motor_SampleRot = theta
-        log.debug("Sample moved to (x=%s, y=%s, z=%s, θ=%s°)", x, y, z, theta)
+        # Log actual x, y, z, θ values
+        msg = "Sample moved to (x={x:.2f}, y={y:.2f}, z={z:.2f}, θ={theta:.2f}°)"
+        msg = msg.format(x=self.Motor_Sample_Top_X,
+                         y=self.Motor_SampleY,
+                         z=self.Motor_Sample_Top_Z,
+                         theta=self.Motor_SampleRot)
+        log.debug(msg)
     
     @permit_required
     def move_energy(self, energy, constant_mag=True, gap_offset=0., 
@@ -621,8 +632,8 @@ class TXM(object):
         starttime = time.time()
         if self.use_shutter_A:
             log.debug("Closing shutter A")
-            self.ShutterA_Close = 1 # wait=True
-            self.wait_pv('ShutterA_Move_Status', self.SHUTTER_CLOSED)
+            self.ShutterA_Close = 1
+            self.wait_pv('ShutteA_Move_Status', self.SHUTTER_CLOSED)
         if self.use_shutter_B:
             log.debug("Closing shutter B")
             self.ShutterB_Close = 1
@@ -685,7 +696,8 @@ class TXM(object):
         log.debug('setup_detector: Done!')
     
     def setup_hdf_writer(self, filename=None, num_projections=1,
-                         write_mode="Stream", num_recursive_images=1):
+                         write_mode="Stream", num_recursive_images=1,
+                         live_display=True):
         """Prepare the HDF file writer to accept data.
         
         Parameters
@@ -701,6 +713,8 @@ class TXM(object):
           (default), recursive filtering will be disabled.
         
         """
+        log.error("Test this code!!!")
+        
         log.debug('setup_hdf_writer() called')
         if num_recursive_images > 1:
             # Enable recursive filter
@@ -717,11 +731,6 @@ class TXM(object):
             # global_PVs['Proc1_Callbacks'].put('Disable')
             self.Proc1_Filter_Enable = 'Disable'
             self.HDF1_ArrayPort = self.Proc1_ArrayPort
-        # Other HDF parameters
-        # global_PVs['HDF1_AutoSave'].put('Yes')
-        # global_PVs['HDF1_DeleteDriverFile'].put('No')
-        # global_PVs['HDF1_EnableCallbacks'].put('Enable')
-        # global_PVs['HDF1_BlockingCallbacks'].put('No')
         # Count total number of projections needed
         self.HDF1_NumCapture = num_projections
         self.HDF1_FileWriteMode = write_mode
@@ -729,9 +738,10 @@ class TXM(object):
             self.HDF1_FileName = filename
         self.HDF1_Capture = self.CAPTURE_ENABLED
         # ?? Is this wait_pv really necessary?
-        self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
+        # import pdb; pdb.set_trace()
+        # self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
-        log.debug("Finished setting up HDF writer for %s.", self.HDF1_FileName)
+        log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
         self.hdf_writer_ready = True
     
     def setup_tiff_writer(self, filename, num_projections=1,
@@ -802,7 +812,13 @@ class TXM(object):
     
     def _trigger_single_projection(self, exposure):
         """Trigger the detector to capture just one projection."""
-        self.Cam1_NumImages = 1
+        log.debug("Triggering single projection")
+        with self.wait_pvs():
+            self.Cam1_NumImages = 1
+            self.Cam1_TriggerMode = 'Internal'
+            self.Cam1_ImageMode = 'Single'
+            self.Cam1_AcquireTime = exposure
+            self.Cam1_AcquirePeriod = exposure
         # Start detector acquire
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         # wait for acquire to finish
@@ -825,7 +841,7 @@ class TXM(object):
             msg = "Collecting projections with shutters closed."
             warnings.warn(msg, RuntimeWarning)
             log.warning(msg)
-        # Set frame type
+        # Set frame collection data
         self.Cam1_FrameType = self.FRAME_DATA
         # Collect the data
         if num_projections == 1:
@@ -838,7 +854,7 @@ class TXM(object):
     def capture_tomogram(self, angles, num_projections=1, exposure=1.,
                          stabilize_sleep=10):
         """Collect data frames over a range of angles.
-
+        
         Parameters
         ==========
         angles : np.ndarray
@@ -928,7 +944,7 @@ class TXM(object):
             ret = self._trigger_multiple_projections(
                 num_projections=num_projections, exposure=exposure)
         return ret
-
+    
     def epics_PV(self, pv_name):
         """Retrieve the epics process variable (PV) object for the given
         attribute name.
@@ -969,7 +985,7 @@ class MicroCT(TXM):
     Fly_Calc_Projections = TxmPV('32idcTXM:eFly:calcNumTriggers')
     Fly_Set_Encoder_Pos = TxmPV('32idcTXM:eFly:EncoderPos')
     Theta_Array = TxmPV('32idcTXM:eFly:motorPos.AVAL')
-
+    
     # Motor PVs
     Motor_SampleX = TxmPV('32idc01:m33.VAL')
     Motor_SampleY = TxmPV('32idc02:m15.VAL') # for the micro-CT system
@@ -979,4 +995,3 @@ class MicroCT(TXM):
     Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c1:m1.VAL') # Smaract XZ micro-CT set
     Motor_X_Tile = TxmPV('32idc01:m33.VAL')
     Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
-

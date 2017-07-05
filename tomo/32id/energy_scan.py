@@ -83,7 +83,6 @@ def energy_scan(txm):
     ZP_diameter = float(variableDict['ZP_diameter'])
     offset = float(variableDict['Offset'])
     drn = float(variableDict['drn'])
-    exposure = float(variableDict['ExposureTime'])
     StabilizeSleep_ms = float(variableDict['StabilizeSleep_ms'])
     # Start scan sleep in min so min * 60 = sec
     if sleep_min > 0:
@@ -142,7 +141,8 @@ def main():
 if __name__ == '__main__':
     # Set up default stream logging
     # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    logging.basicConfig(level=logging.WARNING)
+    # logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG, filename='wolfman-devel.log')
     logging.captureWarnings(True)
     # Enter the main script function
     main()
