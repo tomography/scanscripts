@@ -20,6 +20,7 @@ import logging
 
 import numpy as np
 import h5py
+import tqdm
 from epics import PV
 from tomo_scan_lib import update_variable_dict
 from txm import TXM
@@ -46,7 +47,7 @@ variableDict = {
     # 'BSC_drn': 60
 }
 
-IOC_PREFIX = '32idcPG3'
+IOC_PREFIX = '32idcPG3:'
 SHUTTER_PERMIT = False
 DEFAULT_ENERGIES = np.arange(
     variableDict['Energy_Start'],
@@ -64,7 +65,6 @@ def getVariableDict():
 
 def energy_scan(energies, exposure=variableDict['ExposureTime'],
                 n_pre_dark=variableDict['PreDarkImages'],
-                sleep_min=variableDict['StartSleep_min'],
                 is_attached=True, has_permit=False,
                 sample_pos=(None,), out_pos=(None,),
                 gap_offset=variableDict['Offset'],
@@ -72,18 +72,13 @@ def energy_scan(energies, exposure=variableDict['ExposureTime'],
                 drn=variableDict['drn'],
                 constant_mag=variableDict['constant_mag'],
                 stabilize_sleep_ms=variableDict['StabilizeSleep_ms']):
-    txm = TXM(is_attached=is_attached, has_permit=has_permit,
-              zp_diameter=zp_diameter, drn=drn)
     log.debug('start_scan() called')
     start_time = time.time()
     # Create the TXM object for this scan
     txm = TXM(is_attached=is_attached, has_permit=has_permit,
               ioc_prefix=IOC_PREFIX, use_shutter_A=False,
-              use_shutter_B=True)
-    # Start scan sleep in min so min * 60 = sec
-    if sleep_min > 0:
-        log.debug("Sleeping for %f min", sleep_min)
-        time.sleep(sleep_min * 60.0)
+              use_shutter_B=True,
+              zp_diameter=zp_diameter, drn=drn)
     # Prepare TXM for capturing data
     txm.setup_detector(exposure=exposure)
     total_projections = n_pre_dark + 2 * len(energies)
@@ -97,7 +92,7 @@ def energy_scan(energies, exposure=variableDict['ExposureTime'],
     log.info('Capturing %d energies', len(energies))
     # Collect each energy frame
     correct_backlash = True # First energy only
-    for energy in energies:
+    for energy in tqdm.tqdm(energies, "Energy scan"):
         log.debug('Preparing to capture energy: %f keV', energy)
         with txm.wait_pvs():
             txm.move_sample(*sample_pos)
@@ -118,15 +113,13 @@ def energy_scan(energies, exposure=variableDict['ExposureTime'],
         txm.capture_white_field()
     txm.close_shutters()
     # Add the energy array to the active HDF file
-    hdf_filename = txm.hdf_filename
-    log.debug('Saving energies to file: %s', hdf_filename)
-    with h5py.File(hdf_filename) as hdf_f:
+    with txm.hdf_file(mode="r+") as hdf_f:
+        log.debug('Saving energies to file: %s', txm.hdf_filename)
         hdf_f.create_dataset('/exchange/energy',
-                             (len(energies),),
                              data=energies)
     # Log the duration and output file
     duration = time.time() - start_time
-    log.info('Energy scan took %d sec and saved in file %s', duration, hdf_filename)
+    log.info('Energy scan took %d sec and saved in file %s', duration, txm.hdf_filename)
     return txm
 
 
@@ -144,9 +137,12 @@ def main():
     energy_end = float(variableDict['Energy_End'])
     energy_step = float(variableDict['Energy_Step'])
     energies = np.arange(energy_start, energy_end + energy_step, energy_step)
-    # Launch the scan (after waiting if requested)
-    sleep_min = float(variableDict['StartSleep_min'])
-    time.sleep(sleep_min * 60)
+    # Start scan sleep in min so min * 60 = sec
+    sleep_min = float(variableDict.get('StartSleep_min', 0))
+    if sleep_min > 0:
+        log.debug("Sleeping for %f min", sleep_min)
+        time.sleep(sleep_min * 60.0)
+    # Start the energy scan
     energy_scan(energies=energies,
                 exposure=float(variableDict['ExposureTime']),
                 n_pre_dark=int(variableDict['PreDarkImages']),

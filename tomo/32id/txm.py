@@ -18,6 +18,7 @@ import logging
 import warnings
 from contextlib import contextmanager
 
+import h5py
 import tqdm
 from epics import PV as EpicsPV, get_pv
 
@@ -256,6 +257,8 @@ class TXM(object):
     FRAME_DARK = 2
     DETECTOR_IDLE = 0
     DETECTOR_ACQUIRE = 1
+    HDF_IDLE = 0
+    HDF_WRITING = 1
     
     # Process variables
     # -----------------
@@ -592,6 +595,7 @@ class TXM(object):
         self.DCMmvt = old_DCM_mode
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
+    @permit_required
     def open_shutters(self):
         """Open the shutters to allow light in. The specific shutter(s) that
         opens depends on the values of ``self.use_shutter_A`` and
@@ -601,7 +605,7 @@ class TXM(object):
         starttime = time.time()
         if self.use_shutter_A:
             log.debug("Opening shutter A")
-            self.ShutterA_Open = 1 # wait=True
+            self.ShutterA_Open = 1
             self.wait_pv('ShutterA_Move_Status', self.SHUTTER_OPEN)
         if self.use_shutter_B:
             log.debug("Opening shutter B")
@@ -627,6 +631,7 @@ class TXM(object):
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
+    @permit_required
     def close_shutters(self):
         """Close the shutters to stop light in. The specific shutter(s) that
         closes depends on the values of ``self.use_shutter_A`` and
@@ -663,6 +668,12 @@ class TXM(object):
     def hdf_filename(self):
         return self.HDF1_FullFileName_RBV
 
+    def hdf_file(self, timeout=10, *args, **kwargs):
+        start_time = time.time()
+        # Wait for the HDF writer to be done using the HDF file
+        self.wait_pv('HDF1_Capture_RBV', self.HDF_IDLE, timeout=timeout)
+        return h5py.File(self.hdf_filename, *args, **kwargs)
+
     @property
     def exposure_time(self):
         """Exposure time for the CCD in seconds."""
@@ -674,13 +685,14 @@ class TXM(object):
         self.Cam1_AcquireTime = val
         self.Cam1_AcquirePeriod = val
         
-    def setup_detector(self, exposure=0.5, live_display=True):
+    def setup_detector(self, exposure=0.5, live_display=False):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
         # Capture a dummy frame to that the HDF5 plugin will work
         self.Cam1_ImageMode = "Single"
         self.Cam1_TriggerMode = "Internal"
         self.exposure_time = 0.01
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
         # Now set the real settings for the detector
         self.Cam1_Display = live_display
         self.Cam1_ArrayCallbacks = 'Enable'
@@ -798,8 +810,9 @@ class TXM(object):
         for i in range(num_projections):
             self.Cam1_Acquire = self.DETECTOR_ACQUIRE
             self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
-            time.sleep(0.05) # Pause and let the detector catch up
-            self.Cam1_SoftwareTrigger = 1
+            while self.Cam1_Acquire != self.DETECTOR_IDLE:
+                time.sleep(0.01)
+                self.Cam1_SoftwareTrigger = 1
             self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
     
     def capture_projections(self, num_projections=1):
