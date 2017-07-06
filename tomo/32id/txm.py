@@ -98,8 +98,10 @@ class TxmPV(object):
         # Ask the PV for an updated value if possible
         if txm.is_attached:
             pv = self.epics_PV(txm)
-            pv = self.get_epics_PV(txm)
-            self.curr_value = pv.get(**self.get_kwargs)
+            try:
+                self.curr_value = pv.get(**self.get_kwargs)
+            except ValueError as e:
+                log.error("Failed retrieving {}: {}".format(self.pv_name(txm), e))
         # Return the most recently retrieved value
         if self.dtype is not None:
             self.curr_value = self.dtype(self.curr_value)
@@ -132,7 +134,9 @@ class TxmPV(object):
             in_context = txm.pv_queue is not None
             if not in_context:
                 # Blocking version
-                pv.put(val, wait=self.wait)
+                result = pv.put(val, wait=self.wait)
+                if result < 0:
+                    log.error("Error waiting on response from PV %s", self)
             else:
                 # Non-blocking version
                 promise = self.PVPromise()
@@ -268,8 +272,9 @@ class TXM(object):
     Cam1_FrameRateOnOff = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
-    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire')
+    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
+    Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV', get_kwargs={'as_string': True})
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -278,7 +283,7 @@ class TXM(object):
     HDF1_BlockingCallbacks = TxmPV('{ioc_prefix}HDF1:BlockingCallbacks')
     HDF1_FileWriteMode = TxmPV('{ioc_prefix}HDF1:FileWriteMode')
     HDF1_NumCapture = TxmPV('{ioc_prefix}HDF1:NumCapture')
-    HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture')
+    HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture', wait=False)
     HDF1_Capture_RBV = TxmPV('{ioc_prefix}HDF1:Capture_RBV')
     HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName', dtype=str,
                           get_kwargs={'as_string': True})
@@ -473,7 +478,6 @@ class TXM(object):
         while(True and self.is_attached):
             real_PV = self.__class__.__dict__[pv_name]
             pv_val = real_PV.__get__(self)
-            print(pv_val, target_val)
             if (pv_val != target_val):
                 if timeout > -1:
                     curTime = time.time()
@@ -670,84 +674,35 @@ class TXM(object):
         self.Cam1_AcquireTime = val
         self.Cam1_AcquirePeriod = val
         
-    def setup_detector(self, live_display=True):
+    def setup_detector(self, num_projections, live_display=True, exposure=0.5):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
+        # Capture a dummy frame to that the HDF5 plugin will work
+        self.Cam1_ImageMode = "Single"
+        self.Cam1_TriggerMode = "Internal"
+        self.exposure_time = 0.01
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        # Now set the real settings for the detector
         self.Cam1_Display = live_display
-        self.Cam1_ImageMode = 'Multiple'
         self.Cam1_ArrayCallbacks = 'Enable'
-        # If we are using external shutter then set the exposure time
-        self.SetSoftGlueForStep = 0
+        self.SetSoftGlueForStep = '0'
         self.Cam1_FrameRateOnOff = False
+        self.Cam1_TriggerMode = 'Overlapped'
+        self.Cam1_NumImages = num_projections
+        self.exposure_time = exposure
         # Prepare external shutter if necessary
-        # ?? TODO: Do we need this?
         external_shutter = False
         if external_shutter:
             global_PVs['ExternShutterExposure'].put(float(variableDict['ExposureTime']))
             global_PVs['ExternShutterDelay'].put(float(variableDict['Ext_ShutterOpenDelay']))
             global_PVs['SetSoftGlueForStep'].put('1')
-        # if software trigger capture two frames (issue with Point grey grasshopper)
-        if self.pg_external_trigger:
-            log.error("setup_detector not implemented with pg_external_trigger")
-            # wait_time_sec = exposure + 5
-            # global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True) #Ext. Standard
-            # global_PVs['Cam1_NumImages'].put(1, wait=True)
-            # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-            # global_PVs['Cam1_SoftwareTrigger'].put(1)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
-            # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-            # global_PVs['Cam1_SoftwareTrigger'].put(1)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
-        else:
-            self.Cam1_TriggerMode = 'Internal'
         log.debug("Finished setting up detector.")
     
-    def setup_tomo_detector(self):
-        """Prepare the detector for tomography."""
-        log.debug('setup_detector()')
-        if variableDict.has_key('Display_live'):
-            log.debug('** disable live display')
-            global_PVs['Cam1_Display'].put( int( variableDict['Display_live'] ) )
-        global_PVs['Cam1_ImageMode'].put('Multiple')
-        global_PVs['Cam1_ArrayCallbacks'].put('Enable')
-        #global_PVs['Image1_Callbacks'].put('Enable')
-        global_PVs['Cam1_AcquirePeriod'].put(float(variableDict['ExposureTime']))
-        global_PVs['Cam1_AcquireTime'].put(float(variableDict['ExposureTime']))
-        # if we are using external shutter then set the exposure time
-        global_PVs['SetSoftGlueForStep'].put('0')
-        global_PVs['Cam1_FrameRateOnOff'].put(0)
-        if int(variableDict['ExternalShutter']) == 1:
-            global_PVs['ExternShutterExposure'].put(float(variableDict['ExposureTime']))
-            global_PVs['ExternShutterDelay'].put(float(variableDict['Ext_ShutterOpenDelay']))
-            global_PVs['SetSoftGlueForStep'].put('1')
-        # if software trigger capture two frames (issue with Point grey grasshopper)
-        if PG_Trigger_External_Trigger == 1:
-            wait_time_sec = int(variableDict['ExposureTime']) + 5
-            global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True) #Ext. Standard
-            global_PVs['Cam1_NumImages'].put(1, wait=True)
-            global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-            wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-            global_PVs['Cam1_SoftwareTrigger'].put(1)
-            wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
-            global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-            wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-            global_PVs['Cam1_SoftwareTrigger'].put(1)
-            wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
-        else:
-            global_PVs['Cam1_TriggerMode'].put('Internal')
-        #global_PVs['ClearTheta'].put(1)
-        log.debug('setup_detector: Done!')
-    
-    def setup_hdf_writer(self, filename=None, num_projections=1,
-                         write_mode="Stream", num_recursive_images=1,
-                         live_display=True):
+    def setup_hdf_writer(self, num_projections=1, write_mode="Stream",
+                         num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
         
         Parameters
         ----------
-        filename : str
-          The name of the HDF file to save data to.
         num_projections : int
           Total number of projections to collect at one time.
         write_mode : str, optional
@@ -757,8 +712,6 @@ class TXM(object):
           (default), recursive filtering will be disabled.
         
         """
-        log.error("Test this code!!!")
-        
         log.debug('setup_hdf_writer() called')
         if num_recursive_images > 1:
             # Enable recursive filter
@@ -778,12 +731,8 @@ class TXM(object):
         # Count total number of projections needed
         self.HDF1_NumCapture = num_projections
         self.HDF1_FileWriteMode = write_mode
-        if filename is not None:
-            self.HDF1_FileName = filename
         self.HDF1_Capture = self.CAPTURE_ENABLED
-        # ?? Is this wait_pv really necessary?
-        # import pdb; pdb.set_trace()
-        # self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
+        self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
         log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
         self.hdf_writer_ready = True
@@ -805,6 +754,7 @@ class TXM(object):
           (default), recursive filtering will be disabled.
         
         """
+        log.warning("setup_tiff_writer() not tested")
         log.debug('setup_tiff_writer() called')
         if num_recursive_images > 1:
             # Recursive filter enabled
@@ -827,59 +777,40 @@ class TXM(object):
         # ?? Is this wait_pv really necessary?
         self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
         log.debug("Finished setting up TIFF writer for %s.", filename)
-    
-    def _trigger_multiple_projections(self, exposure, num_projections):
-        """Trigger the detector to capture multiple projections one after
-        another."""
-        starttime = time.time()
-        self.Cam1_ImageMode = 'Multiple'
-        self.exposure_time = exposure
-        if self.pg_external_trigger:
-            # Set external trigger mode
-            self.Cam1_TriggerMode = 'Overlapped'
-            self.Cam1_NumImages = 1
-            for i in range(num_projections):
-                # Trigger each projection one at a time
-                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-                self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, timeout=2)
-                self.Cam1_SoftwareTrigger = 1
-                self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, timeout=exposure + 5)
-        else:
-            # Trigger the projections all at once
-            self.Cam1_TriggerMode = 'Internal'
-            self.Cam1_NumImages = num_projections
-            self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-            timeout = num_projections * exposure + 5
-            self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, timeout=timeout)
-        # Log the results
-        duration = time.time() - starttime
-        log.info("Captured %d projections in %.3f sec", num_projections, duration)
-    
-    def _trigger_single_projection(self, exposure):
-        """Trigger the detector to capture just one projection."""
-        log.debug("Triggering single projection")
-        self.exposure_time = exposure
+
+    def _trigger_projections(self, num_projections=1):
+        """Trigger the detector to capture one (or more) projections.
+
+        This method should only be used after setup_detector() and
+        setup_hdf_writer() have been called. The value for
+        num_projections given here should be less than or equal to the
+        number given to each of the setup methods.
+
+        Parameters
+        ==========
+        num_projections : int, optional
+          How many projections to trigger.
+
+        """
+        suffix = 's' if num_projections > 1 else ''
+        log.debug("Triggering %d projection%s", num_projections, suffix)
+        self.Cam1_ImageMode = "Single"
         self.Cam1_NumImages = 1
-        self.Cam1_TriggerMode = 'Internal'
-        self.Cam1_ImageMode = 'Single'
-        self.Cam1_AcquireTime = exposure
-        self.Cam1_AcquirePeriod = exposure
-        # Start detector acquire
-        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-        # wait for acquire to finish
-        self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE,
-                    timeout=exposure * 2)
+        for i in range(num_projections):
+            self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+            self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
+            time.sleep(0.05) # Pause and let the detector catch up
+            self.Cam1_SoftwareTrigger = 1
+            self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
     
-    def capture_projections(self, num_projections=1, exposure=0.5):
+    def capture_projections(self, num_projections=1):
         """Trigger the capturing of projection images from the detector.
         
         Parameters
         ----------
         num_projections : int, optional
           How many projections to acquire.
-        exposure : float, optional
-          Exposure time for each frame in seconds.
-        
+       
         """
         # Raise a warning if the shutters are closed
         if not self.shutters_are_open:
@@ -889,13 +820,55 @@ class TXM(object):
         # Set frame collection data
         self.Cam1_FrameType = self.FRAME_DATA
         # Collect the data
-        if num_projections == 1:
-            ret = self._trigger_single_projection(exposure=exposure)
-        else:
-            ret = self._trigger_multiple_projections(
-                num_projections=num_projections, exposure=exposure)
+        ret = self._trigger_projections(num_projections=num_projections)
         return ret
     
+    def capture_white_field(self, num_projections=1):
+        """Trigger the capturing of projection images from the detector with
+        the shutters open and no sample present.
+        
+        Parameters
+        ----------
+        num_projections : int, optional
+          How many projections to acquire.
+        exposure : float, optional
+          Exposure time for each frame in seconds.
+        
+        """
+        # Raise a warning if the shutters are closed.
+        if not self.shutters_are_open:
+            msg = "Collecting white field with shutters closed."
+            warnings.warn(msg, RuntimeWarning)
+            log.warning(msg)
+        self.Cam1_FrameType = self.FRAME_WHITE
+        # Collect the data
+        ret = self._trigger_projections(num_projections=num_projections)
+        return ret
+    
+    def capture_dark_field(self, num_projections=1):
+        """Trigger the capturing of projection images from the detector with
+        the shutters closed.
+        
+        The shutter should be closed before calling this method.
+        
+        Parameters
+        ----------
+        num_projections : int, optional
+          How many projections to acquire.
+        exposure : float, optional
+          Exposure time for each frame in seconds.
+        
+        """
+        # Raise a warning if the shutters are open.
+        if self.shutters_are_open:
+            msg = "Collecting dark field with shutters open."
+            warnings.warn(msg, RuntimeWarning)
+            log.warning(msg)
+        self.Cam1_FrameType = self.FRAME_DARK
+        # Collect the data
+        ret = self._trigger_projections(num_projections=num_projections)
+        return ret
+
     def capture_tomogram(self, angles, num_projections=1, exposure=1.,
                          stabilize_sleep=10):
         """Collect data frames over a range of angles.
@@ -914,6 +887,7 @@ class TXM(object):
           stage.
         
         """
+        log.warning("capture_tomogram() not tested")
         log.debug('called tomo_scan()')
         # Prepare the instrument for data collection
         self.Cam1_FrameType = self.FRAME_DATA
@@ -935,60 +909,7 @@ class TXM(object):
         # Reestore previous filter enabled state
         if num_projections > 1:
             self.Proc1_Filter_Enable = old_filter
-    
-    def capture_white_field(self, num_projections=1, exposure=0.5):
-        """Trigger the capturing of projection images from the detector with
-        the shutters open and no sample present.
-        
-        Parameters
-        ----------
-        num_projections : int, optional
-          How many projections to acquire.
-        exposure : float, optional
-          Exposure time for each frame in seconds.
-        
-        """
-        # Raise a warning if the shutters are closed.
-        if not self.shutters_are_open:
-            msg = "Collecting white field with shutters closed."
-            warnings.warn(msg, RuntimeWarning)
-            log.warning(msg)
-        self.Cam1_FrameType = self.FRAME_WHITE
-        # Collect the data
-        if num_projections == 1:
-            ret = self._trigger_single_projection(exposure=exposure)
-        else:
-            ret = self._trigger_multiple_projections(
-                num_projections=num_projections, exposure=exposure)
-        return ret
-    
-    def capture_dark_field(self, num_projections=1, exposure=0.5):
-        """Trigger the capturing of projection images from the detector with
-        the shutters closed.
-        
-        The shutter should be closed before calling this method.
-        
-        Parameters
-        ----------
-        num_projections : int, optional
-          How many projections to acquire.
-        exposure : float, optional
-          Exposure time for each frame in seconds.
-        
-        """
-        # Raise a warning if the shutters are open.
-        if self.shutters_are_open:
-            msg = "Collecting dark field with shutters open."
-            warnings.warn(msg, RuntimeWarning)
-            log.warning(msg)
-        self.Cam1_FrameType = self.FRAME_DARK
-        # Collect the data
-        if num_projections == 1:
-            ret = self._trigger_single_projection(exposure=exposure)
-        else:
-            ret = self._trigger_multiple_projections(
-                num_projections=num_projections, exposure=exposure)
-        return ret
+
     
     def epics_PV(self, pv_name):
         """Retrieve the epics process variable (PV) object for the given
