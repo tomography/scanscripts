@@ -89,6 +89,7 @@ def energy_scan(txm):
         log.debug("Sleeping for %f min", sleep_min)
         time.sleep(sleep_min * 60.0)
     # Prepare TXM for capturing data
+    txm.setup_detector()
     txm.setup_hdf_writer()
     # Capture pre dark field images
     if n_pre_dark > 0:

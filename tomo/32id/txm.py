@@ -99,7 +99,6 @@ class TxmPV(object):
         if txm.is_attached:
             pv = self.epics_PV(txm)
             pv = self.get_epics_PV(txm)
-            print(pv.info)
             self.curr_value = pv.get(**self.get_kwargs)
         # Return the most recently retrieved value
         if self.dtype is not None:
@@ -658,6 +657,50 @@ class TXM(object):
     @property
     def hdf_filename(self):
         return self.HDF1_FullFileName_RBV
+
+    @property
+    def exposure_time(self):
+        """Exposure time for the CCD in seconds."""
+        current_time = max(self.Cam1_AcquireTime, self,Cam1AcquirePeriod)
+        return self.Cam1_AcquireTime
+    
+    @exposure_time.setter
+    def exposure_time(self, val):
+        self.Cam1_AcquireTime = val
+        self.Cam1_AcquirePeriod = val
+        
+    def setup_detector(self, live_display=True):
+        log.debug("%s live display.", "Enabled" if live_display else "Disabled")
+        self.Cam1_Display = live_display
+        self.Cam1_ImageMode = 'Multiple'
+        self.Cam1_ArrayCallbacks = 'Enable'
+        # If we are using external shutter then set the exposure time
+        self.SetSoftGlueForStep = 0
+        self.Cam1_FrameRateOnOff = False
+        # Prepare external shutter if necessary
+        # ?? TODO: Do we need this?
+        external_shutter = False
+        if external_shutter:
+            global_PVs['ExternShutterExposure'].put(float(variableDict['ExposureTime']))
+            global_PVs['ExternShutterDelay'].put(float(variableDict['Ext_ShutterOpenDelay']))
+            global_PVs['SetSoftGlueForStep'].put('1')
+        # if software trigger capture two frames (issue with Point grey grasshopper)
+        if self.pg_external_trigger:
+            log.error("setup_detector not implemented with pg_external_trigger")
+            # wait_time_sec = exposure + 5
+            # global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True) #Ext. Standard
+            # global_PVs['Cam1_NumImages'].put(1, wait=True)
+            # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
+            # wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
+            # global_PVs['Cam1_SoftwareTrigger'].put(1)
+            # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
+            # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
+            # wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
+            # global_PVs['Cam1_SoftwareTrigger'].put(1)
+            # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
+        else:
+            self.Cam1_TriggerMode = 'Internal'
+        log.debug("Finished setting up detector.")
     
     def setup_tomo_detector(self):
         """Prepare the detector for tomography."""
@@ -789,6 +832,7 @@ class TXM(object):
         another."""
         starttime = time.time()
         self.Cam1_ImageMode = 'Multiple'
+        self.exposure_time = exposure
         if self.pg_external_trigger:
             # Set external trigger mode
             self.Cam1_TriggerMode = 'Overlapped'
@@ -813,12 +857,12 @@ class TXM(object):
     def _trigger_single_projection(self, exposure):
         """Trigger the detector to capture just one projection."""
         log.debug("Triggering single projection")
-        with self.wait_pvs():
-            self.Cam1_NumImages = 1
-            self.Cam1_TriggerMode = 'Internal'
-            self.Cam1_ImageMode = 'Single'
-            self.Cam1_AcquireTime = exposure
-            self.Cam1_AcquirePeriod = exposure
+        self.exposure_time = exposure
+        self.Cam1_NumImages = 1
+        self.Cam1_TriggerMode = 'Internal'
+        self.Cam1_ImageMode = 'Single'
+        self.Cam1_AcquireTime = exposure
+        self.Cam1_AcquirePeriod = exposure
         # Start detector acquire
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         # wait for acquire to finish
