@@ -1,7 +1,7 @@
 """Tests for the transmission x-ray microscope `TXM()` class."""
 
 import logging
-logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.DEBUG)
 
 import six
 import time
@@ -244,6 +244,18 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.TIFF1_FileWriteMode, 'Stream')
         self.assertEqual(txm.TIFF1_FileName, 'hello.h5')
         self.assertEqual(txm.TIFF1_Capture, txm.CAPTURE_ENABLED)
+    
+    def test_setup_detector(self):
+        txm = TXM(is_attached=False, has_permit=False)
+        txm.pg_external_trigger = False
+        txm.setup_detector(live_display=False)
+        # Check that PV values were set
+        self.assertEqual(txm.Cam1_Display, False)
+        self.assertEqual(txm.Cam1_ImageMode, 'Multiple')
+        self.assertEqual(txm.Cam1_ArrayCallbacks, 'Enable')
+        self.assertEqual(txm.SetSoftGlueForStep, 0)
+        self.assertEqual(txm.Cam1_FrameRateOnOff, 0)
+        self.assertEqual(txm.Cam1_TriggerMode, "Internal")
     
     def test_setup_hdf_writer(self):
         txm = TXM(is_attached=False, has_permit=True)
