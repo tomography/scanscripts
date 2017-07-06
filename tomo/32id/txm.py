@@ -171,7 +171,8 @@ def permit_required(real_func):
             ret = real_func(obj, *args, **kwargs)
         else:
             msg = "Shutter permit not granted."
-            raise exceptions_.PermitError(msg)
+            warnings.warn(msg, RuntimeWarning)
+            ret = None
         return ret
     return wrapped_func
 
@@ -529,9 +530,9 @@ class TXM(object):
           If truthy, the detector will also be moved to correct for
           the change in focal length.
         gap_offset : float, optional
-          Extra energy to add to the value sent to the undulator gap.
+          Extra energy, in keV, to add to the undulator gap setting.
         correct_backlash : bool, optional
-          If enabled, this method will correct for slop in the GAP
+          If enabled, this method will correct for slop in the gap
           motors. Only needed for large changes (eg >0.01 keV)
         """
         # Helper function for converting energy to wavelength

@@ -2,7 +2,7 @@
 
 # Logging
 import logging
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 import unittest
 import six
@@ -14,6 +14,7 @@ import sys
 import os
 
 import energy_scan
+import move_energy
 import tomo_step_scan
 from txm import TXM
 
@@ -23,6 +24,12 @@ log.debug('Beginning tests in {}'.format(__name__))
 # Set some faster options for testing
 energy_scan.variableDict['ExposureTime'] = 0.001
 energy_scan.variableDict['StabilizeSleep_ms'] = 0.001
+
+
+class MoveEnergyTests(unittest.TestCase):
+    def test_move_energy(self):
+        txm = TXM(is_attached=False)
+        move_energy.move_energy(txm=txm)
 
 
 class TomoStepScanTests(unittest.TestCase):

@@ -22,7 +22,7 @@ class PermitDecoratorsTestCase(unittest.TestCase):
     class FakeTXM():
         has_permit = False
         is_attached = True
-vv        ioc_prefix = ''
+        ioc_prefix = ''
         test_value = False
         @permit_required
         def permit_func(self):

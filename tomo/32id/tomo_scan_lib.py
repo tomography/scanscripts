@@ -136,7 +136,8 @@ def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
     # Prepare the remote command
     json_sequence = json.dumps(sequence).replace(" ","")
     script_path = os.path.join(ver_dir, 'server_verifier.py')
-    COMMAND = f"bash && python {script_path} {conf} None '{json_sequence}' {port} {key}"
+    COMMAND = "bash && python {script_path} {conf} None '{json_sequence}' {port} {key}"
+    COMMAND = COMMAND.format(**locals())
     # Execute the remote SSH command
     ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
                            shell=False,
