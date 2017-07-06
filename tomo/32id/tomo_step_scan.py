@@ -99,20 +99,18 @@ def full_tomo_scan(txm, key=None):
     # Pre-scan sleep
     time.sleep(sleep_time)
     # Prepare the microscope for collecting data
-    txm.setup_tomo_detector()
+    txm.setup_detector(num_projections=1)
     txm.setup_hdf_writer()
     # Collect pre-scan dark-field images
     if num_pre_dark_images > 0:
         txm.close_shutters()
-        txm.capture_dark_field(num_projections=num_pre_dark_images,
-                               exposure=exposure)
+        txm.capture_dark_field(num_projections=num_pre_dark_images)
     # Collect pre-scan white-field images
     if num_pre_white_images > 0:
         with txm.wait_pvs():
             txm.move_sample(*out_pos)
             txm.open_shutters()
-        txm.capture_white_field(num_projections=num_pre_white_images,
-                                exposure=exposure)
+        txm.capture_white_field(num_projections=num_pre_white_images)
     # Capture the actual sample data
     with txm.wait_pvs():
         txm.move_sample(*sample_pos)
@@ -125,13 +123,11 @@ def full_tomo_scan(txm, key=None):
     if num_post_white_images > 0:
         with txm.wait_pvs():
             txm.move_sample(*out_pos)
-        txm.capture_white_field(num_projections=num_post_white_images,
-                                exposure=exposure)
+        txm.capture_white_field(num_projections=num_post_white_images)
     # Capture post-scan dark-field images
     txm.close_shutters()
     if num_post_dark_images > 0:
-        txm.capture_dark_field(num_projections=num_post_dark_images,
-                               exposure=exposure)
+        txm.capture_dark_field(num_projections=num_post_dark_images)
     # Save metadata
     with h5py.File(txm.hdf_filename) as f:
         f.create_dataset('/exchange/theta', data=thetas)

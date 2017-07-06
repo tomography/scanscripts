@@ -13,6 +13,8 @@ else:
 import sys
 import os
 
+import numpy as np
+
 import energy_scan
 import move_energy
 import tomo_step_scan
@@ -29,7 +31,7 @@ energy_scan.variableDict['StabilizeSleep_ms'] = 0.001
 class MoveEnergyTests(unittest.TestCase):
     def test_move_energy(self):
         txm = TXM(is_attached=False)
-        move_energy.move_energy(txm=txm)
+        move_energy.move_energy(energy=6.7)
 
 
 class TomoStepScanTests(unittest.TestCase):
@@ -45,7 +47,14 @@ class TomoStepScanTests(unittest.TestCase):
     
     def test_full_tomo_scan(self):
         self.txm.HDF1_FullFileName_RBV = self.hdf_filename
+        self.txm.setup_detector = mock.MagicMock()
         tomo_step_scan.full_tomo_scan(txm=self.txm)
+        # Check that the right txm functions were called
+        detector_kwargs = {
+            'exposure': 98,
+            'num_projections': 361
+        }
+        self.txm.setup_detector.assert_called_once_with(**detector_kwargs)
 
 
 class EnergyScanTests(unittest.TestCase):
@@ -58,26 +67,30 @@ class EnergyScanTests(unittest.TestCase):
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')
     
+    @mock.patch('txm.TXM.capture_projections')
+    @mock.patch('txm.TXM.capture_dark_field')
+    @mock.patch('txm.TXM.capture_white_field')
+    @mock.patch('txm.TXM.setup_hdf_writer')
+    @mock.patch('txm.TXM.setup_detector')
     def test_start_scan(self, *args):
         # Get rid of any old files hanging around
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')
+        # Set some sensible TXM values for testing
         self.txm.HDF1_FullFileName_RBV = '/tmp/test_file.h5'
-        # Set some mocked functions for testing
-        txm = self.txm
-        txm.capture_projections = mock.MagicMock()
-        txm.capture_dark_field = mock.MagicMock()
-        txm.capture_white_field = mock.MagicMock()
-        txm.setup_hdf_writer = mock.MagicMock()
-        txm.setup_detector = mock.MagicMock()
         # Launch the script
-        energy_scan.variableDict['PreDarkImages'] = 4
-        energy_scan.energy_scan(txm)
+        energies = np.linspace(8.6, 8.8, num=4)
+        n_pre_dark = 4
+        expected_projections = n_pre_dark + 2 * len(energies)
+        txm = energy_scan.energy_scan(energies=energies,
+                                      n_pre_dark=n_pre_dark,
+                                      exposure=0.77,
+                                      is_attached=False,
+                                      has_permit=True)
         # Check that what happened was done correctly
-        self.assertEqual(txm.capture_projections.call_count, 101)
-        txm.capture_projections.assert_called_with(exposure=0.001)
-        txm.capture_dark_field.assert_called_once_with(
-            exposure=0.001, num_projections=4)
-        txm.setup_hdf_writer.assert_called_once_with()
-        # Verify 
-        txm.setup_detector.assert_called_once_with()
+        self.assertEqual(txm.capture_projections.call_count, len(energies))
+        txm.capture_projections.assert_called_with()
+        txm.capture_dark_field.assert_called_once_with(num_projections=4)
+        # Verify the detector and hdf writer were colled properly
+        txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections)
+        txm.setup_detector.assert_called_once_with(exposure=0.77)

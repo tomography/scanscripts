@@ -34,15 +34,13 @@ variableDict = {
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 0.5,
-    # 'IOC_Prefix': '32idcPG3:',
     'FileWriteMode': 'Stream',
     'Energy_Start': 6.7,
     'Energy_End': 6.8, # Inclusive
     'Energy_Step': 0.001,
     'ZP_diameter': 180,
-    # 'ShutterPermit': 0,
     'drn': 60,
-    'constant_mag': 1, # 1 means CCD will move to maintain constant magnification
+    'constant_mag': True, # 1 means CCD will move to maintain constant magnification
     'Offset': 0.15,
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
@@ -50,6 +48,11 @@ variableDict = {
 
 IOC_PREFIX = '32idcPG3'
 SHUTTER_PERMIT = False
+DEFAULT_ENERGIES = np.arange(
+    variableDict['Energy_Start'],
+    variableDict['Energy_End'] + variableDict['Energy_Step'],
+    variableDict['Energy_Step'],
+)
 
 log = logging.getLogger(__name__)
 
@@ -59,63 +62,60 @@ def getVariableDict():
     return variableDict
 
 
-def energy_scan(txm):
+def energy_scan(energies, exposure=variableDict['ExposureTime'],
+                n_pre_dark=variableDict['PreDarkImages'],
+                sleep_min=variableDict['StartSleep_min'],
+                is_attached=True, has_permit=False,
+                sample_pos=(None,), out_pos=(None,),
+                gap_offset=variableDict['Offset'],
+                zp_diameter=variableDict['ZP_diameter'],
+                drn=variableDict['drn'],
+                constant_mag=variableDict['constant_mag'],
+                stabilize_sleep_ms=variableDict['StabilizeSleep_ms']):
+    txm = TXM(is_attached=is_attached, has_permit=has_permit,
+              zp_diameter=zp_diameter, drn=drn)
     log.debug('start_scan() called')
     start_time = time.time()
-    # Stopping the scan in a clean way (currently broken)
-    if 'StopTheScan' in variableDict.keys():
-        raise NotImplementedError("Cannot stop scan that way")
-        stop_scan(global_PVs, variableDict)
-        return
-    # Extract scan parameters from the variable dictionary
-    exposure = float(variableDict['ExposureTime'])
-    n_pre_dark = int(variableDict['PreDarkImages'])
-    sleep_min = float(variableDict['StartSleep_min'])
-    sample_pos = (variableDict.get('SampleXIn', None),
-                  variableDict.get('SampleYIn', None),
-                  variableDict.get('SampleZIn', None))
-    out_pos = (variableDict.get('SampleXOut', None),
-               variableDict.get('SampleYOut', None),
-               variableDict.get('SampleZOut', None))
-    energy_start = float(variableDict['Energy_Start'])
-    energy_end = float(variableDict['Energy_End'])
-    energy_step = float(variableDict['Energy_Step'])
-    ZP_diameter = float(variableDict['ZP_diameter'])
-    offset = float(variableDict['Offset'])
-    drn = float(variableDict['drn'])
-    StabilizeSleep_ms = float(variableDict['StabilizeSleep_ms'])
+    # Create the TXM object for this scan
+    txm = TXM(is_attached=is_attached, has_permit=has_permit,
+              ioc_prefix=IOC_PREFIX, use_shutter_A=False,
+              use_shutter_B=True)
     # Start scan sleep in min so min * 60 = sec
     if sleep_min > 0:
         log.debug("Sleeping for %f min", sleep_min)
         time.sleep(sleep_min * 60.0)
     # Prepare TXM for capturing data
-    txm.setup_detector()
-    txm.setup_hdf_writer()
+    txm.setup_detector(exposure=exposure)
+    total_projections = n_pre_dark + 2 * len(energies)
+    txm.setup_hdf_writer(num_projections=total_projections)
     # Capture pre dark field images
     if n_pre_dark > 0:
         txm.close_shutters()
         log.info('Capturing %d Pre Dark Field images', n_pre_dark)
-        txm.capture_dark_field(num_projections=n_pre_dark, exposure=exposure)
+        txm.capture_dark_field(num_projections=n_pre_dark)
     # Calculate the array of energies that will be scanned
-    energies = np.arange(energy_start, energy_end + energy_step, energy_step)
     log.info('Capturing %d energies', len(energies))
     # Collect each energy frame
+    correct_backlash = True # First energy only
     for energy in energies:
         log.debug('Preparing to capture energy: %f keV', energy)
         with txm.wait_pvs():
             txm.move_sample(*sample_pos)
-            txm.move_energy(energy, gap_offset=offset)
+            txm.move_energy(energy, gap_offset=gap_offset, constant_mag=constant_mag,
+                            correct_backlash=correct_backlash)
+        correct_backlash = False # Needed on first energy only
         # Pause for a moment to allow the beam to stabilize
-        log.debug('Stabilize Sleep %f ms', StabilizeSleep_ms)
-        time.sleep(StabilizeSleep_ms / 1000.0)
+        log.debug('Stabilize Sleep %f ms', stabilize_sleep_ms)
+        time.sleep(stabilize_sleep_ms / 1000.0)
         # Sample projection acquisition
         log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
-        txm.capture_projections(exposure=exposure)
+        txm.open_shutters()
+        txm.capture_projections()
         # Flat-field projection acquisition
         log.debug("Acquiring flat-field position %s at %.4f eV", out_pos, energy)
         with txm.wait_pvs():
             txm.move_sample(*out_pos)
-        txm.capture_white_field(exposure=exposure)
+        txm.capture_white_field()
     txm.close_shutters()
     # Add the energy array to the active HDF file
     hdf_filename = txm.hdf_filename
@@ -127,16 +127,35 @@ def energy_scan(txm):
     # Log the duration and output file
     duration = time.time() - start_time
     log.info('Energy scan took %d sec and saved in file %s', duration, hdf_filename)
+    return txm
 
 
 def main():
     update_variable_dict(variableDict)
-    # Create the microscope object
-    txm = TXM(has_permit=SHUTTER_PERMIT, is_attached=True,
-              ioc_prefix=IOC_PREFIX, use_shutter_A=False,
-              use_shutter_B=True)
-    # Launch the scan
-    energy_scan(txm=txm)
+    # Get the requested sample positions
+    sample_pos = (variableDict.get('SampleXIn', None),
+                  variableDict.get('SampleYIn', None),
+                  variableDict.get('SampleZIn', None))
+    out_pos = (variableDict.get('SampleXOut', None),
+               variableDict.get('SampleYOut', None),
+               variableDict.get('SampleZOut', None))
+    # Prepare the list of energies requested
+    energy_start = float(variableDict['Energy_Start'])
+    energy_end = float(variableDict['Energy_End'])
+    energy_step = float(variableDict['Energy_Step'])
+    energies = np.arange(energy_start, energy_end + energy_step, energy_step)
+    # Launch the scan (after waiting if requested)
+    sleep_min = float(variableDict['StartSleep_min'])
+    time.sleep(sleep_min * 60)
+    energy_scan(energies=energies,
+                exposure=float(variableDict['ExposureTime']),
+                n_pre_dark=int(variableDict['PreDarkImages']),
+                sleep_min=float(variableDict['StabilizeSleep_ms']),
+                sample_pos=sample_pos, out_pos=out_pos,
+                ZP_diameter=float(variableDict['ZP_diameter']),
+                offset=float(variableDict['Offset']),
+                drn=float(variableDict['drn']),
+                constant_mag=bool(variableDict['constant_mag']))
 
 
 if __name__ == '__main__':

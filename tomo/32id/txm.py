@@ -623,7 +623,7 @@ class TXM(object):
             which_shutters = "no shutters"
         if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
             duration = time.time() - starttime
-            log.info("Opened %s in %.2f sec", which_shutters, duration)
+            log.debug("Opened %s in %.2f sec", which_shutters, duration)
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
@@ -674,7 +674,7 @@ class TXM(object):
         self.Cam1_AcquireTime = val
         self.Cam1_AcquirePeriod = val
         
-    def setup_detector(self, num_projections, live_display=True, exposure=0.5):
+    def setup_detector(self, exposure=0.5, live_display=True):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
         # Capture a dummy frame to that the HDF5 plugin will work
         self.Cam1_ImageMode = "Single"
@@ -687,7 +687,6 @@ class TXM(object):
         self.SetSoftGlueForStep = '0'
         self.Cam1_FrameRateOnOff = False
         self.Cam1_TriggerMode = 'Overlapped'
-        self.Cam1_NumImages = num_projections
         self.exposure_time = exposure
         # Prepare external shutter if necessary
         external_shutter = False
@@ -816,7 +815,6 @@ class TXM(object):
         if not self.shutters_are_open:
             msg = "Collecting projections with shutters closed."
             warnings.warn(msg, RuntimeWarning)
-            log.warning(msg)
         # Set frame collection data
         self.Cam1_FrameType = self.FRAME_DATA
         # Collect the data
@@ -901,15 +899,10 @@ class TXM(object):
             log.debug('Stabilize Sleep: %d ms', stabilize_sleep)
             time.sleep(stabilize_sleep / 1000)
             # Trigger the camera
-            if num_projections > 1:
-                self._trigger_multiple_projections(exposure=exposure,
-                                                   num_projections=num_projections)
-            else:
-                self._trigger_single_projection(exposure=exposure)
+            self._trigger_projections(num_projections=num_projections)
         # Reestore previous filter enabled state
         if num_projections > 1:
             self.Proc1_Filter_Enable = old_filter
-
     
     def epics_PV(self, pv_name):
         """Retrieve the epics process variable (PV) object for the given

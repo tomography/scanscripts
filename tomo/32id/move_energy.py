@@ -28,15 +28,33 @@ def getVariableDict():
     global variableDict
     return variableDict
 
-def move_energy(txm):
+
+def move_energy(energy, gap_offset=0.15, constant_mag=True,
+                is_attached=True, has_permit=False):
+    """Change the X-ray microscope to a new energy.
+    
+    Parameters
+    ==========
+    energy : float
+      New energy (in keV) for the microscope/source.
+    gap_offset : float, optional
+      Extra energy to add to the undulator gap target energy.
+    constant_mag : bool, optional
+      If truthy, the camera will move to maintain a constant
+      magnification.
+    is_attached, has_permit : bool, optional
+      Determine if the TXM is attached and is allowed to open
+      shutters.
+    
+    """
+    # Prepare TXM object
+    txm = TXM(is_attached=is_attached, has_permit=has_permit)
     # Get variables from user dictionary.
-    energy = float(variableDict['new_energy'])
-    constant_mag = float(variableDict['constant_mag'])
-    offset = float(variableDict['offset'])
     # Attach to the TXM and change energy
     with txm.wait_pvs():
-        txm.move_energy(energy, constant_mag=constant_mag, gap_offset=offset)
+        txm.move_energy(energy, constant_mag=constant_mag, gap_offset=gap_offset)
     log.info("Changed energy to %.5f keV", energy)
+
 
 if __name__ == '__main__':
     # Prepare logging

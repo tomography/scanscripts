@@ -2,6 +2,7 @@
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
+logging.captureWarnings(True)
 
 import six
 import time
@@ -37,8 +38,10 @@ class PermitDecoratorsTestCase(unittest.TestCase):
         txm = self.FakeTXM()
         txm.has_permit = False
         txm.test_value = False
-        with self.assertRaises(exceptions_.PermitError):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
             txm.permit_func()
+            self.assertEqual(len(w), 1, 'Permit warning not raised')
         # Now check that it *is* set when permit is available
         txm.has_permit = True
         txm.permit_func()
@@ -172,7 +175,7 @@ class PVDescriptorTestCase(unittest.TestCase):
         self.assertEqual(test_pv.get_kwargs['as_string'], True)
         # Check that the arguments get passed to the real PV
         txm.args_pv
-        test_pv.get_epics_PV(txm).get.assert_called_once_with(as_string=True)
+        test_pv.epics_PV(txm).get.assert_called_once_with(as_string=True)
 
 
 class TXMTestCase(unittest.TestCase):
@@ -245,35 +248,34 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.TIFF1_Capture, txm.CAPTURE_ENABLED)
     
     def test_setup_detector(self):
+        log.error("test_setup_detector() needs to be checked")
         txm = TXM(is_attached=False, has_permit=False)
         txm.pg_external_trigger = False
         txm.setup_detector(live_display=False)
         # Check that PV values were set
         self.assertEqual(txm.Cam1_Display, False)
-        self.assertEqual(txm.Cam1_ImageMode, 'Multiple')
+        self.assertEqual(txm.Cam1_ImageMode, 'Single')
         self.assertEqual(txm.Cam1_ArrayCallbacks, 'Enable')
-        self.assertEqual(txm.SetSoftGlueForStep, 0)
+        self.assertEqual(txm.SetSoftGlueForStep, '0')
         self.assertEqual(txm.Cam1_FrameRateOnOff, 0)
-        self.assertEqual(txm.Cam1_TriggerMode, "Internal")
+        self.assertEqual(txm.Cam1_TriggerMode, "Overlapped")
     
     def test_setup_hdf_writer(self):
         txm = TXM(is_attached=False, has_permit=True)
         txm.Proc1_ArrayPort = "test_value"
-        txm.setup_hdf_writer(filename="testfile.h5",
-                             num_projections=3, write_mode="stream")
+        txm.setup_hdf_writer(num_projections=3, write_mode="stream")
         # Test without recursive filter
         self.assertEqual(txm.Proc1_Filter_Enable, "Disable")
         self.assertEqual(txm.HDF1_ArrayPort, 'test_value')
         self.assertEqual(txm.HDF1_NumCapture, 3)
         self.assertEqual(txm.HDF1_FileWriteMode, 'stream')
-        self.assertEqual(txm.HDF1_FileName, 'testfile.h5')
         self.assertEqual(txm.HDF1_Capture, 1)
         self.assertTrue(txm.hdf_writer_ready)
     
     def test_setup_hdf_writer_recursive(self):
         txm = TXM(is_attached=False, has_permit=True)
         txm.Proc1_ArrayPort = "test_value"
-        txm.setup_hdf_writer(filename="testfile.h5", num_recursive_images=3,
+        txm.setup_hdf_writer(num_recursive_images=3,
                              num_projections=3, write_mode="stream")
         # Test with recursive filter
         self.assertEqual(txm.Proc1_Callbacks, "Enable")
@@ -286,7 +288,6 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Proc1_Filter_Callbacks, 'Array N only')
         # These should be the same regardless of recursion filter
         self.assertEqual(txm.HDF1_FileWriteMode, 'stream')
-        self.assertEqual(txm.HDF1_FileName, 'testfile.h5')
         self.assertEqual(txm.HDF1_Capture, 1)
         self.assertTrue(txm.hdf_writer_ready)
     
@@ -377,28 +378,14 @@ class TXMTestCase(unittest.TestCase):
             promise.is_complete = False
             txm.pv_queue.append(promise)
     
-    def test_trigger_multiple_projections(self):
-        txm = TXM(is_attached=False)
-        txm.pg_external_trigger = True
-        txm._trigger_multiple_projections(exposure=0.5, num_projections=3)
-        self.assertEqual(txm.Cam1_ImageMode, 'Multiple')
-        self.assertEqual(txm.Cam1_TriggerMode, 'Overlapped')
-        self.assertEqual(txm.Cam1_NumImages, 1)
-        # Now with internal trigger
-        txm.pg_external_trigger = False
-        txm._trigger_multiple_projections(exposure=0.5, num_projections=3)
-        self.assertEqual(txm.Cam1_TriggerMode, "Internal")
-        self.assertEqual(txm.Cam1_NumImages, 3)
-    
-    def test_trigger_single_projection(self):
+    def test_trigger_projections(self):
         # Currently this test only checks that the method can run without error
         txm = TXM(is_attached=False)
-        txm._trigger_single_projection(exposure=0.5)
+        txm._trigger_projections(num_projections=3)
     
     def test_capture_projections(self):
         txm = TXM(is_attached=False)
-        txm._trigger_multiple_projections = mock.MagicMock()
-        txm._trigger_single_projection = mock.MagicMock()
+        txm._trigger_projections = mock.MagicMock()
         # Check for warning if collecting with shutters closed
         txm.shutters_are_open = False
         with warnings.catch_warnings(record=True) as w:
@@ -411,16 +398,14 @@ class TXMTestCase(unittest.TestCase):
         txm.shutters_are_open = True
         txm.capture_projections(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_DATA)
-        txm._trigger_multiple_projections.assert_called_with(exposure=0.5,
-                                                             num_projections=3)
+        txm._trigger_projections.assert_called_with(num_projections=3)
         # Test when num_projections == 1
         txm.capture_projections(num_projections=1)
-        txm._trigger_single_projection.assert_called_with(exposure=0.5,)
+        txm._trigger_projections.assert_called_with(num_projections=1)
     
     def test_capture_dark_field(self):
         txm = TXM(is_attached=False)
-        txm._trigger_multiple_projections = mock.MagicMock()
-        txm._trigger_single_projection = mock.MagicMock()
+        txm._trigger_projections = mock.MagicMock()
         # Check for warning if collecting with shutters open
         txm.shutters_are_open = True
         with warnings.catch_warnings(record=True) as w:
@@ -431,18 +416,18 @@ class TXMTestCase(unittest.TestCase):
                           str(w[0].message))
         # Test when calling with multiple projections
         txm.close_shutters()
+        txm._trigger_projections.reset_mock()
         txm.capture_dark_field(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_DARK)
-        txm._trigger_multiple_projections.assert_called_with(num_projections=3,
-                                                             exposure=0.5)
+        txm._trigger_projections.assert_called_once_with(num_projections=3)
         # Test when calling only one projection
+        txm._trigger_projections.reset_mock()
         txm.capture_dark_field(num_projections=1)
-        txm._trigger_single_projection.assert_called_with(exposure=0.5)
+        txm._trigger_projections.assert_called_once_with(num_projections=1)
     
     def test_capture_flat_field(self):
         txm = TXM(is_attached=False)
-        txm._trigger_multiple_projections = mock.MagicMock()
-        txm._trigger_single_projection = mock.MagicMock()
+        txm._trigger_projections = mock.MagicMock()
         # Check for warning if collecting with shutters closed
         txm.shutters_are_open = False
         with warnings.catch_warnings(record=True) as w:
@@ -452,17 +437,14 @@ class TXMTestCase(unittest.TestCase):
             self.assertIn('Collecting white field with shutters closed.', str(w[0].message))
         # Test for collecting multiple projections
         txm.open_shutters()
-        txm._trigger_multiple_projections.reset_mock()
-        txm._trigger_single_projection.reset_mock()
+        txm._trigger_projections.reset_mock()
         txm.capture_white_field(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_WHITE)
-        txm._trigger_multiple_projections.assert_called_with(num_projections=3,
-                                                             exposure=0.5)
+        txm._trigger_projections.assert_called_with(num_projections=3)
         # Test when calling only one projection
-        txm._trigger_multiple_projections.reset_mock()
-        txm._trigger_single_projection.reset_mock()
+        txm._trigger_projections.reset_mock()
         txm.capture_white_field(num_projections=1)
-        txm._trigger_single_projection.assert_called_with(exposure=0.5)
+        txm._trigger_projections.assert_called_once_with(num_projections=1)
     
     def test_reset_ccd(self):
         txm = TXM(is_attached=False)
