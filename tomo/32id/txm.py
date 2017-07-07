@@ -275,7 +275,7 @@ class TXM(object):
     Cam1_FrameRateOnOff = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
-    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
+    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False, default=0)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
     Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV', get_kwargs={'as_string': True})
     
@@ -291,7 +291,7 @@ class TXM(object):
     HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName', dtype=str,
                           get_kwargs={'as_string': True})
     HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV',
-                                  dtype=str, default='',
+                                  dtype=str, default="/tmp/sector32_test.h5",
                                   get_kwargs={'as_string': True})
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
@@ -666,14 +666,15 @@ class TXM(object):
     
     @property
     def hdf_filename(self):
+        print(self.HDF1_FullFileName_RBV)
         return self.HDF1_FullFileName_RBV
-
+    
     def hdf_file(self, timeout=10, *args, **kwargs):
         start_time = time.time()
         # Wait for the HDF writer to be done using the HDF file
         self.wait_pv('HDF1_Capture_RBV', self.HDF_IDLE, timeout=timeout)
         return h5py.File(self.hdf_filename, *args, **kwargs)
-
+    
     @property
     def exposure_time(self):
         """Exposure time for the CCD in seconds."""
@@ -788,20 +789,20 @@ class TXM(object):
         # ?? Is this wait_pv really necessary?
         self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
         log.debug("Finished setting up TIFF writer for %s.", filename)
-
+    
     def _trigger_projections(self, num_projections=1):
         """Trigger the detector to capture one (or more) projections.
-
+        
         This method should only be used after setup_detector() and
         setup_hdf_writer() have been called. The value for
         num_projections given here should be less than or equal to the
         number given to each of the setup methods.
-
+        
         Parameters
         ==========
         num_projections : int, optional
           How many projections to trigger.
-
+        
         """
         suffix = 's' if num_projections > 1 else ''
         log.debug("Triggering %d projection%s", num_projections, suffix)
@@ -810,7 +811,9 @@ class TXM(object):
         for i in range(num_projections):
             self.Cam1_Acquire = self.DETECTOR_ACQUIRE
             self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
+            # Wait for the camera to be ready
             while self.Cam1_Acquire != self.DETECTOR_IDLE:
+                print(self.Cam1_Acquire)
                 time.sleep(0.01)
                 self.Cam1_SoftwareTrigger = 1
             self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)

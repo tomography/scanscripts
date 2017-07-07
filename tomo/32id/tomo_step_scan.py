@@ -48,7 +48,7 @@ variableDict = {
     'ExposureTime_sec': 3,
     # 'ShutterOpenDelay': 0.05,
     # 'ExternalShutter': 0,
-    'FileWriteMode': 'Stream',
+    # 'FileWriteMode': 'Stream',
     'rot_speed_deg_per_s': 0.5,
     'Recursive_Filter_N_Images': 2,
 }
@@ -63,17 +63,104 @@ def getVariableDict():
     return variableDict
 
 
-def full_tomo_scan(txm, key=None):
+def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=3.,
+                   has_permit=SHUTTER_PERMIT,
+                   is_attached=True,
+                   num_white=(5, 5), num_dark=(5, 0),
+                   sample_pos=(None,), out_pos=(None,),
+                   rot_speed_deg_per_s=0.5, key=None,
+                   num_recursive_images=1):
+    """Collect a series of projections at multiple angles.
+    
+    The given angles should span a range of 180°. The frames will be
+    stored in an HDF file as determined by the camera and hdf settings
+    on the instrument.
+    
+    Parameters
+    ----------
+    angles : np.ndarray
+      Numpy array with rotation (θ) angles, in degrees, for the
+      projections.
+    stabilize_sleep_ms : float, optional
+      How long to wait, in milliseconds, at each angle for the
+      rotation stage to settle.
+    exposure : float, optional
+      Exposure time in seconds for each projection.
+    has_permit : bool, optional
+      Whether the user has a priority for the shutters and source.
+    is_attached : bool, optional
+      Whether or not to try and actually control the TXM.
+    num_white : 2-tuple(int), optional
+      (pre, post) tuple for number of white field images to collect.
+    num_dark : 2-tuple(int), optional
+      (pre, post) tuple for number of dark field images to collect.
+    sample_pos : 4-tuple(float), optional
+      4 (or less) tuple of (x, y, z, θ) for the sample position.
+    out_pos : 4-tuple(float), optional
+      4 (or less) tuple of (x, y, z, θ) for white field position.
+    rot_speed_deg_per_s : float, optional
+      Angular speed for the rotation stage.
+    key : 
+      Used for controlling the verifier instance.
+    num_recursive_images : int, optional
+      Recurisve averaging filter for combining multiple exposures.
+    
+    """
+    # Unpack options
+    num_pre_white_images, num_post_white_images = num_white
+    num_pre_dark_images, num_post_dark_images = num_dark
     # Some intial debugging
     start_time = time.time()
     log.debug('called start_scan()')
-    # Stop the scan if requested
-    if variableDict.get('StopTheScan'):
-        raise NotImplementedError("Stop scan coming soon.")
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
-        return
     # Start verifier on remote machine
     start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
+    # Prepare X-ray microscope
+    txm = TXM(is_attached=is_attached, has_permit=has_permit)
+    # Prepare the microscope for collecting data
+    txm.setup_detector(exposure=exposure)
+    txm.setup_hdf_writer()
+    # Collect pre-scan dark-field images
+    if num_pre_dark_images > 0:
+        txm.close_shutters()
+        txm.capture_dark_field(num_projections=num_pre_dark_images)
+    # Collect pre-scan white-field images
+    if num_pre_white_images > 0:
+        with txm.wait_pvs():
+            txm.move_sample(*out_pos)
+            txm.open_shutters()
+        txm.capture_white_field(num_projections=num_pre_white_images)
+    # Capture the actual sample data
+    with txm.wait_pvs():
+        txm.move_sample(*sample_pos)
+        txm.open_shutters()
+        log.debug('Starting tomography scan')
+    txm.capture_tomogram(angles=angles, num_projections=num_recursive_images,
+                         exposure=exposure, stabilize_sleep=stabilize_sleep_ms)
+    # Capture post-scan white-field images
+    if num_post_white_images > 0:
+        with txm.wait_pvs():
+            txm.move_sample(*out_pos)
+        txm.capture_white_field(num_projections=num_post_white_images)
+    # Capture post-scan dark-field images
+    txm.close_shutters()
+    if num_post_dark_images > 0:
+        txm.capture_dark_field(num_projections=num_post_dark_images)
+    # Save metadata
+    with h5py.File(txm.hdf_filename) as f:
+        f.create_dataset('/exchange/theta', data=angles)
+    # Clean up
+    txm.reset_ccd()
+    log.info("Captured %d projections in %d sec.", len(angles), time.time() - start_time)
+    return txm
+
+
+def main():
+    # Prepare the exit handler
+    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
+    def on_exit(sig, func=None):
+        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
+        sys.exit(0)
+    set_exit_handler(on_exit)
     # Extract variables from the global dictionary
     sleep_time = float(variableDict['StartSleep_min']) * 60.0
     num_pre_dark_images = int(variableDict['PreDarkImages'])
@@ -92,65 +179,9 @@ def full_tomo_scan(txm, key=None):
     num_projections = int(variableDict['Projections'])
     num_recursive_filter = int(variableDict['Recursive_Filter_N_Images'])
     step_size = ((sample_rot_end - sample_rot_start) / (num_projections - 1.0))
-    stabilize_sleep = float(variableDict['StabilizeSleep_ms'])
-    # Setup some PV info
-    txm.Cam1_FrameType = txm.FRAME_DATA
-    txm.Cam1_NumImages = 1
+    stabilize_sleep_ms = float(variableDict['StabilizeSleep_ms'])
     # Pre-scan sleep
     time.sleep(sleep_time)
-    # Prepare the microscope for collecting data
-    txm.setup_detector(num_projections=1)
-    txm.setup_hdf_writer()
-    # Collect pre-scan dark-field images
-    if num_pre_dark_images > 0:
-        txm.close_shutters()
-        txm.capture_dark_field(num_projections=num_pre_dark_images)
-    # Collect pre-scan white-field images
-    if num_pre_white_images > 0:
-        with txm.wait_pvs():
-            txm.move_sample(*out_pos)
-            txm.open_shutters()
-        txm.capture_white_field(num_projections=num_pre_white_images)
-    # Capture the actual sample data
-    with txm.wait_pvs():
-        txm.move_sample(*sample_pos)
-        txm.open_shutters()
-        log.debug('Starting tomography scan')
-    thetas = np.linspace(sample_rot_start, sample_rot_end, num_projections)
-    txm.capture_tomogram(angles=thetas, num_projections=num_recursive_filter,
-                         exposure=exposure, stabilize_sleep=stabilize_sleep)
-    # Capture post-scan white-field images
-    if num_post_white_images > 0:
-        with txm.wait_pvs():
-            txm.move_sample(*out_pos)
-        txm.capture_white_field(num_projections=num_post_white_images)
-    # Capture post-scan dark-field images
-    txm.close_shutters()
-    if num_post_dark_images > 0:
-        txm.capture_dark_field(num_projections=num_post_dark_images)
-    # Save metadata
-    with h5py.File(txm.hdf_filename) as f:
-        f.create_dataset('/exchange/theta', data=thetas)
-    # Clean up
-    txm.reset_ccd()
-    log.info("Captured %d projections in %d sec.", len(thetas), time.time() - start_time)
-    
-
-
-def main():
-    # Prepare the exit handler
-    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
-    def on_exit(sig, func=None):
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
-        sys.exit(0)
-    set_exit_handler(on_exit)
-    # Create the microscope object
-    has_permit = False
-    txm = TXM(has_permit=SHUTTER_PERMIT,
-              is_attached=True,
-              use_shutter_A=False,
-              use_shutter_B=True,
-              ioc_prefix=IOC_PREFIX)
     # Call the main tomography function
     full_tomo_scan(txm=txm, key=key)
 

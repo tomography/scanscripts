@@ -28,33 +28,33 @@ energy_scan.variableDict['ExposureTime'] = 0.001
 energy_scan.variableDict['StabilizeSleep_ms'] = 0.001
 
 
-class MoveEnergyTests(unittest.TestCase):
-    def test_move_energy(self):
-        txm = TXM(is_attached=False)
-        move_energy.move_energy(energy=6.7)
-
-
-class TomoStepScanTests(unittest.TestCase):
+class ScriptTestCase(unittest.TestCase):
     hdf_filename = "/tmp/sector32_test.h5"
-    
     def setUp(self):
-        self.txm = TXM(is_attached=False,
-                       has_permit=True)
-    
+        if os.path.exists(self.hdf_filename):
+            os.remove(self.hdf_filename)
     def tearDown(self):
         if os.path.exists(self.hdf_filename):
             os.remove(self.hdf_filename)
+
+
+class MoveEnergyTests(ScriptTestCase):
+    def test_move_energy(self):
+        txm = TXM(is_attached=False)
+        txm.HDF1_FullFileName_RBV = "/tmp/sector32_test.h5"
+        move_energy.move_energy(energy=6.7)
+
+
+@mock.patch('txm.TXM._trigger_projections')
+class TomoStepScanTests(ScriptTestCase):
     
-    def test_full_tomo_scan(self):
-        self.txm.HDF1_FullFileName_RBV = self.hdf_filename
-        self.txm.setup_detector = mock.MagicMock()
-        tomo_step_scan.full_tomo_scan(txm=self.txm)
+    @mock.patch('txm.TXM.setup_detector')
+    @mock.patch('txm.TXM.move_sample')
+    def test_full_tomo_scan(self, _trigger_projections, setup_detector, move_sample):
+        angles = np.linspace(0, 180, 361)
+        txm = tomo_step_scan.tomo_step_scan(angles=angles, is_attached=False)
         # Check that the right txm functions were called
-        detector_kwargs = {
-            'exposure': 98,
-            'num_projections': 361
-        }
-        self.txm.setup_detector.assert_called_once_with(**detector_kwargs)
+        txm.setup_detector.assert_called_once_with(exposure=3)
 
 
 class EnergyScanTests(unittest.TestCase):
