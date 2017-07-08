@@ -49,12 +49,20 @@ class MoveEnergyTests(ScriptTestCase):
 class TomoStepScanTests(ScriptTestCase):
     
     @mock.patch('txm.TXM.setup_detector')
+    @mock.patch('txm.TXM.setup_hdf_writer')
     @mock.patch('txm.TXM.move_sample')
-    def test_full_tomo_scan(self, _trigger_projections, setup_detector, move_sample):
+    def test_full_tomo_scan(self, *args):
         angles = np.linspace(0, 180, 361)
-        txm = tomo_step_scan.tomo_step_scan(angles=angles, is_attached=False)
+        txm = tomo_step_scan.tomo_step_scan(angles=angles,
+                                            is_attached=False,
+                                            num_recursive_images=3,
+                                            num_white=(2, 7),
+                                            num_dark=(13, 21))
         # Check that the right txm functions were called
         txm.setup_detector.assert_called_once_with(exposure=3)
+        expected_projections = 361 + 2 + 7 + 13 + 21
+        txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections,
+                                                     num_recursive_images=3)
 
 
 class EnergyScanTests(unittest.TestCase):

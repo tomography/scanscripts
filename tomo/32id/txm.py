@@ -879,7 +879,7 @@ class TXM(object):
         ret = self._trigger_projections(num_projections=num_projections)
         return ret
 
-    def capture_tomogram(self, angles, num_projections=1, exposure=1.,
+    def capture_tomogram(self, angles, num_projections=1,
                          stabilize_sleep=10):
         """Collect data frames over a range of angles.
         
@@ -890,8 +890,6 @@ class TXM(object):
           projections.
         num_projections : int, optional
           Number of projections to average at each angle.
-        exposure : float, optional
-          How long to collect for in each image.
         stablize_sleep : int, optional
           How long (in milliseconds) to wait after moving the rotation
           stage.
@@ -906,13 +904,13 @@ class TXM(object):
             old_filter = self.Proc1_Filter_Enable
             self.Proc1_Filter_Enable = 'Enable'
         # Cycle through each angle and collect data
-        for sample_rot in tqdm.tqdm(angles, desc="Capturing tomogram"):
+        for sample_rot in tqdm.tqdm(angles, desc="Capturing tomogram", unit='rot'):
             self.move_sample(theta=sample_rot)
             log.debug('Stabilize Sleep: %d ms', stabilize_sleep)
             time.sleep(stabilize_sleep / 1000)
             # Trigger the camera
             self._trigger_projections(num_projections=num_projections)
-        # Reestore previous filter enabled state
+        # Restore previous filter enabled state
         if num_projections > 1:
             self.Proc1_Filter_Enable = old_filter
     

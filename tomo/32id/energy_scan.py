@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #######################
 ##### To be tested!
 
@@ -100,7 +101,6 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     log.debug('start_scan() called')
     start_time = time.time()
     # Create the TXM object for this scan
-    assert not has_permit
     txm = TXM(is_attached=is_attached, has_permit=has_permit,
               ioc_prefix=IOC_PREFIX, use_shutter_A=False,
               use_shutter_B=True)
