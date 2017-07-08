@@ -11,15 +11,10 @@ log = logging.getLogger(__name__)
 
 from txm import TXM
 
-
 global variableDict
-
 variableDict = {
     'new_energy': 7.8, # keV
-    'constant_mag': 0, # 1 means magnification will be maintained adjusting CCD location
-    'ZP_diameter': 180.0, # um
-    'drn': 60.0, # nm
-    'offset': 0.15, # keV
+    'constant_mag': 1, # 1 means magnification will be maintained adjusting CCD location
 }
 
 global_PVs = {}
@@ -29,16 +24,14 @@ def getVariableDict():
     return variableDict
 
 
-def move_energy(energy, gap_offset=0.15, constant_mag=True,
-                is_attached=True, has_permit=False):
+def move_energy(energy, constant_mag=True, is_attached=True,
+                has_permit=False):
     """Change the X-ray microscope to a new energy.
     
     Parameters
     ==========
     energy : float
       New energy (in keV) for the microscope/source.
-    gap_offset : float, optional
-      Extra energy to add to the undulator gap target energy.
     constant_mag : bool, optional
       If truthy, the camera will move to maintain a constant
       magnification.
@@ -52,7 +45,7 @@ def move_energy(energy, gap_offset=0.15, constant_mag=True,
     # Get variables from user dictionary.
     # Attach to the TXM and change energy
     with txm.wait_pvs():
-        txm.move_energy(energy, constant_mag=constant_mag, gap_offset=gap_offset)
+        txm.move_energy(energy, constant_mag=constant_mag)
     log.info("Changed energy to %.5f keV", energy)
 
 

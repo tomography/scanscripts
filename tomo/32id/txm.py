@@ -239,6 +239,9 @@ class TXM(object):
       The width of the zoneplate's outermost diffraction zone.
     
     """
+    zp_diameter = 180
+    drn = 60
+    gap_offset = 0.15 # Added to undulator gap setting
     pv_queue = None
     hdf_writer_ready = False
     tiff_writer_ready = False
@@ -253,8 +256,8 @@ class TXM(object):
     CAPTURE_ENABLED = 1
     CAPTURE_DISABLED = 0
     FRAME_DATA = 0
-    FRAME_WHITE = 1
-    FRAME_DARK = 2
+    FRAME_DARK = 1
+    FRAME_WHITE = 2
     DETECTOR_IDLE = 0
     DETECTOR_ACQUIRE = 1
     HDF_IDLE = 0
@@ -410,15 +413,12 @@ class TXM(object):
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
     def __init__(self, has_permit=False, is_attached=True, ioc_prefix="32idcPG3:",
-                 use_shutter_A=False, use_shutter_B=True, zp_diameter=180,
-                 drn=60):
+                 use_shutter_A=False, use_shutter_B=True):
         self.is_attached = is_attached
         self.has_permit = has_permit
         self.ioc_prefix = ioc_prefix
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
-        self.zp_diameter = zp_diameter
-        self.drn = drn
     
     @contextmanager
     def wait_pvs(self, block=True):
@@ -522,7 +522,7 @@ class TXM(object):
         log.debug(msg)
     
     @permit_required
-    def move_energy(self, energy, constant_mag=True, gap_offset=0., 
+    def move_energy(self, energy, constant_mag=True,
                     correct_backlash=True):
         """Change the energy of the X-ray source and optics.
         
@@ -536,8 +536,6 @@ class TXM(object):
         constant_mag : bool, optional
           If truthy, the detector will also be moved to correct for
           the change in focal length.
-        gap_offset : float, optional
-          Extra energy, in keV, to add to the undulator gap setting.
         correct_backlash : bool, optional
           If enabled, this method will correct for slop in the gap
           motors. Only needed for large changes (eg >0.01 keV)
@@ -591,7 +589,7 @@ class TXM(object):
             # Come up from below to correct for motor slop
             log.debug("Correcting backlash")
             self.GAPputEnergy = energy
-        self.GAPputEnergy = energy + gap_offset
+        self.GAPputEnergy = energy + self.gap_offset
         self.DCMmvt = old_DCM_mode
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
@@ -666,7 +664,6 @@ class TXM(object):
     
     @property
     def hdf_filename(self):
-        print(self.HDF1_FullFileName_RBV)
         return self.HDF1_FullFileName_RBV
     
     def hdf_file(self, timeout=10, *args, **kwargs):
@@ -813,7 +810,6 @@ class TXM(object):
             self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
             # Wait for the camera to be ready
             while self.Cam1_Acquire != self.DETECTOR_IDLE:
-                print(self.Cam1_Acquire)
                 time.sleep(0.01)
                 self.Cam1_SoftwareTrigger = 1
             self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
