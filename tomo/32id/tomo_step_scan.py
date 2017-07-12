@@ -190,7 +190,7 @@ def main():
                variableDict.get('SampleYOut', None),
                variableDict.get('SampleZOut', None),
                0)
-    num_recursive_filter = int(variableDict['Recursive_Filter_N_Images'])
+    num_recursive_images = int(variableDict['Recursive_Filter_N_Images'])
     step_size = ((sample_rot_end - sample_rot_start) / (num_projections - 1.0))
     stabilize_sleep_ms = float(variableDict['StabilizeSleep_ms'])
     # Pre-scan sleep
@@ -204,7 +204,7 @@ def main():
                           num_white=num_white, num_dark=num_dark,
                           sample_pos=sample_pos, out_pos=out_pos,
                           rot_speed_deg_per_s=rot_speed_deg_per_s,
-                          num_recursive_images=num_recursive_filter)
+                          num_recursive_images=num_recursive_images)
 
 
 if __name__ == '__main__':

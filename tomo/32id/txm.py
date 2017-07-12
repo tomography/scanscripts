@@ -575,8 +575,8 @@ class TXM(object):
             # Execute motor movement
             self.CCD_Motor = new_CCD_position
         else: # Varying magnification
-            new_D = (old_CCD + math.sqrt(old_CCD * old_CCD - 4.0 * old_CCD * ZP_focal) ) / 2.0
-            ZP_WD = new_D * new_ZP_focal / (new_D - ZP_focal)
+            new_D = (old_CCD + math.sqrt(old_CCD * old_CCD - 4.0 * old_CCD * new_ZP_focal) ) / 2.0
+            ZP_WD = new_D * new_ZP_focal / (new_D - new_ZP_focal)
             new_mag = (old_D - old_ZP_focal) / old_ZP_focal
             log.debug("New magnification: %.2f", new_mag)
         # Move the zoneplate
@@ -589,8 +589,10 @@ class TXM(object):
             # Come up from below to correct for motor slop
             log.debug("Correcting backlash")
             self.GAPputEnergy = energy
+            self.wait_pv('EnergyWait', 0)
         self.GAPputEnergy = energy + self.gap_offset
         self.DCMmvt = old_DCM_mode
+        self.wait_pv('EnergyWait', 0)
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
     @permit_required
@@ -691,6 +693,7 @@ class TXM(object):
         self.exposure_time = 0.01
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
+
         # Now set the real settings for the detector
         self.Cam1_Display = live_display
         self.Cam1_ArrayCallbacks = 'Enable'
@@ -732,9 +735,9 @@ class TXM(object):
             self.Proc1_Reset_Filter = 1
             self.Proc1_AutoReset_Filter = 'Yes'
             self.Proc1_Filter_Callbacks = 'Array N only'
+            self.Proc1_Filter_Enable = 'Enable'
         else:
             # No recursive filter, just 1 image
-            # global_PVs['Proc1_Callbacks'].put('Disable')
             self.Proc1_Filter_Enable = 'Disable'
             self.HDF1_ArrayPort = self.Proc1_ArrayPort
         # Count total number of projections needed
