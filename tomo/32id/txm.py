@@ -3,8 +3,6 @@
 """Defines TXM classes for controlling the Transmission X-ray
 Microscope at Advanced Photon Source beamline 32-ID-C.
 
-TxmPV
-  A decorator for the process variables used by the microscopes.
 TXM
   A nano-CT transmission X-ray microscope.
 MicroCT
@@ -23,141 +21,14 @@ import tqdm
 from epics import PV as EpicsPV, get_pv
 
 import exceptions_
+from txm_pv import TxmPV
 
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 
 log = logging.getLogger(__name__)
 
-class TxmPV(object):
-    """A descriptor representing a process variable in the EPICS system.
-    
-    This allows accessing process variables as if they were object
-    attributes. If the descriptor owner (ie. TXM) is not attached,
-    this descriptor performs like a regular attribute. Optionally,
-    this can also be done for objects that have no shutter permit.
-    
-    Attributes
-    ----------
-    put_complete : bool
-      If False, there is a pending put operation.
-    
-    Parameters
-    ----------
-    pv_name : str
-      The name of the process variable to connect to as defined in the
-      EPICS system.
-    dtype : optional
-      If given, the values returned by `PV.get` will be
-      typecast. Example: ``dtype=int`` will return
-      ``int(PV[pv].get())``.
-    default : optional
-      If the owner is not attached, this value is returned instead of
-      polling the instrument..
-    permit_required : bool, optional
-      If truthy, data will only be sent if the owner `has_permit`
-      attribute is true. Reading of process variable is still enabled
-      either way.
-    wait : bool, optional
-      If truthy, setting this descriptor will block until the
-      operation succeeds.
-    get_kwargs : dict, optional
-      Extra keyword arguments to pass to the PV's ``get`` method.
-    """
-    _epicsPV = None
-    put_complete = True
-    
-    class PVPromise():
-        is_complete = False
-        result = None
-    
-    def __init__(self, pv_name, dtype=None, default=None,
-                 permit_required=False, wait=True, get_kwargs={}):
-        # Make sure the dtype and float are compatible
-        if dtype is not None:
-            dtype(default)
-        # Set default values
-        self._namestring = pv_name
-        self.curr_value = default
-        self.dtype = dtype
-        self.permit_required = permit_required
-        self.wait = wait
-        self.get_kwargs = get_kwargs
-    
-    def epics_PV(self, txm):
-        # Only create a PV if one doesn't exist or the IOC prefix has changed
-        is_cached = (self._epicsPV is not None)
-        if not is_cached:
-            pv_name = self.pv_name(txm)
-            self._epicsPV = EpicsPV(pv_name)
-        return self._epicsPV
-    
-    def pv_name(self, txm):
-        """Do string formatting on the pv_name and return the result."""
-        return self._namestring.format(ioc_prefix=txm.ioc_prefix)
-    
-    def __get__(self, txm, type=None):
-        # Ask the PV for an updated value if possible
-        if txm.is_attached:
-            pv = self.epics_PV(txm)
-            try:
-                self.curr_value = pv.get(**self.get_kwargs)
-            except ValueError as e:
-                log.error("Failed retrieving {}: {}".format(self.pv_name(txm), e))
-        # Return the most recently retrieved value
-        if self.dtype is not None:
-            self.curr_value = self.dtype(self.curr_value)
-        return self.curr_value
-    
-    def complete_put(self, data, pvname):
-        log.debug("Completed put for %s", self)
-        promise = data
-        promise.is_complete = True
-    
-    def __set__(self, txm, val):
-        pv_name = self.pv_name(txm)
-        log.debug("Setting PV value %s: %s", pv_name, val)
-        self.txm = txm
-        # Check that the TXM has shutter permit if required for this PV
-        if txm.is_attached and self.permit_required and not txm.has_permit:
-            # There's a valid TXM but we can't operate this PV
-            permit_clear = False
-            msg = "PV {pv} was not set because TXM doesn't have beamline permit."
-            msg = msg.format(pv=pv_name)
-            warnings.warn(msg, RuntimeWarning)
-            log.warning(msg)
-        else:
-            permit_clear = True
-            self.curr_value = val
-        # Set the PV (only if the TXM is attached and has permit)
-        if txm.is_attached and permit_clear:
-            pv = self.epics_PV(txm)
-            # How should be handle waiting?
-            in_context = txm.pv_queue is not None
-            if not in_context:
-                # Blocking version
-                result = pv.put(val, wait=self.wait)
-                if result < 0:
-                    log.error("Error waiting on response from PV %s", self)
-            else:
-                # Non-blocking version
-                promise = self.PVPromise()
-                txm.pv_queue.append(promise)
-                pv.put(val, wait=False, callback=self.complete_put, callback_data=promise)
-        elif not txm.is_attached:
-            # Simulate a completed put call, because the callback isn't run
-            self.curr_value = val
-    
-    def __set_name__(self, txm, name):
-        self.name = name
-    
-    def __str__(self):
-        return getattr(self, 'name', self._namestring)
-    
-    def __repr__(self):
-        return "<TxmPV: {}>".format(self._namestring)
 
-
-def permit_required(real_func):
+def permit_required(real_func, return_value=None):
     """Decorates a method so it can only open with a permit.
     
     This method decorator ensures that the decorated method can only
@@ -166,8 +37,8 @@ def permit_required(real_func):
     
     Parameters
     ----------
-    return_value : optional
-      Will be returned if the method is mocked.
+    real_func
+      The function or method to decorate.
     
     """
     def wrapped_func(obj, *args, **kwargs):
@@ -180,33 +51,6 @@ def permit_required(real_func):
             ret = None
         return ret
     return wrapped_func
-
-
-class txm_required():
-    """Decorates a method so it can only open with an instrument attached.
-    
-    This method decorator ensures that the decorated method can only
-    be called on an object that has a real-world TXM instrument
-    attached. If it doesn't, then nothing happens.
-    
-    Parameters
-    ----------
-    return_value
-      Will be returned if the method is mocked.
-    
-    """
-    def __init__(self, return_value):
-        self.return_value = return_value
-    
-    def __call__(self, real_func):
-        def wrapped_func(obj, *args, **kwargs):
-            # Inner function that checks the status of permit
-            if obj.is_attached:
-                ret = real_func(obj, *args, **kwargs)
-            else:
-                ret = self.return_value
-            return ret
-        return wrapped_func
 
 
 ############################
@@ -278,9 +122,9 @@ class TXM(object):
     Cam1_FrameRateOnOff = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
-    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False, default=0)
+    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
-    Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV', get_kwargs={'as_string': True})
+    Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV', as_string=True)
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -292,10 +136,9 @@ class TXM(object):
     HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture', wait=False)
     HDF1_Capture_RBV = TxmPV('{ioc_prefix}HDF1:Capture_RBV')
     HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName', dtype=str,
-                          get_kwargs={'as_string': True})
+                          as_string=True)
     HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV',
-                                  dtype=str, default="/tmp/sector32_test.h5",
-                                  get_kwargs={'as_string': True})
+                                  dtype=str, as_string=True)
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
     HDF1_NextFile = TxmPV('{ioc_prefix}HDF1:FileNumber')
@@ -315,13 +158,13 @@ class TXM(object):
     TIFF1_ArrayPort = TxmPV('{ioc_prefix}TIFF1:NDArrayPort')
     
     # Motor PV's
-    Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL', float, default=0.)
-    Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL', float, default=0.) # for the TXM
+    Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL', dtype=float)
+    Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL', dtype=float)
     # Professional Instrument air bearing rotary stage
-    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL', float, default=0.)
+    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL', dtype=float)
     # Smaract XZ TXM set
-    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL', float, default=0.)
-    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c3:m8.VAL', float, default=0.)
+    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL', dtype=float)
+    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c3:m8.VAL', dtype=float)
     # # Mosaic scanning axes
     # Motor_X_Tile = TxmPV('32idc01:m33.VAL')
     # Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
@@ -338,15 +181,15 @@ class TXM(object):
     zone_plate_2_z = TxmPV('32idcTXM:mcs:c0:m2.VAL')
     
     # CCD motors:
-    CCD_Motor = TxmPV('32idcTXM:mxv:c1:m6.VAL', float, default=3200)
+    CCD_Motor = TxmPV('32idcTXM:mxv:c1:m6.VAL', float)
     
     # Shutter PV's
     ShutterA_Open = TxmPV('32idb:rshtrA:Open', permit_required=True)
     ShutterA_Close = TxmPV('32idb:rshtrA:Close', permit_required=True)
-    ShutterA_Move_Status = TxmPV('PB:32ID:STA_A_FES_CLSD_PL', default=0)
+    ShutterA_Move_Status = TxmPV('PB:32ID:STA_A_FES_CLSD_PL')
     ShutterB_Open = TxmPV('32idb:fbShutter:Open.PROC', permit_required=True)
     ShutterB_Close = TxmPV('32idb:fbShutter:Close.PROC', permit_required=True)
-    ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL', default=0)
+    ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL')
     ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
     # State 0 = Close, 1 = Open
     Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control', permit_required=True)
@@ -399,7 +242,7 @@ class TXM(object):
     DCMmvt = TxmPV('32ida:KohzuModeBO.VAL', permit_required=True)
     GAPputEnergy = TxmPV('32id:ID32us_energy', permit_required=True, wait=False)
     EnergyWait = TxmPV('ID32us:Busy')
-    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', float, default=8.6,
+    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', dtype=float,
                          permit_required=True)
     
     #interlaced
@@ -412,13 +255,21 @@ class TXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False, is_attached=True, ioc_prefix="32idcPG3:",
+    def __init__(self, has_permit=False, ioc_prefix="32idcPG3:",
                  use_shutter_A=False, use_shutter_B=True):
-        self.is_attached = is_attached
         self.has_permit = has_permit
         self.ioc_prefix = ioc_prefix
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
+    
+    def pv_get(self, pv_name, *args, **kwargs):
+        """Retrieve the current process variable values."""
+        epics_pv = EpicsPV(pv_name)
+        return epics_pv.get(*args, **kwargs)
+    
+    def pv_put(self, pv_name, value, *args, **kwargs):
+        epics_pv = EpicsPV(pv_name)
+        return epics_pv.put(value, *args, **kwargs)
     
     @contextmanager
     def wait_pvs(self, block=True):
@@ -478,7 +329,7 @@ class TXM(object):
         time.sleep(self.POLL_INTERVAL)
         startTime = time.time()
         # Enter into infinite loop polling the PV status
-        while(True and self.is_attached):
+        while(True):
             real_PV = self.__class__.__dict__[pv_name]
             pv_val = real_PV.__get__(self)
             if (pv_val != target_val):

@@ -65,7 +65,6 @@ def getVariableDict():
 
 def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
                    has_permit=False,
-                   is_attached=True,
                    num_white=(5, 5), num_dark=(5, 0),
                    sample_pos=(None,), out_pos=(None,),
                    rot_speed_deg_per_s=0.5, key=None,
@@ -88,8 +87,6 @@ def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
       Exposure time in seconds for each projection.
     has_permit : bool, optional
       Whether the user has a priority for the shutters and source.
-    is_attached : bool, optional
-      Whether or not to try and actually control the TXM.
     num_white : 2-tuple(int), optional
       (pre, post) tuple for number of white field images to collect.
     num_dark : 2-tuple(int), optional
@@ -115,7 +112,7 @@ def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
     # Start verifier on remote machine
     start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
     # Prepare X-ray microscope
-    txm = TXM(is_attached=is_attached, has_permit=has_permit)
+    txm = TXM(has_permit=has_permit)
     # Prepare the microscope for collecting data
     txm.setup_detector(exposure=exposure)
     total_projections = len(angles)
@@ -199,7 +196,7 @@ def main():
     # Call the main tomography function
     return tomo_step_scan(angles=angles,
                           stabilize_sleep_ms=stabilize_sleep_ms,
-                          exposure=exposure, is_attached=True,
+                          exposure=exposure,
                           has_permit=SHUTTER_PERMIT, key=key,
                           num_white=num_white, num_dark=num_dark,
                           sample_pos=sample_pos, out_pos=out_pos,
