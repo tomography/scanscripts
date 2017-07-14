@@ -18,6 +18,12 @@ import string
 from tomo_scan_lib import *
 import tomo_fly_scan
 
+__author__ = 'Mark Wolf'
+__copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
+__docformat__ = 'restructuredtext en'
+__platform__ = 'Unix'
+__version__ = '1.6'
+
 # hardcoded values for verifier
 VER_HOST = "txmtwo"
 VER_PORT = "5011"
