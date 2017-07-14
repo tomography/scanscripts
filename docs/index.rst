@@ -22,5 +22,3 @@ Content
    source/about
    source/install
    source/api
-   source/demo
-
