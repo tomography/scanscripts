@@ -55,10 +55,6 @@ class TxmPV(object):
     _epicsPV = None
     put_complete = True
     
-    class PVPromise():
-        is_complete = False
-        result = None
-    
     def __init__(self, pv_name, dtype=None, permit_required=False,
                  wait=True, as_string=False):
         # Set default values
@@ -114,11 +110,6 @@ class TxmPV(object):
             msg = msg.format(pv=pv_name)
             warnings.warn(msg, RuntimeWarning)
             log.warning(msg)
-    
-    def complete_put(self, data, pvname):
-        log.debug("Completed put for %s", self)
-        promise = data
-        promise.is_complete = True
     
     def __set_name__(self, txm, name):
         self.name = name

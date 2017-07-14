@@ -45,7 +45,7 @@ class PermitDecoratorsTestCase(unittest.TestCase):
 class TXMTestCase(unittest.TestCase):
     class StubTXM(TXM):
         __pv_dict = {'ioc_sample_X': 7}
-        def pv_put(self, pv_name, value, *args, **kwargs):
+        def _pv_put(self, pv_name, value, *args, **kwargs):
             self.__pv_dict[pv_name] = value
             return True
         
@@ -54,7 +54,23 @@ class TXMTestCase(unittest.TestCase):
         
         def wait_pv(self, *args, **kwargs):
             return True
-
+    
+    def test_pv_put(self):
+        # Have a dummy PV method to check if it actually calls
+        class StubTXM2(self.StubTXM):
+            _test_value = 0
+            def _pv_put(self, pv_name, value, *args, **kwargs):
+                self._test_value = value
+                return True
+        txm = StubTXM2()
+        # Check if the method set the test value
+        txm.pv_put('my_pv', 3, wait=True)
+        self.assertEqual(txm._test_value, 3)
+        # Check that the method adds a promise if a PV queue is present
+        txm.pv_queue = []
+        txm.pv_put('my_pv', 3, wait=True)
+        self.assertEqual(len(txm.pv_queue), 1, "No PV promise added to queue")
+    
     def test_move_sample(self):
         txm = self.StubTXM()
         txm.Motor_SampleX = 0.
@@ -149,7 +165,7 @@ class TXMTestCase(unittest.TestCase):
                              num_projections=3, write_mode="stream")
         # Test with recursive filter
         self.assertEqual(txm.Proc1_Callbacks, "Enable")
-        self.assertEqual(txm.Proc1_Filter_Enable, "Disable")
+        self.assertEqual(txm.Proc1_Filter_Enable, "Enable")
         self.assertEqual(txm.Proc1_Filter_Type, txm.RECURSIVE_FILTER_TYPE)
         self.assertEqual(txm.HDF1_ArrayPort, 'PROC1')
         self.assertEqual(txm.Proc1_Num_Filter, 3)
@@ -223,27 +239,6 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.ShutterA_Close, None)
         self.assertEqual(txm.ShutterB_Close, 1)
     
-    def test_wait_pvs(self):
-        """Check that the ``wait_pvs`` context manager waits."""
-        txm = self.StubTXM()
-        dmc_pv = TxmPV('DCMmvt')
-        txm.pv_queue = 'outer_value'
-        with txm.wait_pvs() as q:
-            self.assertEqual(q, [])
-            # Check that it resets the pv_queue
-            self.assertEqual(txm.pv_queue, q)
-            # Add a pv promise
-            promise = TxmPV.PVPromise()
-            promise.is_complete = True
-            txm.pv_queue.append(promise)
-        # Was the previous queue restored?
-        self.assertEqual(txm.pv_queue, 'outer_value')
-        # Now does it work in non-blocking mode?
-        with txm.wait_pvs(block=False) as q:
-            promise = TxmPV.PVPromise()
-            promise.is_complete = False
-            txm.pv_queue.append(promise)
-
     @unittest.skip('while loop runs forever')
     def test_trigger_projections(self):
         # Currently this test only checks that the method can run without error

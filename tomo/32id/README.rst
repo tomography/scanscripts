@@ -43,5 +43,5 @@ value:
 +==============+=============+==================+======================+
 | wait=True    | Blocks now  | Blocks later     | No blocking          |
 +--------------+-------------+------------------+----------------------+
-| wait=False   | No blocking | Blocks later?    | No blocking          |
+| wait=False   | No blocking | No blocking      | No blocking          |
 +--------------+-------------+------------------+----------------------+

@@ -53,6 +53,14 @@ def permit_required(real_func, return_value=None):
     return wrapped_func
 
 
+class PVPromise():
+    is_complete = False
+    result = None
+    
+    def complete(self):
+        self.is_complete = True
+
+
 ############################
 # Main TXM Class definition
 ############################
@@ -263,30 +271,79 @@ class TXM(object):
         self.use_shutter_B = use_shutter_B
     
     def pv_get(self, pv_name, *args, **kwargs):
-        """Retrieve the current process variable values."""
+        """Retrieve the current process variable value.
+        
+        Parameters
+        ----------
+        *args, **kwargs
+          Extra arguments that get passed to :py:meth:``epics.PV.get``
+        
+        """
         epics_pv = EpicsPV(pv_name)
         return epics_pv.get(*args, **kwargs)
+
+    def pv_put(self, pv_name, value, wait, *args, **kwargs):
+        """Set the current process variable value.
+        
+        When ``wait=True``, this method becomes closely linked with
+        the concept of deferred PVs. Normally, this method will block
+        until the PV has been set. When inside a
+        :py:meth:``TXM.wait_pvs`` context, this method adds a promise
+        to the queue so the :py:meth:``TXM.wait_pvs`` manager can
+        handle the blocking. When ``wait=False``, this method returns
+        immediately once the value has been sent and does not alter
+        the PV queue.
+        
+        Parameters
+        ----------
+        wait : bool, optional
+          If true, the method will keep track of when PV has been set.
+        *args, **kwargs
+          Extra arguments that get passed to :py:meth:``epics.PV.get``
+        
+        """
+        if self.pv_queue is not None:
+            # Non-blocking, deferred PV waiting
+            promise = PVPromise()
+            ret = self._pv_put(pv_name, value, wait=False, callback=promise.complete)
+            self.pv_queue.append(promise)
+        else:
+            # Blocking PV waiting
+            ret = self._pv_put(pv_name, value, wait=wait, *args, **kwargs)
+        return ret
     
-    def pv_put(self, pv_name, value, *args, **kwargs):
+    def _complete_promise(self, promise):
+        print(promise)
+    
+    def _pv_put(self, pv_name, value, wait, *args, **kwargs):
+        """Retrieves the epics PV and calls its ``put`` method."""
+        print(pv_name, value, wait)
         epics_pv = EpicsPV(pv_name)
-        return epics_pv.put(value, *args, **kwargs)
+        return epics_pv.put(value, wait=wait, *args, **kwargs)
     
     @contextmanager
     def wait_pvs(self, block=True):
         """Context manager that allows for setting multiple PVs
         asynchronously.
         
-        This manager creates an empty queue for PV objects. After
-        exiting the inner code, it then waits until all the PV's to be
-        finished before returning. This method is tightly coupled with
-        the settings of the relevant ``TxmPV`` objects.
+        This manager creates an empty queue for PV objects. If
+        blocking, upon exiting the context it waits for all the PV's
+        to finished before moving on. If non-blocking, this basically
+        turns off blocking feature on any TxmPVs that have
+        ``wait=True`` (so use with caution).
+        
+        Arguments
+        ---------
+        block : bool, optional
+          If True, this function will wait for all PVs to finish
+        before continuing.
         
         """
         # Save old queue to resore it later on
         old_queue = self.pv_queue
-        # Set up an event loop
+        # Prepare a queue for holding PV promises
         self.pv_queue = []
-        # Return execution to the calling script
+        # Return execution to the inner block
         yield self.pv_queue
         # Wait for all the PVs to be finished
         num_promises = len(self.pv_queue)
@@ -295,7 +352,7 @@ class TXM(object):
         log.debug("Completed %d queued PV's", num_promises)
         # Restore the old PV queue
         self.pv_queue = old_queue
-   
+    
     def wait_pv(self, pv_name, target_val, timeout=DEFAULT_TIMEOUT):
         """Wait for a process variable to reach given value.
         
