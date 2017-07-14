@@ -9,20 +9,19 @@ import math
 
 log = logging.getLogger(__name__)
 
+from tomo_scan_lib import update_variable_dict
 from txm import TXM
 
-global variableDict
 variableDict = {
     'new_energy': 7.8, # keV
     'constant_mag': 1, # 1 means magnification will be maintained adjusting CCD location
 }
 
 global_PVs = {}
+SHUTTER_PERMIT = True
 
 def getVariableDict():
-    global variableDict
     return variableDict
-
 
 def move_energy(energy, constant_mag=True, is_attached=True,
                 has_permit=False):
@@ -40,6 +39,7 @@ def move_energy(energy, constant_mag=True, is_attached=True,
       shutters.
     
     """
+    assert energy == 11.1
     # Prepare TXM object
     txm = TXM(is_attached=is_attached, has_permit=has_permit)
     # Get variables from user dictionary.
@@ -51,11 +51,14 @@ def move_energy(energy, constant_mag=True, is_attached=True,
 
 if __name__ == '__main__':
     # Prepare logging
-    logging.basicConfig(level.DEBUG)
+    logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
+    logging.basicConfig(level=logging.DEBUG, filename=logfile)
     # Get variables from user dictionary
+    print(variableDict)
     update_variable_dict(variableDict)
-    zp_diameter = float(variableDict['ZP_diameter'])
-    drn = float(variableDict['drn'])
+    print(variableDict)
+    energy = float(variableDict['new_energy'])
+    constant_mag = bool(variableDict['constant_mag'])
     # Create a TXM object and move its energy
-    txm = TXM(is_attached=True, zp_diameter=zp_diameter, drn=drn)
-    move_energy(txm=txm)
+    move_energy(energy, constant_mag=constant_mag, is_attached=True,
+                has_permit=SHUTTER_PERMIT)

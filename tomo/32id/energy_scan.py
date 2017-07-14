@@ -45,10 +45,11 @@ variableDict = {
     'constant_mag': True, # 1 means CCD will move to maintain constant magnification
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
+    'Recursive_Filter_N_Images': 1,
 }
 
 IOC_PREFIX = '32idcPG3:'
-SHUTTER_PERMIT = False
+SHUTTER_PERMIT = True
 DEFAULT_ENERGIES = np.arange(
     variableDict['Energy_Start'],
     variableDict['Energy_End'] + variableDict['Energy_Step'],
@@ -66,7 +67,8 @@ def getVariableDict():
 def energy_scan(energies, exposure=0.5, n_pre_dark=5,
                 is_attached=True, has_permit=False,
                 sample_pos=(None,), out_pos=(None,),
-                constant_mag=True, stabilize_sleep_ms=1000):
+                constant_mag=True, stabilize_sleep_ms=1000,
+                num_recursive_images=1):
     """Collect a series of 2-dimensional projections across a range of energies.
 
     At each position, a sample projection and white-field projection
@@ -96,7 +98,8 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     stabilize_sleep_ms : int, optional
       How long, in milliseconds, to wait for the beam to stabilize
       before collecting projections.
-
+    num_recursive_images: int, optional
+      If greater than 1, several consecutive images can be collected.
     """
     log.debug('start_scan() called')
     start_time = time.time()
@@ -107,15 +110,17 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     # Prepare TXM for capturing data
     txm.setup_detector(exposure=exposure)
     total_projections = n_pre_dark + 2 * len(energies)
-    txm.setup_hdf_writer(num_projections=total_projections)
+    txm.setup_hdf_writer(num_projections=total_projections,
+                         num_recursive_images=num_recursive_images)
     # Capture pre dark field images
     if n_pre_dark > 0:
         txm.close_shutters()
         log.info('Capturing %d Pre Dark Field images', n_pre_dark)
-        txm.capture_dark_field(num_projections=n_pre_dark)
+        txm.capture_dark_field(num_projections=n_pre_dark * num_recursive_images)
     # Calculate the array of energies that will be scanned
     log.info('Capturing %d energies', len(energies))
     # Collect each energy frame
+    txm.open_shutters()
     correct_backlash = True # First energy only
     for idx, energy in enumerate(tqdm.tqdm(energies, "Energy scan")):
         log.debug('Preparing to capture energy: %f keV', energy)
@@ -123,36 +128,35 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
         sample_first = not bool(idx % 2)
         log.info("Collecting %s first.", "sample" if sample_first else "white-field")
         # Move sample and energy
-        with txm.wait_pvs():
-            if sample_first:
-                txm.move_sample(*sample_pos)
-            else:
-                txm.move_sample(*out_pos)
-            txm.move_energy(energy, constant_mag=constant_mag,
-                            correct_backlash=correct_backlash)
+        # with txm.wait_pvs():
+        if sample_first:
+            txm.move_sample(*sample_pos)
+        else:
+            txm.move_sample(*out_pos)
+        txm.move_energy(energy, constant_mag=constant_mag,
+                        correct_backlash=correct_backlash)
         correct_backlash = False # Needed on first energy only
         # Pause for a moment to allow the beam to stabilize
         log.debug('Stabilize Sleep %f ms', stabilize_sleep_ms)
         time.sleep(stabilize_sleep_ms / 1000.0)
         # Sample projection acquisition (or white-field on odd passes)
-        txm.open_shutters()
         if sample_first:
             log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
-            txm.capture_projections()
+            txm.capture_projections(num_projections=num_recursive_images)
         else:
             log.info("Acquiring white-field position %s at %.4f eV", out_pos, energy)
-            txm.capture_white_field()
+            txm.capture_white_field(num_projections=num_recursive_images)
         # Flat-field projection acquisition (or sample on odd passes)
         if sample_first:
             with txm.wait_pvs():
                 txm.move_sample(*out_pos)
             log.info("Acquiring white-field position %s at %.4f eV", out_pos, energy)
-            txm.capture_white_field()
+            txm.capture_white_field(num_projections=num_recursive_images)
         else:
             with txm.wait_pvs():
                 txm.move_sample(*sample_pos)
             log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
-            txm.capture_projections()
+            txm.capture_projections(num_projections=num_recursive_images)
     txm.close_shutters()
     # Add the energy array to the active HDF file
     with txm.hdf_file(mode="r+") as hdf_f:
@@ -182,16 +186,20 @@ def main():
     # Start scan sleep in min so min * 60 = sec
     sleep_min = float(variableDict.get('StartSleep_min', 0))
     stabilize_sleep_ms = float(variableDict.get("StabilizeSleep_ms"))
+    num_recursive_images = int(variableDict['Recursive_Filter_N_Images'])
+    constant_mag = bool(variableDict['constant_mag'])
     if sleep_min > 0:
         log.debug("Sleeping for %f min", sleep_min)
         time.sleep(sleep_min * 60.0)
     # Start the energy scan
     energy_scan(energies=energies,
+                is_attached=True, has_permit=SHUTTER_PERMIT,
                 exposure=float(variableDict['ExposureTime']),
                 n_pre_dark=int(variableDict['PreDarkImages']),
                 sample_pos=sample_pos, out_pos=out_pos,
                 stabilize_sleep_ms=stabilize_sleep_ms,
-                constant_mag=bool(variableDict['constant_mag']))
+                constant_mag=constant_mag,
+                num_recursive_images=num_recursive_images)
 
 
 if __name__ == '__main__':
