@@ -17,18 +17,16 @@ variableDict = {
     'constant_mag': 1, # 1 means magnification will be maintained adjusting CCD location
 }
 
-global_PVs = {}
 SHUTTER_PERMIT = True
 
 def getVariableDict():
     return variableDict
 
-def move_energy(energy, constant_mag=True, is_attached=True,
-                has_permit=False):
+def move_energy(energy, constant_mag=True, has_permit=False):
     """Change the X-ray microscope to a new energy.
     
     Parameters
-    ==========
+    ----------
     energy : float
       New energy (in keV) for the microscope/source.
     constant_mag : bool, optional
@@ -39,26 +37,26 @@ def move_energy(energy, constant_mag=True, is_attached=True,
       shutters.
     
     """
-    assert energy == 11.1
     # Prepare TXM object
-    txm = TXM(is_attached=is_attached, has_permit=has_permit)
-    # Get variables from user dictionary.
+    txm = TXM(has_permit=has_permit)
     # Attach to the TXM and change energy
     with txm.wait_pvs():
         txm.move_energy(energy, constant_mag=constant_mag)
     log.info("Changed energy to %.5f keV", energy)
 
 
-if __name__ == '__main__':
+def main(variableDict, has_permit):
     # Prepare logging
     logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
     logging.basicConfig(level=logging.DEBUG, filename=logfile)
     # Get variables from user dictionary
-    print(variableDict)
     update_variable_dict(variableDict)
-    print(variableDict)
     energy = float(variableDict['new_energy'])
     constant_mag = bool(variableDict['constant_mag'])
     # Create a TXM object and move its energy
     move_energy(energy, constant_mag=constant_mag, is_attached=True,
-                has_permit=SHUTTER_PERMIT)
+                has_permit=has_permit)
+
+
+if __name__ == '__main__':
+    main(variableDict, has_permit=SHUTTER_PERMIT)
