@@ -23,6 +23,15 @@ from epics import PV as EpicsPV, get_pv
 import exceptions_
 from txm_pv import TxmPV
 
+__author__ = 'Mark Wolf'
+__copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
+__docformat__ = 'restructuredtext en'
+__platform__ = 'Unix'
+__version__ = '1.6'
+__all__ = ['TxmPV',
+           'permit_required',
+           'txm_required']
+
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 
 log = logging.getLogger(__name__)

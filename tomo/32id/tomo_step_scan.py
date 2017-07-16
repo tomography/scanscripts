@@ -20,6 +20,16 @@ import numpy as np
 
 from tomo_scan_lib import *
 
+__author__ = 'Mark Wolf'
+__copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
+__docformat__ = 'restructuredtext en'
+__platform__ = 'Unix'
+__version__ = '1.6'
+__all__ = ['set_exit_handler',
+           'getVariableDict',
+           'tomo_scan',
+           'mirror_fly_scan',
+           'full_tomo_scan']
 
 # Hardcoded values for verifier and TXM
 VER_HOST = "txmtwo"

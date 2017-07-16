@@ -40,7 +40,7 @@ class ScriptTestCase(unittest.TestCase):
 
 
 class MoveEnergyTests(ScriptTestCase):
-    # @unittest.skip('Need to re-work the integrations tests')
+    @unittest.skip('Need to re-work the integrations tests')
     def test_move_energy(self):
         txm = TXM()
         txm.HDF1_FullFileName_RBV = self.hdf_filename

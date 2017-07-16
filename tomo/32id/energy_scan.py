@@ -26,7 +26,14 @@ from epics import PV
 from tomo_scan_lib import update_variable_dict
 from txm import TXM
 
-# global variableDict
+__author__ = 'Mark Wolf'
+__copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
+__docformat__ = 'restructuredtext en'
+__platform__ = 'Unix'
+__version__ = '1.6'
+__all__ = ['energy_scan']
+
+
 variableDict = {
     'PreDarkImages': 0,
     'SampleXOut': 0.0,

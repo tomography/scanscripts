@@ -23,6 +23,30 @@ import h5py
 
 from txm import TXM
 
+__author__ = 'Mark Wolf'
+__copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
+__docformat__ = 'restructuredtext en'
+__platform__ = 'Unix'
+__version__ = '1.6'
+__all__ = ['update_variable_dict',
+            'wait_pv',
+            'start_verifier',
+            'stop_verifier',
+            'init_general_PVs',
+            'stop_scan',
+            'cleanup',
+            'capture_multiple_projections',
+            'move_sample_in',
+            'move_sample_out',
+            'open_shutters',
+            'close_shutters',
+            'add_theta',
+            'add_extra_hdf5',
+            'move_dataset_to_run_dir',
+            'move_energy',
+            'bitreversed_decimal',
+            'gen_interlaced_views']
+
 
 ShutterA_Open_Value = 0
 ShutterA_Close_Value = 1
