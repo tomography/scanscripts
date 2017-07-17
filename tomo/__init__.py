@@ -48,11 +48,14 @@
 
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
-from project.module_01 import *
-from project.module_02 import *
+from tomo.32id.energy_scan import *
+from tomo.32id.tomo_fly_scan import *
+from tomo.32id.scan_lib import *
+from tomo.32id.step_scan import *
+from tomo.32id.exceptions import *
 
 try:
     import pkg_resources
-    __version__ = pkg_resources.working_set.require("project")[0].version
+    __version__ = pkg_resources.working_set.require("tomo")[0].version
 except:
     pass
