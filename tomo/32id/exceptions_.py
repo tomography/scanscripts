@@ -12,6 +12,10 @@ class PermitError(RuntimeError):
     """
     pass
 
+class PVError(RuntimeError):
+    """A problem occurred trying to interact with process variables."""
+    pass
+
 class TimeoutError(RuntimeError):
     """Took too long connecting to a PV."""
     pass

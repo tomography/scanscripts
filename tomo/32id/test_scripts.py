@@ -1,15 +1,24 @@
-"""This file tests the actual execution scripts themselves."""
+"""This file runs integration tests on the actual execution scripts
+themselves."""
 
 # Logging
 import logging
-logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.ERROR)
 
 import unittest
-import mock
+import six
+if six.PY2:
+    import mock
+else:
+    from unittest import mock
 import sys
 import os
 
+import numpy as np
+
 import energy_scan
+import move_energy
+import tomo_step_scan
 from txm import TXM
 
 log = logging.getLogger(__name__)
@@ -19,36 +28,83 @@ log.debug('Beginning tests in {}'.format(__name__))
 energy_scan.variableDict['ExposureTime'] = 0.001
 energy_scan.variableDict['StabilizeSleep_ms'] = 0.001
 
+
+class ScriptTestCase(unittest.TestCase):
+    hdf_filename = "/tmp/sector32_test.h5"
+    def setUp(self):
+        if os.path.exists(self.hdf_filename):
+            os.remove(self.hdf_filename)
+    def tearDown(self):
+        if os.path.exists(self.hdf_filename):
+            os.remove(self.hdf_filename)
+
+
+class MoveEnergyTests(ScriptTestCase):
+    @unittest.skip('Need to re-work the integrations tests')
+    def test_move_energy(self):
+        txm = TXM()
+        txm.HDF1_FullFileName_RBV = self.hdf_filename
+        move_energy.move_energy(energy=6.7, has_permit=False)
+    
+    # def test_main(self):
+    #     move_energy.main(
+
+
+@unittest.skip('Need to re-work the integrations tests')
+@mock.patch('txm.TXM._trigger_projections')
+@mock.patch('txm.EpicsPV')
+class TomoStepScanTests(ScriptTestCase):
+    
+    @mock.patch('txm.TXM.setup_detector')
+    @mock.patch('txm.TXM.setup_hdf_writer')
+    @mock.patch('txm.TXM.move_sample')
+    def test_full_tomo_scan(self, *args):
+        angles = np.linspace(0, 180, 361)
+        txm = tomo_step_scan.tomo_step_scan(angles=angles,
+                                            num_recursive_images=3,
+                                            num_white=(2, 7),
+                                            num_dark=(13, 21))
+        # Check that the right txm functions were called
+        txm.setup_detector.assert_called_once_with(exposure=3)
+        expected_projections = 361 + 2 + 7 + 13 + 21
+        txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections,
+                                                     num_recursive_images=3)
+
+
+@unittest.skip('Need to re-work the integrations tests')
 class EnergyScanTests(unittest.TestCase):
     def setUp(self):
-        self.txm = TXM(is_attached=False,
-                       has_permit=True)
+        self.txm = TXM(has_permit=True)
     
     def tearDown(self):
         # Get rid of the temporary HDF5 file
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')
     
+    @mock.patch('txm.TXM.capture_projections')
+    @mock.patch('txm.TXM.capture_dark_field')
+    @mock.patch('txm.TXM.capture_white_field')
+    @mock.patch('txm.TXM.setup_hdf_writer')
+    @mock.patch('txm.TXM.setup_detector')
     def test_start_scan(self, *args):
         # Get rid of any old files hanging around
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')
+        # Set some sensible TXM values for testing
         self.txm.HDF1_FullFileName_RBV = '/tmp/test_file.h5'
-        # Set some mocked functions for testing
-        txm = self.txm
-        txm.capture_projections = mock.MagicMock()
-        txm.capture_dark_field = mock.MagicMock()
-        txm.capture_white_field = mock.MagicMock()
-        txm.setup_hdf_writer = mock.MagicMock()
-        txm.setup_detector = mock.MagicMock()
         # Launch the script
-        energy_scan.variableDict['PreDarkImages'] = 4
-        energy_scan.energy_scan(txm)
+        energies = np.linspace(8.6, 8.8, num=4)
+        n_pre_dark = 4
+        expected_projections = n_pre_dark + 2 * len(energies)
+        txm = energy_scan.energy_scan(energies=energies,
+                                      n_pre_dark=n_pre_dark,
+                                      exposure=0.77,
+                                      is_attached=False,
+                                      has_permit=True)
         # Check that what happened was done correctly
-        self.assertEqual(txm.capture_projections.call_count, 101)
-        txm.capture_projections.assert_called_with(exposure=0.001)
-        txm.capture_dark_field.assert_called_once_with(
-            exposure=0.001, num_projections=4)
-        txm.setup_hdf_writer.assert_called_once_with()
-        # Verify 
-        txm.setup_detector.assert_called_once_with()
+        self.assertEqual(txm.capture_projections.call_count, len(energies))
+        txm.capture_projections.assert_called_with()
+        txm.capture_dark_field.assert_called_once_with(num_projections=4)
+        # Verify the detector and hdf writer were colled properly
+        txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections)
+        txm.setup_detector.assert_called_once_with(exposure=0.77)

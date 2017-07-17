@@ -1,12 +1,11 @@
+# -*- coding: utf-8 -*-
 '''
-	TomoScan for Sector 32 ID C
+TomoScan for Sector 32 ID C
 
 '''
 import sys
 import json
 import time
-from epics import PV
-import h5py
 import shutil
 import os
 import imp
@@ -14,6 +13,10 @@ import traceback
 import signal
 import random
 import string
+
+import h5py
+from epics import PV
+import numpy as np
 
 from tomo_scan_lib import *
 
@@ -28,197 +31,194 @@ __all__ = ['set_exit_handler',
            'mirror_fly_scan',
            'full_tomo_scan']
 
-# hardcoded values for verifier
+# Hardcoded values for verifier and TXM
 VER_HOST = "txmtwo"
 VER_PORT = "5011"
 VER_DIR = "/local/usr32idc/conda/data-quality/"
 INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
+IOC_PREFIX = '32idcPG3'
+SHUTTER_PERMIT = False
 
-global variableDict
+variableDict = {
+    'PreDarkImages': 5,
+    'PreWhiteImages': 5,
+    'Projections': 361,
+    'PostDarkImages': 0,
+    'PostWhiteImages': 5,
+    'SampleXOut': 0.05,
+    # 'SampleYOut': 0.1,
+    # 'SampleZOut': 0,
+    # 'SampleRotOut': 90.0,
+    'SampleXIn': 0.0,
+    # 'SampleYIn': 0.1,
+    # 'SampleZIn': 0.0,
+    'SampleStart_Rot': -90.,
+    'SampleEnd_Rot': 90.,
+    'StartSleep_min': 1,
+    'StabilizeSleep_ms': 10,
+    'ExposureTime_sec': 0.5,
+    # 'ShutterOpenDelay': 0.05,
+    # 'ExternalShutter': 0,
+    # 'FileWriteMode': 'Stream',
+    'rot_speed_deg_per_s': 0.5,
+    'Recursive_Filter_N_Images': 2,
+}
 
-variableDict = {'PreDarkImages': 5,
-                'PreWhiteImages': 5,
-                'Projections': 361,
-                'PostDarkImages': 0,
-                'PostWhiteImages': 5,
-                'SampleXOut': 0.05,
-                # 'SampleYOut': 0.1,
-                # 'SampleZOut': 0,
-                # 'SampleRotOut': 90.0,
-                'SampleXIn': 0.0,
-                # 'SampleYIn': 0.1,
-                # 'SampleZIn': 0.0,
-                'SampleStart_Rot': 0.0,
-                'SampleEnd_Rot': 180.0,
-                'StartSleep_min': 0,
-                'StabilizeSleep_ms': 1,
-                'ExposureTime': 3,
-                # 'ShutterOpenDelay': 0.05,
-                'IOC_Prefix': '32idcPG3:',
-                # 'ExternalShutter': 0,
-                'FileWriteMode': 'Stream',
-                'rot_speed_deg_per_s': 0.5,
-                'Recursive_Filter_Enabled': 0,
-                'Recursive_Filter_N_Images': 2,
-                'Recursive_Filter_Type': 'RecursiveAve'
-                # 'UseInterferometer': 0
-                }
-
-global_PVs = {}
 
 def set_exit_handler(func):
     signal.signal(signal.SIGTERM, func)
 
+
 def getVariableDict():
-    global variableDict
     return variableDict
 
-def tomo_scan():
-    print 'tomo_scan()'
-    theta = []
-    interf_arr = []
-    if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
-        global_PVs['Interferometer_Mode'].put('ONE-SHOT')
-    step_size = ((float(variableDict['SampleEnd_Rot']) - float(variableDict['SampleStart_Rot'])) / (float(variableDict['Projections']) - 1.0))
-    #end_pos = float(variableDict['SampleEnd_Rot'])
-    global_PVs['Cam1_FrameType'].put(FrameTypeData, wait=True)
-    global_PVs['Cam1_NumImages'].put(1, wait=True)
-    #if int(variableDict['ExternalShutter']) == 1:
-    #	global_PVs['Cam1_TriggerMode'].put('Ext. Standard', wait=True)
-    sample_rot = float(variableDict['SampleStart_Rot'])
-    if variableDict['Recursive_Filter_Enabled'] == 1:
-        global_PVs['Proc1_Filter_Enable'].put('Enable')
 
-    for i in range(int(variableDict['Projections'])):
-        #while sample_rot <= end_pos:
-        print 'Sample Rot:', sample_rot
-        global_PVs['Motor_SampleRot'].put(sample_rot, wait=True)
-        if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
-            global_PVs['Interferometer_Acquire'].put(1)
-            interf_arr += [global_PVs['Interferometer_Val'].get()]
-        print 'Stabilize Sleep (ms)', variableDict['StabilizeSleep_ms']
-        time.sleep(float(variableDict['StabilizeSleep_ms']) / 1000.0)
-        # save theta to array
-        theta += [sample_rot]
-        # start detector acquire
-        if variableDict['Recursive_Filter_Enabled'] == 1:
-            global_PVs['Proc1_Callbacks'].put('Enable', wait=True)
-            for i in range(int(variableDict['Recursive_Filter_N_Images'])):
-                global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-                wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-                global_PVs['Cam1_SoftwareTrigger'].put(1)
-                wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, 60)
-        else:
-            global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-            wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-            global_PVs['Cam1_SoftwareTrigger'].put(1)
-        # if external shutter
-        #if int(variableDict['ExternalShutter']) == 1:
-        #	print 'External trigger'
-        #	#time.sleep(float(variableDict['rest_time']))
-        #	global_PVs['ExternalShutter_Trigger'].put(1, wait=True)
-        # wait for acquire to finish
-        wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, 60)
-        # update sample rotation
-        sample_rot += step_size
-    # set trigger move to internal for post dark and white
-    #global_PVs['Cam1_TriggerMode'].put('Internal', wait=True)
-    #if int(variableDict['ExternalShutter']) == 1:
-    #	global_PVs['SetSoftGlueForStep'].put('0')
-    if variableDict['Recursive_Filter_Enabled'] == 1:
-        global_PVs['Proc1_Filter_Enable'].put('Disable', wait=True)
-    return theta, interf_arr
-
-def mirror_fly_scan(rev=False):
-    print 'mirror_fly_scan()'
-    interf_arr = []
-    global_PVs['Interferometer_Reset'].put(1, wait=True)
-    time.sleep(2.0)
-    # setup fly scan macro
-    delta = ((float(variableDict['SampleEnd_Rot']) - float(variableDict['SampleStart_Rot'])) / (	float(variableDict['Projections'])))
-    slew_speed = 60
-    global_PVs['Fly_ScanDelta'].put(delta)
-    if rev:
-        global_PVs['Fly_StartPos'].put(float(variableDict['SampleEnd_Rot']))
-        global_PVs['Fly_EndPos'].put(float(variableDict['SampleStart_Rot']))
-    else:
-        global_PVs['Fly_StartPos'].put(float(variableDict['SampleStart_Rot']))
-        global_PVs['Fly_EndPos'].put(float(variableDict['SampleEnd_Rot']))
-    global_PVs['Fly_SlewSpeed'].put(slew_speed)
-    # num_images = ((float(variableDict['SampleEnd_Rot']) - float(variableDict['SampleStart_Rot'])) / (delta + 1.0))
-    #num_images = int(variableDict['Projections'])
-    print 'Taxi'
-    global_PVs['Fly_Taxi'].put(1, wait=True)
-    wait_pv(global_PVs['Fly_Taxi'], 0)
-    print 'Fly'
-    global_PVs['Fly_Run'].put(1, wait=True)
-    wait_pv(global_PVs['Fly_Run'], 0)
-    global_PVs['Interferometer_Proc_Arr'].put(1)
-    time.sleep(2.0)
-    interf_cnt = global_PVs['Interferometer_Cnt'].get()
-    interf_arr = global_PVs['Interferometer_Arr'].get(count=interf_cnt)
-    # wait for acquire to finish
-    return interf_arr
-
-
-def full_tomo_scan(key):
-    print 'start_scan()'
-    init_general_PVs(global_PVs, variableDict)
-    if variableDict.has_key('StopTheScan'):
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
-        return
-        #start verifier on remote machine
+def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
+                   has_permit=False,
+                   num_white=(5, 5), num_dark=(5, 0),
+                   sample_pos=(None,), out_pos=(None,),
+                   rot_speed_deg_per_s=0.5, key=None,
+                   num_recursive_images=1):
+    """Collect a series of projections at multiple angles.
+    
+    The given angles should span a range of 180°. The frames will be
+    stored in an HDF file as determined by the camera and hdf settings
+    on the instrument.
+    
+    Parameters
+    ----------
+    angles : np.ndarray
+      Numpy array with rotation (θ) angles, in degrees, for the
+      projections.
+    stabilize_sleep_ms : float, optional
+      How long to wait, in milliseconds, at each angle for the
+      rotation stage to settle.
+    exposure : float, optional
+      Exposure time in seconds for each projection.
+    has_permit : bool, optional
+      Whether the user has a priority for the shutters and source.
+    num_white : 2-tuple(int), optional
+      (pre, post) tuple for number of white field images to collect.
+    num_dark : 2-tuple(int), optional
+      (pre, post) tuple for number of dark field images to collect.
+    sample_pos : 4-tuple(float), optional
+      4 (or less) tuple of (x, y, z, θ) for the sample position.
+    out_pos : 4-tuple(float), optional
+      4 (or less) tuple of (x, y, z, θ) for white field position.
+    rot_speed_deg_per_s : float, optional
+      Angular speed for the rotation stage.
+    key : 
+      Used for controlling the verifier instance.
+    num_recursive_images : int, optional
+      Recurisve averaging filter for combining multiple exposures.
+    
+    """
+    # Unpack options
+    num_pre_white_images, num_post_white_images = num_white
+    num_pre_dark_images, num_post_dark_images = num_dark
+    # Some intial debugging
+    start_time = time.time()
+    log.debug('called start_scan()')
+    # Start verifier on remote machine
     start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
-    #collect interferometer
-    interf_arrs = []
-    if variableDict.has_key('UseInterferometer') and int(variableDict['UseInterferometer']) > 0:
-        for i in range(2):
-            interf_arrs += [mirror_fly_scan()]
-            interf_arrs += [mirror_fly_scan(rev=True)]
-    # Start scan sleep in min so min * 60 = sec
-    time.sleep(float(variableDict['StartSleep_min']) * 60.0)
-    setup_detector(global_PVs, variableDict)
-    setup_writer(global_PVs, variableDict)
-    if int(variableDict['PreDarkImages']) > 0:
-        close_shutters(global_PVs, variableDict)
-        print 'Capturing Pre Dark Field'
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreDarkImages']), FrameTypeDark)
-    if int(variableDict['PreWhiteImages']) > 0:
-        print 'Capturing Pre White Field'
-        open_shutters(global_PVs, variableDict)
-        move_sample_out(global_PVs, variableDict)
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreWhiteImages']), FrameTypeWhite)
-    move_sample_in(global_PVs, variableDict)
-    #time.sleep(float(variableDict['StabilizeSleep_ms']) / 1000.0)
-    open_shutters(global_PVs, variableDict)
-    theta, interf_step = tomo_scan()
-    #	interf_arrs += [interf_step]
-    if int(variableDict['PostWhiteImages']) > 0:
-        print 'Capturing Post White Field'
-        move_sample_out(global_PVs, variableDict)
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostWhiteImages']), FrameTypeWhite)
-    if int(variableDict['PostDarkImages']) > 0:
-        print 'Capturing Post Dark Field'
-        close_shutters(global_PVs, variableDict)
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostDarkImages']), FrameTypeDark)
-    close_shutters(global_PVs, variableDict)
-    # if int(variableDict['ExternalShutter']) == 1:
-    #     global_PVs['SetSoftGlueForStep'].put('0')
-    add_extra_hdf5(global_PVs, variableDict, theta, interf_arrs)
-    reset_CCD(global_PVs, variableDict)
-    # move_dataset_to_run_dir()
+    # Prepare X-ray microscope
+    txm = TXM(has_permit=has_permit)
+    # Prepare the microscope for collecting data
+    txm.setup_detector(exposure=exposure)
+    total_projections = len(angles)
+    total_projections += num_pre_white_images + num_post_white_images
+    total_projections += num_pre_dark_images + num_post_dark_images
+    txm.setup_hdf_writer(num_projections=total_projections,
+                         num_recursive_images=num_recursive_images)
+    # Collect pre-scan dark-field images
+    if num_pre_dark_images > 0:
+        txm.close_shutters()
+        txm.capture_dark_field(num_projections=num_pre_dark_images)
+    # Collect pre-scan white-field images
+    if num_pre_white_images > 0:
+        logging.info("Capturing %d white-fields at %s", num_pre_white_images, out_pos)
+        with txm.wait_pvs():
+            txm.move_sample(*out_pos)
+            txm.open_shutters()
+        txm.capture_white_field(num_projections=num_pre_white_images)
+    # Capture the actual sample data
+    with txm.wait_pvs():
+        txm.move_sample(*sample_pos)
+        txm.open_shutters()
+        log.debug('Starting tomography scan')
+    txm.capture_tomogram(angles=angles, num_projections=num_recursive_images,
+                         stabilize_sleep=stabilize_sleep_ms)
+    # Capture post-scan white-field images
+    if num_post_white_images > 0:
+        with txm.wait_pvs():
+            txm.move_sample(*out_pos)
+        txm.capture_white_field(num_projections=num_post_white_images)
+    # Capture post-scan dark-field images
+    txm.close_shutters()
+    if num_post_dark_images > 0:
+        txm.capture_dark_field(num_projections=num_post_dark_images)
+    # Save metadata
+    with txm.hdf_file() as f:
+        f.create_dataset('/exchange/theta', data=angles)
+    # Clean up
+    txm.reset_ccd()
+    log.info("Captured %d projections in %d sec.", total_projections, time.time() - start_time)
+    return txm
 
 
-def main(key):
-    update_variable_dict(variableDict)
-    full_tomo_scan(key)
-
-if __name__ == '__main__':
+def main():
+    # Prepare the exit handler
     key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
     def on_exit(sig, func=None):
         cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
         sys.exit(0)
     set_exit_handler(on_exit)
-    
-    main(key)
+    # Update user settings
+    update_variable_dict(variableDict)
+    # Extract variables from the global dictionary
+    sleep_time = float(variableDict['StartSleep_min']) * 60.0
+    num_pre_dark_images = int(variableDict['PreDarkImages'])
+    num_post_dark_images = int(variableDict['PostDarkImages'])
+    num_dark = (num_pre_dark_images, num_post_dark_images)
+    num_pre_white_images = int(variableDict['PreWhiteImages'])
+    num_post_white_images = int(variableDict['PostWhiteImages'])
+    num_white = (num_pre_white_images, num_post_white_images)
+    exposure = float(variableDict['ExposureTime_sec'])
+    sample_rot_end = float(variableDict['SampleEnd_Rot'])
+    sample_rot_start = float(variableDict['SampleStart_Rot'])
+    num_projections = int(variableDict['Projections'])
+    rot_speed_deg_per_s = float(variableDict['rot_speed_deg_per_s'])
+    angles = np.linspace(sample_rot_start, sample_rot_end, num=num_projections)
+    sample_pos = (variableDict.get('SampleXIn', None),
+                  variableDict.get('SampleYIn', None),
+                  variableDict.get('SampleZIn', None),
+                  sample_rot_start)
+    out_pos = (variableDict.get('SampleXOut', None),
+               variableDict.get('SampleYOut', None),
+               variableDict.get('SampleZOut', None),
+               0)
+    num_recursive_images = int(variableDict['Recursive_Filter_N_Images'])
+    step_size = ((sample_rot_end - sample_rot_start) / (num_projections - 1.0))
+    stabilize_sleep_ms = float(variableDict['StabilizeSleep_ms'])
+    # Pre-scan sleep
+    log.debug("Sleeping for %d seconds", int(sleep_time))
+    time.sleep(sleep_time)
+    # Call the main tomography function
+    return tomo_step_scan(angles=angles,
+                          stabilize_sleep_ms=stabilize_sleep_ms,
+                          exposure=exposure,
+                          has_permit=SHUTTER_PERMIT, key=key,
+                          num_white=num_white, num_dark=num_dark,
+                          sample_pos=sample_pos, out_pos=out_pos,
+                          rot_speed_deg_per_s=rot_speed_deg_per_s,
+                          num_recursive_images=num_recursive_images)
 
+
+if __name__ == '__main__':
+    # Set up default stream logging
+    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
+    logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
+    logging.basicConfig(level=logging.DEBUG, filename=logfile)
+    logging.captureWarnings(True)
+    # Launch the main script portion
+    main()

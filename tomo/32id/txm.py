@@ -3,8 +3,6 @@
 """Defines TXM classes for controlling the Transmission X-ray
 Microscope at Advanced Photon Source beamline 32-ID-C.
 
-TxmPV
-  A decorator for the process variables used by the microscopes.
 TXM
   A nano-CT transmission X-ray microscope.
 MicroCT
@@ -18,9 +16,12 @@ import logging
 import warnings
 from contextlib import contextmanager
 
+import h5py
+import tqdm
 from epics import PV as EpicsPV, get_pv
 
 import exceptions_
+from txm_pv import TxmPV
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
@@ -36,131 +37,8 @@ DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 
 log = logging.getLogger(__name__)
 
-class TxmPV(object):
-    """A descriptor representing a process variable in the EPICS system.
-    
-    This allows accessing process variables as if they were object
-    attributes. If the descriptor owner (ie. TXM) is not attached,
-    this descriptor performs like a regular attribute. Optionally,
-    this can also be done for objects that have no shutter permit.
-    
-    Attributes
-    ----------
-    put_complete : bool
-      If False, there is a pending put operation.
-    
-    Parameters
-    ----------
-    pv_name : str
-      The name of the process variable to connect to as defined in the
-      EPICS system.
-    dtype : optional
-      If given, the values returned by `PV.get` will be
-      typecast. Example: ``dtype=int`` will return
-      ``int(PV[pv].get())``.
-    default : optional
-      If the owner is not attached, this value is returned instead of
-      polling the instrument..
-    permit_required : bool, optional
-      If truthy, data will only be sent if the owner `has_permit`
-      attribute is true. Reading of process variable is still enabled
-      either way.
-    wait : bool, optional
-      If truthy, setting this descriptor will block until the
-      operation succeeds.
-    get_kwargs : dict, optional
-      Extra keyword arguments to pass to the PV's ``get`` method.
-    """
-    _epicsPV = None
-    put_complete = True
-    
-    class PVPromise():
-        is_complete = False
-        result = None
-    
-    def __init__(self, pv_name, dtype=None, default=None,
-                 permit_required=False, wait=True, get_kwargs={}):
-        # Make sure the dtype and float are compatible
-        if dtype is not None:
-            dtype(default)
-        # Set default values
-        self._namestring = pv_name
-        self.curr_value = default
-        self.dtype = dtype
-        self.permit_required = permit_required
-        self.wait = wait
-        self.get_kwargs = get_kwargs
-    
-    def get_epics_PV(self, txm):
-        # Only create a PV if one doesn't exist or the IOC prefix has changed
-        is_cached = (self._epicsPV is not None)
-        if not is_cached:
-            pv_name = self.pv_name(txm)
-            self._epicsPV = EpicsPV(pv_name)
-        return self._epicsPV
-    
-    def pv_name(self, txm):
-        """Do string formatting on the pv_name and return the result."""
-        return self._namestring.format(ioc_prefix=txm.ioc_prefix)
-    
-    def __get__(self, txm, type=None):
-        # Ask the PV for an updated value if possible
-        if txm.is_attached:
-            pv = self.get_epics_PV(txm)
-            self.curr_value = pv.get(**self.get_kwargs)
-        # Return the most recently retrieved value
-        if self.dtype is not None:
-            self.curr_value = self.dtype(self.curr_value)
-        return self.curr_value
-    
-    def complete_put(self, data, pvname):
-        log.debug("Completed put for %s", self)
-        promise = data
-        promise.is_complete = True
-    
-    def __set__(self, txm, val):
-        pv_name = self.pv_name(txm)
-        log.debug("Setting PV value %s: %s", pv_name, val)
-        self.txm = txm
-        # Check that the TXM has shutter permit if required for this PV
-        if txm.is_attached and self.permit_required and not txm.has_permit:
-            # There's a valid TXM but we can't operate this PV
-            permit_clear = False
-            msg = "PV {pv} was not set because TXM doesn't have beamline permit."
-            msg = msg.format(pv=pv_name)
-            warnings.warn(msg, RuntimeWarning)
-            log.warning(msg)
-        else:
-            permit_clear = True
-            self.curr_value = val
-        # Set the PV (only if the TXM is attached and has permit)
-        if txm.is_attached and permit_clear:
-            pv = self.get_epics_PV(txm)
-            # How should be handle waiting?
-            in_context = txm.pv_queue is not None
-            if not in_context:
-                # Blocking version
-                pv.put(val, wait=self.wait)
-            else:
-                # Non-blocking version
-                promise = self.PVPromise()
-                txm.pv_queue.append(promise)
-                pv.put(val, wait=False, callback=self.complete_put, callback_data=promise)
-        elif not txm.is_attached:
-            # Simulate a completed put call, because the callback isn't run
-            self.curr_value = val
-    
-    def __set_name__(self, txm, name):
-        self.name = name
-    
-    def __str__(self):
-        return getattr(self, 'name', self._namestring)
-    
-    def __repr__(self):
-        return "<TxmPV: {}>".format(self._namestring)
 
-
-def permit_required(real_func):
+def permit_required(real_func, return_value=None):
     """Decorates a method so it can only open with a permit.
     
     This method decorator ensures that the decorated method can only
@@ -169,8 +47,8 @@ def permit_required(real_func):
     
     Parameters
     ----------
-    return_value : optional
-      Will be returned if the method is mocked.
+    real_func
+      The function or method to decorate.
     
     """
     def wrapped_func(obj, *args, **kwargs):
@@ -179,36 +57,18 @@ def permit_required(real_func):
             ret = real_func(obj, *args, **kwargs)
         else:
             msg = "Shutter permit not granted."
-            raise exceptions_.PermitError(msg)
+            warnings.warn(msg, RuntimeWarning)
+            ret = None
         return ret
     return wrapped_func
 
 
-class txm_required():
-    """Decorates a method so it can only open with an instrument attached.
+class PVPromise():
+    is_complete = False
+    result = None
     
-    This method decorator ensures that the decorated method can only
-    be called on an object that has a real-world TXM instrument
-    attached. If it doesn't, then nothing happens.
-    
-    Parameters
-    ----------
-    return_value
-      Will be returned if the method is mocked.
-    
-    """
-    def __init__(self, return_value):
-        self.return_value = return_value
-    
-    def __call__(self, real_func):
-        def wrapped_func(obj, *args, **kwargs):
-            # Inner function that checks the status of permit
-            if obj.is_attached:
-                ret = real_func(obj, *args, **kwargs)
-            else:
-                ret = self.return_value
-            return ret
-        return wrapped_func
+    def complete(self):
+        self.is_complete = True
 
 
 ############################
@@ -241,6 +101,9 @@ class TXM(object):
       The width of the zoneplate's outermost diffraction zone.
     
     """
+    zp_diameter = 180
+    drn = 60
+    gap_offset = 0.15 # Added to undulator gap setting
     pv_queue = None
     hdf_writer_ready = False
     tiff_writer_ready = False
@@ -255,10 +118,12 @@ class TXM(object):
     CAPTURE_ENABLED = 1
     CAPTURE_DISABLED = 0
     FRAME_DATA = 0
-    FRAME_WHITE = 1
-    FRAME_DARK = 2
+    FRAME_DARK = 1
+    FRAME_WHITE = 2
     DETECTOR_IDLE = 0
     DETECTOR_ACQUIRE = 1
+    HDF_IDLE = 0
+    HDF_WRITING = 1
     
     # Process variables
     # -----------------
@@ -275,8 +140,9 @@ class TXM(object):
     Cam1_FrameRateOnOff = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
-    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire')
+    Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
+    Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV', as_string=True)
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -285,13 +151,12 @@ class TXM(object):
     HDF1_BlockingCallbacks = TxmPV('{ioc_prefix}HDF1:BlockingCallbacks')
     HDF1_FileWriteMode = TxmPV('{ioc_prefix}HDF1:FileWriteMode')
     HDF1_NumCapture = TxmPV('{ioc_prefix}HDF1:NumCapture')
-    HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture')
+    HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture', wait=False)
     HDF1_Capture_RBV = TxmPV('{ioc_prefix}HDF1:Capture_RBV')
     HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName', dtype=str,
-                          get_kwargs={'as_string': True})
+                          as_string=True)
     HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV',
-                                  dtype=str, default='',
-                                  get_kwargs={'as_string': True})
+                                  dtype=str, as_string=True)
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
     HDF1_NextFile = TxmPV('{ioc_prefix}HDF1:FileNumber')
@@ -311,13 +176,13 @@ class TXM(object):
     TIFF1_ArrayPort = TxmPV('{ioc_prefix}TIFF1:NDArrayPort')
     
     # Motor PV's
-    Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL', float, default=0.)
-    Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL', float, default=0.) # for the TXM
+    Motor_SampleX = TxmPV('32idcTXM:nf:c0:m1.VAL', dtype=float)
+    Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL', dtype=float)
     # Professional Instrument air bearing rotary stage
-    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL', float, default=0.)
+    Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL', dtype=float)
     # Smaract XZ TXM set
-    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL', float, default=0.)
-    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c3:m8.VAL', float, default=0.)
+    Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL', dtype=float)
+    Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c3:m8.VAL', dtype=float)
     # # Mosaic scanning axes
     # Motor_X_Tile = TxmPV('32idc01:m33.VAL')
     # Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
@@ -334,15 +199,15 @@ class TXM(object):
     zone_plate_2_z = TxmPV('32idcTXM:mcs:c0:m2.VAL')
     
     # CCD motors:
-    CCD_Motor = TxmPV('32idcTXM:mxv:c1:m6.VAL', float, default=3200)
+    CCD_Motor = TxmPV('32idcTXM:mxv:c1:m6.VAL', float)
     
     # Shutter PV's
     ShutterA_Open = TxmPV('32idb:rshtrA:Open', permit_required=True)
     ShutterA_Close = TxmPV('32idb:rshtrA:Close', permit_required=True)
-    ShutterA_Move_Status = TxmPV('PB:32ID:STA_A_FES_CLSD_PL', default=0)
+    ShutterA_Move_Status = TxmPV('PB:32ID:STA_A_FES_CLSD_PL')
     ShutterB_Open = TxmPV('32idb:fbShutter:Open.PROC', permit_required=True)
     ShutterB_Close = TxmPV('32idb:fbShutter:Close.PROC', permit_required=True)
-    ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL', default=0)
+    ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL')
     ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
     # State 0 = Close, 1 = Open
     Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control', permit_required=True)
@@ -395,7 +260,7 @@ class TXM(object):
     DCMmvt = TxmPV('32ida:KohzuModeBO.VAL', permit_required=True)
     GAPputEnergy = TxmPV('32id:ID32us_energy', permit_required=True, wait=False)
     EnergyWait = TxmPV('ID32us:Busy')
-    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', float, default=8.6,
+    DCMputEnergy = TxmPV('32ida:BraggEAO.VAL', dtype=float,
                          permit_required=True)
     
     #interlaced
@@ -408,33 +273,87 @@ class TXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False, is_attached=True, ioc_prefix="32idcPG3:",
-                 use_shutter_A=False, use_shutter_B=True, zp_diameter=180,
-                 drn=60):
-        self.is_attached = is_attached
+    def __init__(self, has_permit=False, ioc_prefix="32idcPG3:",
+                 use_shutter_A=False, use_shutter_B=True):
         self.has_permit = has_permit
         self.ioc_prefix = ioc_prefix
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
-        self.zp_diameter = zp_diameter
-        self.drn = drn
+    
+    def pv_get(self, pv_name, *args, **kwargs):
+        """Retrieve the current process variable value.
+        
+        Parameters
+        ----------
+        *args, **kwargs
+          Extra arguments that get passed to :py:meth:``epics.PV.get``
+        
+        """
+        epics_pv = EpicsPV(pv_name)
+        return epics_pv.get(*args, **kwargs)
+
+    def pv_put(self, pv_name, value, wait, *args, **kwargs):
+        """Set the current process variable value.
+        
+        When ``wait=True``, this method becomes closely linked with
+        the concept of deferred PVs. Normally, this method will block
+        until the PV has been set. When inside a
+        :py:meth:``TXM.wait_pvs`` context, this method adds a promise
+        to the queue so the :py:meth:``TXM.wait_pvs`` manager can
+        handle the blocking. When ``wait=False``, this method returns
+        immediately once the value has been sent and does not alter
+        the PV queue.
+        
+        Parameters
+        ----------
+        wait : bool, optional
+          If true, the method will keep track of when PV has been set.
+        *args, **kwargs
+          Extra arguments that get passed to :py:meth:``epics.PV.get``
+        
+        """
+        if self.pv_queue is not None:
+            # Non-blocking, deferred PV waiting
+            promise = PVPromise()
+            ret = self._pv_put(pv_name, value, wait=False, callback=promise.complete)
+            self.pv_queue.append(promise)
+        else:
+            # Blocking PV waiting
+            ret = self._pv_put(pv_name, value, wait=wait, *args, **kwargs)
+        return ret
+    
+    def _complete_promise(self, promise):
+        print(promise)
+    
+    def _pv_put(self, pv_name, value, wait, *args, **kwargs):
+        """Retrieves the epics PV and calls its ``put`` method."""
+        print(pv_name, value, wait)
+        epics_pv = EpicsPV(pv_name)
+        return epics_pv.put(value, wait=wait, *args, **kwargs)
     
     @contextmanager
     def wait_pvs(self, block=True):
         """Context manager that allows for setting multiple PVs
         asynchronously.
         
-        This manager creates an empty queue for PV objects. After
-        exiting the inner code, it then waits until all the PV's to be
-        finished before returning. This method is tightly coupled with
-        the settings of the relevant ``TxmPV`` objects.
+        This manager creates an empty queue for PV objects. If
+        blocking, upon exiting the context it waits for all the PV's
+        to finished before moving on. If non-blocking, this basically
+        turns off blocking feature on any TxmPVs that have
+        ``wait=True`` (so use with caution).
+        
+        Arguments
+        ---------
+        block : bool, optional
+          If True, this function will wait for all PVs to finish
+        before continuing.
         
         """
         # Save old queue to resore it later on
         old_queue = self.pv_queue
-        # Set up an event loop
+        # Prepare a queue for holding PV promises
         self.pv_queue = []
-        # Return execution to the calling script
+        # Return execution to the inner block
         yield self.pv_queue
         # Wait for all the PVs to be finished
         num_promises = len(self.pv_queue)
@@ -443,13 +362,6 @@ class TXM(object):
         log.debug("Completed %d queued PV's", num_promises)
         # Restore the old PV queue
         self.pv_queue = old_queue
-    
-    def flush_pvs(self):
-        """This method blocks until all the PV's in the pv_queue have reached
-        their target values, then clears the queue.
-        
-        """
-        self.pv_queue = []
     
     def wait_pv(self, pv_name, target_val, timeout=DEFAULT_TIMEOUT):
         """Wait for a process variable to reach given value.
@@ -484,10 +396,9 @@ class TXM(object):
         time.sleep(self.POLL_INTERVAL)
         startTime = time.time()
         # Enter into infinite loop polling the PV status
-        while(True and self.is_attached):
+        while(True):
             real_PV = self.__class__.__dict__[pv_name]
             pv_val = real_PV.__get__(self)
-            print(pv_val, target_val)
             if (pv_val != target_val):
                 if timeout > -1:
                     curTime = time.time()
@@ -529,7 +440,7 @@ class TXM(object):
         log.debug(msg)
     
     @permit_required
-    def move_energy(self, energy, constant_mag=True, gap_offset=0., 
+    def move_energy(self, energy, constant_mag=True,
                     correct_backlash=True):
         """Change the energy of the X-ray source and optics.
         
@@ -543,10 +454,8 @@ class TXM(object):
         constant_mag : bool, optional
           If truthy, the detector will also be moved to correct for
           the change in focal length.
-        gap_offset : float, optional
-          Extra energy to add to the value sent to the undulator gap.
         correct_backlash : bool, optional
-          If enabled, this method will correct for slop in the GAP
+          If enabled, this method will correct for slop in the gap
           motors. Only needed for large changes (eg >0.01 keV)
         """
         # Helper function for converting energy to wavelength
@@ -584,8 +493,8 @@ class TXM(object):
             # Execute motor movement
             self.CCD_Motor = new_CCD_position
         else: # Varying magnification
-            new_D = (old_CCD + math.sqrt(old_CCD * old_CCD - 4.0 * old_CCD * ZP_focal) ) / 2.0
-            ZP_WD = new_D * new_ZP_focal / (new_D - ZP_focal)
+            new_D = (old_CCD + math.sqrt(old_CCD * old_CCD - 4.0 * old_CCD * new_ZP_focal) ) / 2.0
+            ZP_WD = new_D * new_ZP_focal / (new_D - new_ZP_focal)
             new_mag = (old_D - old_ZP_focal) / old_ZP_focal
             log.debug("New magnification: %.2f", new_mag)
         # Move the zoneplate
@@ -598,10 +507,13 @@ class TXM(object):
             # Come up from below to correct for motor slop
             log.debug("Correcting backlash")
             self.GAPputEnergy = energy
-        self.GAPputEnergy = energy + gap_offset
+            self.wait_pv('EnergyWait', 0)
+        self.GAPputEnergy = energy + self.gap_offset
         self.DCMmvt = old_DCM_mode
+        self.wait_pv('EnergyWait', 0)
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
+    @permit_required
     def open_shutters(self):
         """Open the shutters to allow light in. The specific shutter(s) that
         opens depends on the values of ``self.use_shutter_A`` and
@@ -611,7 +523,7 @@ class TXM(object):
         starttime = time.time()
         if self.use_shutter_A:
             log.debug("Opening shutter A")
-            self.ShutterA_Open = 1 # wait=True
+            self.ShutterA_Open = 1
             self.wait_pv('ShutterA_Move_Status', self.SHUTTER_OPEN)
         if self.use_shutter_B:
             log.debug("Opening shutter B")
@@ -633,10 +545,11 @@ class TXM(object):
             which_shutters = "no shutters"
         if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
             duration = time.time() - starttime
-            log.info("Opened %s in %.2f sec", which_shutters, duration)
+            log.debug("Opened %s in %.2f sec", which_shutters, duration)
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
+    @permit_required
     def close_shutters(self):
         """Close the shutters to stop light in. The specific shutter(s) that
         closes depends on the values of ``self.use_shutter_A`` and
@@ -672,7 +585,13 @@ class TXM(object):
     @property
     def hdf_filename(self):
         return self.HDF1_FullFileName_RBV
-
+    
+    def hdf_file(self, timeout=10, *args, **kwargs):
+        start_time = time.time()
+        # Wait for the HDF writer to be done using the HDF file
+        self.wait_pv('HDF1_Capture_RBV', self.HDF_IDLE, timeout=timeout)
+        return h5py.File(self.hdf_filename, *args, **kwargs)
+    
     @property
     def exposure_time(self):
         """Exposure time for the CCD in seconds."""
@@ -684,48 +603,36 @@ class TXM(object):
         self.Cam1_AcquireTime = val
         self.Cam1_AcquirePeriod = val
         
-    def setup_detector(self, live_display=True):
+    def setup_detector(self, exposure=0.5, live_display=False):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
+        # Capture a dummy frame to that the HDF5 plugin will work
+        self.Cam1_ImageMode = "Single"
+        self.Cam1_TriggerMode = "Internal"
+        self.exposure_time = 0.01
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
+
+        # Now set the real settings for the detector
         self.Cam1_Display = live_display
-        self.Cam1_ImageMode = 'Multiple'
         self.Cam1_ArrayCallbacks = 'Enable'
-        # If we are using external shutter then set the exposure time
-        self.SetSoftGlueForStep = 0
+        self.SetSoftGlueForStep = '0'
         self.Cam1_FrameRateOnOff = False
+        self.Cam1_TriggerMode = 'Overlapped'
+        self.exposure_time = exposure
         # Prepare external shutter if necessary
-        # ?? TODO: Do we need this?
         external_shutter = False
         if external_shutter:
             global_PVs['ExternShutterExposure'].put(float(variableDict['ExposureTime']))
             global_PVs['ExternShutterDelay'].put(float(variableDict['Ext_ShutterOpenDelay']))
             global_PVs['SetSoftGlueForStep'].put('1')
-        # if software trigger capture two frames (issue with Point grey grasshopper)
-        if self.pg_external_trigger:
-            log.error("setup_detector not implemented with pg_external_trigger")
-            # wait_time_sec = exposure + 5
-            # global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True) #Ext. Standard
-            # global_PVs['Cam1_NumImages'].put(1, wait=True)
-            # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-            # global_PVs['Cam1_SoftwareTrigger'].put(1)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
-            # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
-            # global_PVs['Cam1_SoftwareTrigger'].put(1)
-            # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle, wait_time_sec)
-        else:
-            self.Cam1_TriggerMode = 'Internal'
         log.debug("Finished setting up detector.")
     
-    def setup_hdf_writer(self, filename=None, num_projections=1,
-                         write_mode="Stream", num_recursive_images=1,
-                         live_display=True):
+    def setup_hdf_writer(self, num_projections=1, write_mode="Stream",
+                         num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
         
         Parameters
         ----------
-        filename : str
-          The name of the HDF file to save data to.
         num_projections : int
           Total number of projections to collect at one time.
         write_mode : str, optional
@@ -735,8 +642,6 @@ class TXM(object):
           (default), recursive filtering will be disabled.
         
         """
-        log.error("Test this code!!!")
-        
         log.debug('setup_hdf_writer() called')
         if num_recursive_images > 1:
             # Enable recursive filter
@@ -748,20 +653,16 @@ class TXM(object):
             self.Proc1_Reset_Filter = 1
             self.Proc1_AutoReset_Filter = 'Yes'
             self.Proc1_Filter_Callbacks = 'Array N only'
+            self.Proc1_Filter_Enable = 'Enable'
         else:
             # No recursive filter, just 1 image
-            # global_PVs['Proc1_Callbacks'].put('Disable')
             self.Proc1_Filter_Enable = 'Disable'
             self.HDF1_ArrayPort = self.Proc1_ArrayPort
         # Count total number of projections needed
         self.HDF1_NumCapture = num_projections
         self.HDF1_FileWriteMode = write_mode
-        if filename is not None:
-            self.HDF1_FileName = filename
         self.HDF1_Capture = self.CAPTURE_ENABLED
-        # ?? Is this wait_pv really necessary?
-        # import pdb; pdb.set_trace()
-        # self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
+        self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
         log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
         self.hdf_writer_ready = True
@@ -783,6 +684,7 @@ class TXM(object):
           (default), recursive filtering will be disabled.
         
         """
+        log.warning("setup_tiff_writer() not tested")
         log.debug('setup_tiff_writer() called')
         if num_recursive_images > 1:
             # Recursive filter enabled
@@ -806,75 +708,53 @@ class TXM(object):
         self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
         log.debug("Finished setting up TIFF writer for %s.", filename)
     
-    def _trigger_multiple_projections(self, exposure, num_projections):
-        """Trigger the detector to capture multiple projections one after
-        another."""
-        starttime = time.time()
-        self.Cam1_ImageMode = 'Multiple'
-        self.exposure_time = exposure
-        if self.pg_external_trigger:
-            # Set external trigger mode
-            self.Cam1_TriggerMode = 'Overlapped'
-            self.Cam1_NumImages = 1
-            for i in range(num_projections):
-                # Trigger each projection one at a time
-                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-                self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, timeout=2)
-                self.Cam1_SoftwareTrigger = 1
-                self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, timeout=exposure + 5)
-        else:
-            # Trigger the projections all at once
-            self.Cam1_TriggerMode = 'Internal'
-            self.Cam1_NumImages = num_projections
-            self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-            timeout = num_projections * exposure + 5
-            self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, timeout=timeout)
-        # Log the results
-        duration = time.time() - starttime
-        log.info("Captured %d projections in %.3f sec", num_projections, duration)
-    
-    def _trigger_single_projection(self, exposure):
-        """Trigger the detector to capture just one projection."""
-        log.debug("Triggering single projection")
-        self.exposure_time = exposure
+    def _trigger_projections(self, num_projections=1):
+        """Trigger the detector to capture one (or more) projections.
+        
+        This method should only be used after setup_detector() and
+        setup_hdf_writer() have been called. The value for
+        num_projections given here should be less than or equal to the
+        number given to each of the setup methods.
+        
+        Parameters
+        ==========
+        num_projections : int, optional
+          How many projections to trigger.
+        
+        """
+        suffix = 's' if num_projections > 1 else ''
+        log.debug("Triggering %d projection%s", num_projections, suffix)
+        self.Cam1_ImageMode = "Single"
         self.Cam1_NumImages = 1
-        self.Cam1_TriggerMode = 'Internal'
-        self.Cam1_ImageMode = 'Single'
-        self.Cam1_AcquireTime = exposure
-        self.Cam1_AcquirePeriod = exposure
-        # Start detector acquire
-        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-        # wait for acquire to finish
-        self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE,
-                    timeout=exposure * 2)
+        for i in range(num_projections):
+            self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+            self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
+            # Wait for the camera to be ready
+            while self.Cam1_Acquire != self.DETECTOR_IDLE:
+                time.sleep(0.01)
+                self.Cam1_SoftwareTrigger = 1
+            self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
     
-    def capture_projections(self, num_projections=1, exposure=0.5):
+    def capture_projections(self, num_projections=1):
         """Trigger the capturing of projection images from the detector.
         
         Parameters
         ----------
         num_projections : int, optional
           How many projections to acquire.
-        exposure : float, optional
-          Exposure time for each frame in seconds.
-        
+       
         """
         # Raise a warning if the shutters are closed
         if not self.shutters_are_open:
             msg = "Collecting projections with shutters closed."
             warnings.warn(msg, RuntimeWarning)
-            log.warning(msg)
         # Set frame collection data
         self.Cam1_FrameType = self.FRAME_DATA
         # Collect the data
-        if num_projections == 1:
-            ret = self._trigger_single_projection(exposure=exposure)
-        else:
-            ret = self._trigger_multiple_projections(
-                num_projections=num_projections, exposure=exposure)
+        ret = self._trigger_projections(num_projections=num_projections)
         return ret
     
-    def capture_white_field(self, num_projections=1, exposure=0.5):
+    def capture_white_field(self, num_projections=1):
         """Trigger the capturing of projection images from the detector with
         the shutters open and no sample present.
         
@@ -893,14 +773,10 @@ class TXM(object):
             log.warning(msg)
         self.Cam1_FrameType = self.FRAME_WHITE
         # Collect the data
-        if num_projections == 1:
-            ret = self._trigger_single_projection(exposure=exposure)
-        else:
-            ret = self._trigger_multiple_projections(
-                num_projections=num_projections, exposure=exposure)
+        ret = self._trigger_projections(num_projections=num_projections)
         return ret
     
-    def capture_dark_field(self, num_projections=1, exposure=0.5):
+    def capture_dark_field(self, num_projections=1):
         """Trigger the capturing of projection images from the detector with
         the shutters closed.
         
@@ -921,12 +797,69 @@ class TXM(object):
             log.warning(msg)
         self.Cam1_FrameType = self.FRAME_DARK
         # Collect the data
-        if num_projections == 1:
-            ret = self._trigger_single_projection(exposure=exposure)
-        else:
-            ret = self._trigger_multiple_projections(
-                num_projections=num_projections, exposure=exposure)
+        ret = self._trigger_projections(num_projections=num_projections)
         return ret
+
+    def capture_tomogram(self, angles, num_projections=1,
+                         stabilize_sleep=10):
+        """Collect data frames over a range of angles.
+        
+        Parameters
+        ==========
+        angles : np.ndarray
+          An array of angles (in degrees) to use for collecting
+          projections.
+        num_projections : int, optional
+          Number of projections to average at each angle.
+        stablize_sleep : int, optional
+          How long (in milliseconds) to wait after moving the rotation
+          stage.
+        
+        """
+        log.warning("capture_tomogram() not tested")
+        log.debug('called tomo_scan()')
+        # Prepare the instrument for data collection
+        self.Cam1_FrameType = self.FRAME_DATA
+        self.Cam1_NumImages = 1
+        if num_projections > 1:
+            old_filter = self.Proc1_Filter_Enable
+            self.Proc1_Filter_Enable = 'Enable'
+        # Cycle through each angle and collect data
+        for sample_rot in tqdm.tqdm(angles, desc="Capturing tomogram", unit='rot'):
+            self.move_sample(theta=sample_rot)
+            log.debug('Stabilize Sleep: %d ms', stabilize_sleep)
+            time.sleep(stabilize_sleep / 1000)
+            # Trigger the camera
+            self._trigger_projections(num_projections=num_projections)
+        # Restore previous filter enabled state
+        if num_projections > 1:
+            self.Proc1_Filter_Enable = old_filter
+    
+    def epics_PV(self, pv_name):
+        """Retrieve the epics process variable (PV) object for the given
+        attribute name.
+        
+        Parameters
+        ==========
+        pv_name : str
+          The name of the PV object. Should match the attribute on
+          this TXM() object.
+        
+        """
+        return self.__class__.__dict__[pv_name].epics_PV(txm=self)
+    
+    def reset_ccd(self):
+        log.debug("Resetting CCD")
+        # Sequence Internal / Overlapped / internal because of CCD bug!!
+        self.Cam1_TriggerMode = 'Internal'
+        self.Cam1_TriggerMode = 'Overlapped'
+        self.Cam1_TriggerMode = 'Internal'
+        # Other PV settings
+        self.Proc1_Filter_Callbacks = 'Every array'
+        self.Cam1_ImageMode = 'Continuous'
+        self.Cam1_Display = 1
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, timeout=2)
 
 
 class MicroCT(TXM):
@@ -942,7 +875,7 @@ class MicroCT(TXM):
     Fly_Calc_Projections = TxmPV('32idcTXM:eFly:calcNumTriggers')
     Fly_Set_Encoder_Pos = TxmPV('32idcTXM:eFly:EncoderPos')
     Theta_Array = TxmPV('32idcTXM:eFly:motorPos.AVAL')
-
+    
     # Motor PVs
     Motor_SampleX = TxmPV('32idc01:m33.VAL')
     Motor_SampleY = TxmPV('32idc02:m15.VAL') # for the micro-CT system
@@ -952,4 +885,3 @@ class MicroCT(TXM):
     Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c1:m1.VAL') # Smaract XZ micro-CT set
     Motor_X_Tile = TxmPV('32idc01:m33.VAL')
     Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
-

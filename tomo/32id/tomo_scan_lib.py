@@ -35,12 +35,6 @@ __all__ = ['update_variable_dict',
             'init_general_PVs',
             'stop_scan',
             'cleanup',
-            'reset_CCD',
-            'setup_hdf_writer',
-            'setup_detector_energy_scan',
-            'setup_detector',
-            'setup_writer',
-            'setup_tiff_writer',
             'capture_multiple_projections',
             'move_sample_in',
             'move_sample_out',
@@ -68,9 +62,6 @@ UseShutterB = 0
 PG_Trigger_External_Trigger = 1
 Recursive_Filter_Type = 'RecursiveAve'
 
-if UseShutterA == 0 & UseShutterB ==0:
-    print('### WARNING: shutters are deactivated during the scans !!!!')
-
 
 log = logging.getLogger(__name__)
 
@@ -80,15 +71,15 @@ def update_variable_dict(variableDict):
     if len(sys.argv) > 1:
         strArgv = sys.argv[1]
         argDic = json.loads(strArgv)
-    print('orig variable dict: %s' % variableDict)
-    for k,v in argDic.iteritems():
+    log.debug('Orig variable dict: %s', variableDict)
+    for k, v in argDic.iteritems():
         variableDict[k] = v
-    print(' new variable dict: %s' % variableDict)
+    log.debug('New variable dict: %s', variableDict)
 
 
 def wait_pv(pv, wait_val, max_timeout_sec=-1):
     """Wait on a pv to be a value until max_timeout (default forever)"""
-    print('wait_pv(', pv.pvname, wait_val, max_timeout_sec, ')')
+    log.debug('wait_pv(%s, %s, %s)', pv.pvname, wait_val, max_timeout_sec)
     # Delay for pv to change
     time.sleep(.01)
     startTime = time.time()
@@ -134,7 +125,6 @@ def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
     none
     
     """
-    
     sequence = []
     index = -1
     try:
@@ -167,16 +157,16 @@ def start_verifier(conf, report_file, variableDict, ver_dir, host, port, key):
         sequence.append(('data_white', index))
     except KeyError:
         pass
-    
+    # Prepare the remote command
     json_sequence = json.dumps(sequence).replace(" ","")
-    
-    COMMAND="bash && python " + ver_dir + "server_verifier.py " + conf + " None '" + json_sequence + "' " + port + " " + key
-    
+    script_path = os.path.join(ver_dir, 'server_verifier.py')
+    COMMAND = "bash && python {script_path} {conf} None '{json_sequence}' {port} {key}"
+    COMMAND = COMMAND.format(**locals())
+    # Execute the remote SSH command
     ssh = subprocess.Popen(["ssh", "%s" % host, COMMAND],
                            shell=False,
                            stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE)
-    
     # ssh usr32idc@txmtwo "python
     # /home/beams/USR32IDC/temp/server_verifier.py conf, report_file,
     # sequence, port, key"
@@ -202,7 +192,6 @@ def stop_verifier(host, port, key):
     none
     
     """
-    
     class RemoteController:
         def QueueServerClient(self, host, port, key):
             class QueueManager(SyncManager):
@@ -217,19 +206,16 @@ def stop_verifier(host, port, key):
                 conn.close()
             except Exception:
                 pass
-    
-    print("Creating remote controller")
+    log.debug("Creating remote controller")
     remote_controller = RemoteController()
-    
     # this will connect to the server
     remote_controller.QueueServerClient(host, port, key)
-    
     # this will execute command on the server
     remote_controller.stop_remote_process()
 
 
 def init_general_PVs(global_PVs, variableDict):
-    print('init_PVs()')
+    log.debug('init_PVs()')
     #init detector pv's
     global_PVs['Cam1_ImageMode'] = PV(variableDict['IOC_Prefix'] + 'cam1:ImageMode')
     global_PVs['Cam1_ArrayCallbacks'] = PV(variableDict['IOC_Prefix'] + 'cam1:ArrayCallbacks')
@@ -396,7 +382,6 @@ def init_general_PVs(global_PVs, variableDict):
     global_PVs['Interlaced_Num_Sub_Cycles_RBV'] = PV('32idcTXM:iFly:interlaceFlySub.VALG')
 
 
-
 def stop_scan(global_PVs, variableDict):
     global_PVs['TIFF1_AutoSave'].put('No')
     global_PVs['TIFF1_Capture'].put(0)
@@ -420,6 +405,8 @@ def cleanup(global_PVs, variableDict, host, port, keys):
 
 
 def reset_CCD(global_PVs, variableDict):
+    log.error("Reimplement reset_CCD() method")
+    return
     # sequence Internal / Overlapped / internal because of CCD bug!!
     global_PVs['Cam1_TriggerMode'].put('Internal', wait=True)
     global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True)
@@ -435,19 +422,10 @@ def reset_CCD(global_PVs, variableDict):
     wait_pv(global_PVs['Cam1_Acquire'], DetectorAcquire, 2)
 
 
-def setup_hdf_writer(globalPVs, variableDict):
-    log.error('setup_hdf_writer() not found.')
-
-
-def setup_detector_energy_scan(global_PVs, variableDict):
-    log.error('setup_detector_energy_scan() not found.')
-
-
 def setup_detector(global_PVs, variableDict):
-    print(' ')
-    print('  *** setup_detector')
+    log.debug('setup_detector()')
     if variableDict.has_key('Display_live'):
-        print('** disable live display')
+        log.debug('** disable live display')
         global_PVs['Cam1_Display'].put( int( variableDict['Display_live'] ) )
     global_PVs['Cam1_ImageMode'].put('Multiple')
     global_PVs['Cam1_ArrayCallbacks'].put('Enable')
@@ -477,11 +455,11 @@ def setup_detector(global_PVs, variableDict):
     else:
         global_PVs['Cam1_TriggerMode'].put('Internal')
     #global_PVs['ClearTheta'].put(1)
-    print('  *** setup_detector: Done!')
+    log.debug('setup_detector: Done!')
 
 
 def setup_writer(global_PVs, variableDict, filename=None):
-    print('setup_writer() called.')
+    log.debug('setup_writer() called.')
     if variableDict.has_key('Recursive_Filter_Enabled'):
         if variableDict['Recursive_Filter_Enabled'] == 1:
             # global_PVs['Proc1_Callbacks'].put('Disable')
@@ -526,8 +504,7 @@ def setup_writer(global_PVs, variableDict, filename=None):
 
 
 def setup_tiff_writer(global_PVs, variableDict, filename=None):
-    print('  ')
-    print('  *** setup_writer')
+    log.debug('setup_tiff_writer')
     global_PVs['TIFF1_ArrayPort'].put(variableDict['TIFFNDArrayPort'], wait=True)
     if variableDict.has_key('Recursive_Filter_Enabled'):
         if variableDict['Recursive_Filter_Enabled'] == 1:
@@ -559,12 +536,11 @@ def setup_tiff_writer(global_PVs, variableDict, filename=None):
         global_PVs['TIFF1_FileName'].put(filename)
     global_PVs['TIFF1_Capture'].put(1)
     wait_pv(global_PVs['TIFF1_Capture'], 1)
-    print('  *** setup_writer: Done!')
-
+    log.debug('setup_writer: Done!')
 
 
 def capture_multiple_projections(global_PVs, variableDict, num_proj, frame_type):
-    print('capture_multiple_projections(', num_proj, ')')
+    log.debug('capture_multiple_projections(%d)', num_proj)
     wait_time_sec = int(variableDict['ExposureTime']) + 5
     global_PVs['Cam1_ImageMode'].put('Multiple')
     global_PVs['Cam1_FrameType'].put(frame_type)
@@ -585,19 +561,18 @@ def capture_multiple_projections(global_PVs, variableDict, num_proj, frame_type)
 
 
 def move_sample_in(global_PVs, variableDict):
-    print(' ')
-    print('  *** move_sample_in')
+    log.debug('move_sample_in()')
     # global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXIn']), wait=True)
     # global_PVs['Motor_SampleX'].put(float(variableDict['SampleXIn']), wait=True)
     global_PVs['Motor_Sample_Top_X'].put(float(variableDict['SampleXIn']), wait=True)
     # global_PVs['Motor_SampleY'].put(float(variableDict['SampleYIn']), wait=True)
     # global_PVs['Motor_SampleZ'].put(float(variableDict['SampleZIn']), wait=True)
     global_PVs['Motor_SampleRot'].put(0, wait=True)
-    print('  *** move_sample_in: Done!')
+    log.debug('move_sample_in: Done!')
 
 
 def move_sample_out(global_PVs, variableDict):
-    print('move_sample_out()')
+    log.debug('move_sample_out()')
     # global_PVs['Motor_SampleRot'].put(float(variableDict['SampleRotOut']), wait=True)
     # global_PVs['Motor_X_Tile'].put(float(variableDict['SampleXOut']), wait=True)
     # global_PVs['Motor_SampleX'].put(float(variableDict['SampleXOut']), wait=True)
@@ -608,29 +583,29 @@ def move_sample_out(global_PVs, variableDict):
 
 
 def open_shutters(global_PVs, variableDict):
-    print('Opening shutters...')
+    log.debug('Opening shutters...')
     if UseShutterA > 0:
         global_PVs['ShutterA_Open'].put(1, wait=True)
         wait_pv(global_PVs['ShutterA_Move_Status'], ShutterA_Open_Value)
     if UseShutterB > 0:
         global_PVs['ShutterB_Open'].put(1, wait=True)
         wait_pv(global_PVs['ShutterB_Move_Status'], ShutterB_Open_Value)
-    print('Shutters opened.')
+    log.debug('Shutters opened.')
 
 
 def close_shutters(global_PVs, variableDict):
-    print('Closing shutters...')
+    log.debug('Closing shutters...')
     if UseShutterA > 0:
         global_PVs['ShutterA_Close'].put(1, wait=True)
         wait_pv(global_PVs['ShutterA_Move_Status'], ShutterA_Close_Value)
     if UseShutterB > 0:
         global_PVs['ShutterB_Close'].put(1, wait=True)
         wait_pv(global_PVs['ShutterB_Move_Status'], ShutterB_Close_Value)
-    print("Shutters closed")
+    log.debug("Shutters closed")
 
 
 def add_theta(global_PVs, variableDict, theta_arr):
-    print('add_theta()')
+    log.debug('add_theta()')
     fullname = global_PVs['HDF1_FullFileName_RBV'].get(as_string=True)
     try:
         hdf_f = h5py.File(fullname, mode='a')
@@ -643,7 +618,9 @@ def add_theta(global_PVs, variableDict, theta_arr):
 
 
 def add_extra_hdf5(global_PVs, variableDict, theta_arr, interf_arrs):
-    print('add_extra_hdf5()')
+    log.error("add_extra_hdf5 is deprecated")
+    return
+    log.debug('add_extra_hdf5()')
     wait_pv(global_PVs['HDF1_Capture_RBV'], 0, 10.0)
     fullname = global_PVs['HDF1_FullFileName_RBV'].get(as_string=True)
     try:
@@ -664,7 +641,7 @@ def add_extra_hdf5(global_PVs, variableDict, theta_arr, interf_arrs):
 
 
 def move_dataset_to_run_dir(global_PVs, variableDict):
-    print('move_dataset_to_run_dir()')
+    log.debug('move_dataset_to_run_dir()')
     try:
         txm_ui = imp.load_source('txm_ui', '/local/usr32idc/DMagic/doc/demo/txm_ui.py')
         run_dir = txm_ui.directory()
@@ -673,7 +650,7 @@ def move_dataset_to_run_dir(global_PVs, variableDict):
         run_full_path = run_dir + '/' + base_name
         shutil.move(full_path, run_full_path)
     except:
-        print('error moving dataset to run directory')
+        log.error('error moving dataset to run directory')
 
 
 def move_energy(global_PVs, variableDict): # TO BE TESTED!!!
