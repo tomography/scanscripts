@@ -48,8 +48,8 @@
 
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
-from project.module_01 import *
-from project.module_02 import *
+# from project.module_01 import *
+# from project.module_02 import *
 
 try:
     import pkg_resources
