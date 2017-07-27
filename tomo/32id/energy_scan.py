@@ -2,9 +2,8 @@
 #######################
 ##### To be tested!
 
-'''For each energy step, a projection and then a flat field is being
-acquired. The script calls the move_energy method from
-the TXM class.
+'''For each energy step, a projection and then a flat field is
+acquired. The script calls the move_energy method from the TXM class.
 
 '''
 
@@ -77,10 +76,10 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
                 constant_mag=True, stabilize_sleep_ms=1000,
                 num_recursive_images=1):
     """Collect a series of 2-dimensional projections across a range of energies.
-
+    
     At each position, a sample projection and white-field projection
     will be collected by moving the sample along the X direction.
-
+    
     Parameters
     ----------
     energies : np.ndarray
@@ -177,6 +176,13 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
 
 
 def main():
+    # Set up default stream logging
+    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
+    # logging.basicConfig(level=logging.DEBUG)
+    logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
+    logging.basicConfig(level=logging.DEBUG, filename=logfile)
+    logging.captureWarnings(True)
+    # Enter the main script function
     update_variable_dict(variableDict)
     # Get the requested sample positions
     sample_pos = (variableDict.get('SampleXIn', None),
@@ -210,11 +216,4 @@ def main():
 
 
 if __name__ == '__main__':
-    # Set up default stream logging
-    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    # logging.basicConfig(level=logging.DEBUG)
-    logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
-    logging.basicConfig(level=logging.DEBUG, filename=logfile)
-    logging.captureWarnings(True)
-    # Enter the main script function
     main()

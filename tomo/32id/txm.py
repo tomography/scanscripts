@@ -15,6 +15,7 @@ import math
 import logging
 import warnings
 from contextlib import contextmanager
+from collections import namedtuple
 
 import h5py
 import tqdm
@@ -411,8 +412,26 @@ class TXM(object):
             else:
                 log.debug("Ended wait_pv()")
                 return True
+
+    def sample_position(self):
+        """Retrieve the x, y, z and theta positions of the sample stage.
+        
+        Returns
+        -------
+        position : 4-tuple
+          (x, y, z, θ) tuple that is suitable for giving to
+          :py:meth:`move_sample`.
+        
+        """
+        Position = namedtuple('Position', ['x', 'y', 'z', 'theta'])
+        position = Position(self.Motor_Sample_Top_X,
+                            self.Motor_SampleY,
+                            self.Motor_Sample_Top_Z,
+                            self.Motor_SampleRot)
+        return position
     
     def move_sample(self, x=None, y=None, z=None, theta=None):
+
         """Move the sample to the given (x, y, z) position.
         
         Parameters
@@ -438,6 +457,17 @@ class TXM(object):
                          z=self.Motor_Sample_Top_Z,
                          theta=self.Motor_SampleRot)
         log.debug(msg)
+    
+    def energy(self):
+        """Get the current beam energy.
+        
+        Returns
+        -------
+        energy : float
+          Current X-ray energy in keV
+        """
+        energy = self.DCMputEnergy
+        return energy
     
     @permit_required
     def move_energy(self, energy, constant_mag=True,
@@ -468,7 +498,7 @@ class TXM(object):
                              upper=self.E_RANGE[1])
             raise exceptions_.EnergyError(msg)
         # Get the current values
-        old_energy = self.DCMputEnergy
+        old_energy = self.energy()
         old_CCD = self.CCD_Motor
         old_wavelength = kev_to_nm(old_energy)
         old_ZP_focal = self.zp_diameter * self.drn / (1000.0 * old_wavelength)
@@ -847,6 +877,31 @@ class TXM(object):
         
         """
         return self.__class__.__dict__[pv_name].epics_PV(txm=self)
+    
+    @contextmanager
+    def run_scan(self):
+        """A context manager for executing long-running scripts. At the end of
+        the context, the CCD gets reset and several motor positions
+        get restored.
+        
+        """
+        # Save the initial values
+        init_position = self.sample_position()
+        init_E = self.energy()
+        # Return to the inner code block
+        yield
+        # Stop TIFF and HDF collection
+        global_PVs['TIFF1_AutoSave'].put('No')
+        global_PVs['TIFF1_Capture'].put(0)
+        global_PVs['HDF1_Capture'].put(0)
+        wait_pv(global_PVs['HDF1_Capture'], 0)
+        # Restore the saved initial motor positions
+        self.move_sample(*init_position)
+        self.move_energy(init_E)
+        # Reset the CCD so it's in continuous mode
+        self.reset_ccd()
+        # Open the fast shutter #### FOR SUJI
+        global_PVs['Fast_Shutter_Uniblitz'].put(1, wait=True)
     
     def reset_ccd(self):
         log.debug("Resetting CCD")

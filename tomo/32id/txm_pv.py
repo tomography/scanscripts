@@ -7,6 +7,13 @@ TxmPV
 
 """
 
+__author__ = 'Mark Wolf'
+__copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
+__docformat__ = 'restructuredtext en'
+__platform__ = 'Unix'
+__version__ = '1.6'
+__all__ = ['TxmPV']
+
 import logging
 import warnings
 

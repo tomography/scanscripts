@@ -44,7 +44,11 @@ class PermitDecoratorsTestCase(unittest.TestCase):
 
 class TXMTestCase(unittest.TestCase):
     class StubTXM(TXM):
-        __pv_dict = {'ioc_sample_X': 7}
+        __pv_dict = {
+            'ioc_sample_X': 7,
+            '32ida:BraggEAO.VAL': 8.7, # DMCputEnergy
+            '32idcTXM:mxv:c1:m6.VAL': 3400, # CCD_Motor
+        }
         def _pv_put(self, pv_name, value, *args, **kwargs):
             self.__pv_dict[pv_name] = value
             return True
@@ -324,3 +328,26 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Cam1_Acquire, txm.DETECTOR_ACQUIRE)
         # Check that the method waits for cam1_acquire
         txm.wait_pv.assert_called_once_with('Cam1_Acquire', txm.DETECTOR_ACQUIRE, timeout=2)
+
+    def test_sample_position(self):
+        txm = self.StubTXM()
+        txm.Motor_Sample_Top_X = 3
+        txm.Motor_SampleY = 5
+        txm.Motor_Sample_Top_Z = 7
+        txm.Motor_SampleRot = 9
+        self.assertEqual(txm.sample_position(), (3, 5, 7, 9))
+    
+    def test_run_scan(self):
+        txm = self.StubTXM(has_permit=True)
+        # Set the initial values
+        init_position = (3., 4, 5, 90)
+        txm.move_sample(*init_position)
+        E_init = 8.7
+        txm.move_energy(8.7)
+        with txm.run_scan():
+            # Change the values inside the manager
+            txm.move_sample(1, 2, 3, 45)
+            txm.move_energy(9)
+        # Check that the value was restored when the context completed
+        self.assertEqual(txm.sample_position(), init_position)
+        self.assertEqual(txm.energy(), 8.7)
