@@ -22,7 +22,7 @@ import numpy as np
 import h5py
 import tqdm
 from epics import PV
-from tomo_scan_lib import update_variable_dict
+from tomo_scan_lib import update_variable_dict, stop_scan
 from txm import TXM
 
 __author__ = 'Mark Wolf'
@@ -34,21 +34,23 @@ __all__ = ['energy_scan']
 
 
 variableDict = {
-    'PreDarkImages': 0,
+    'PreDarkImages': 5,
     'SampleXOut': 0.0,
     # 'SampleYOut': 0.0,
+    # 'SampleZOut': 12.5,
     'SampleXIn': 0.0,
     # 'SampleYIn': 0.0,
+    # 'SampleZIn': 0.0,
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
-    'ExposureTime': 0.5,
+    'ExposureTime': 1,
     'FileWriteMode': 'Stream',
-    'Energy_Start': 6.7,
-    'Energy_End': 6.8, # Inclusive
+    'Energy_Start': 8.5,
+    'Energy_End': 8.980, # Inclusive
     'Energy_Step': 0.001,
     # 'ZP_diameter': 180,
     # 'drn': 60,
-    'constant_mag': True, # 1 means CCD will move to maintain constant magnification
+    'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Recursive_Filter_N_Images': 1,
@@ -66,7 +68,6 @@ log = logging.getLogger(__name__)
 
 
 def getVariableDict():
-    # global variableDict
     return variableDict
 
 
@@ -108,6 +109,7 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
       If greater than 1, several consecutive images can be collected.
     """
     log.debug('start_scan() called')
+    # txm.Fast_Shutter_Uniblitz = 1
     start_time = time.time()
     # Create the TXM object for this scan
     txm = TXM(is_attached=is_attached, has_permit=has_permit,
@@ -154,13 +156,14 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
             txm.capture_white_field(num_projections=num_recursive_images)
         # Flat-field projection acquisition (or sample on odd passes)
         if sample_first:
-            with txm.wait_pvs():
-                txm.move_sample(*out_pos)
+            # with txm.wait_pvs():
+            txm.move_sample(*out_pos)
             log.info("Acquiring white-field position %s at %.4f eV", out_pos, energy)
+            # time.sleep(3)
             txm.capture_white_field(num_projections=num_recursive_images)
         else:
-            with txm.wait_pvs():
-                txm.move_sample(*sample_pos)
+            # with txm.wait_pvs():
+            txm.move_sample(*sample_pos)
             log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
             txm.capture_projections(num_projections=num_recursive_images)
     txm.close_shutters()

@@ -104,7 +104,7 @@ class TXM(object):
     """
     zp_diameter = 180
     drn = 60
-    gap_offset = 0.15 # Added to undulator gap setting
+    gap_offset = 0.17 # Added to undulator gap setting
     pv_queue = None
     hdf_writer_ready = False
     tiff_writer_ready = False
@@ -537,10 +537,13 @@ class TXM(object):
             # Come up from below to correct for motor slop
             log.debug("Correcting backlash")
             self.GAPputEnergy = energy
-            self.wait_pv('EnergyWait', 0)
+            # self.wait_pv('EnergyWait', 0)
+            time.sleep(1)
         self.GAPputEnergy = energy + self.gap_offset
+        time.sleep(1)
         self.DCMmvt = old_DCM_mode
-        self.wait_pv('EnergyWait', 0)
+        #self.wait_pv('EnergyWait', 0)
+
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
     @permit_required
@@ -617,7 +620,6 @@ class TXM(object):
         return self.HDF1_FullFileName_RBV
     
     def hdf_file(self, timeout=10, *args, **kwargs):
-        start_time = time.time()
         # Wait for the HDF writer to be done using the HDF file
         self.wait_pv('HDF1_Capture_RBV', self.HDF_IDLE, timeout=timeout)
         return h5py.File(self.hdf_filename, *args, **kwargs)
@@ -625,15 +627,26 @@ class TXM(object):
     @property
     def exposure_time(self):
         """Exposure time for the CCD in seconds."""
-        current_time = max(self.Cam1_AcquireTime, self,Cam1AcquirePeriod)
-        return self.Cam1_AcquireTime
+        current_exposure = max(self.Cam1_AcquireTime, self.Cam1AcquirePeriod)
+        return self.current_exposure
     
     @exposure_time.setter
     def exposure_time(self, val):
         self.Cam1_AcquireTime = val
         self.Cam1_AcquirePeriod = val
         
-    def setup_detector(self, exposure=0.5, live_display=False):
+    def stop_scan(self):
+        log.debug("stop_scan called")
+        self.TIFF1_AutoSave = 'No'
+        self.TIFF1_Capture = 0
+        self.HDF1_Capture = 0
+        self.wait_pv('HDF1_Capture', 0)
+        self.reset_CCD()
+        self.reset_CCD()
+        # Open the fast shutter (FOR SUJI)
+        # global_PVs['Fast_Shutter_Uniblitz'].put(1, wait=True)
+        
+    def setup_detector(self, exposure=0.5, live_display=True):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
         # Capture a dummy frame to that the HDF5 plugin will work
         self.Cam1_ImageMode = "Single"

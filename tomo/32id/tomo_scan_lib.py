@@ -11,8 +11,8 @@ import shutil
 import os
 import imp
 import traceback
-#import math
-#import numpy as np
+import math
+import numpy as np
 import subprocess
 from multiprocessing.managers import SyncManager
 import logging
@@ -697,9 +697,11 @@ def move_energy(global_PVs, variableDict): # TO BE TESTED!!!
     print('* Move gap to the new energy: %3.3f keV*' % new_Energy)
     global_PVs['GAPputEnergy'].put(new_Energy)
     wait_pv(global_PVs['EnergyWait'], 0)
+    time.sleep(2)
     print('* Add the energy offset to the gap *')
     global_PVs['GAPputEnergy'].put(new_Energy + Offset)
     wait_pv(global_PVs['EnergyWait'], 0)
+    time.sleep(2)
     global_PVs['DCMmvt'].put(0)
 
 
