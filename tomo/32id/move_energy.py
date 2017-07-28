@@ -13,8 +13,8 @@ from tomo_scan_lib import update_variable_dict
 from txm import TXM
 
 variableDict = {
-    'new_energy': 7.8, # keV
-    'constant_mag': 1, # 1 means magnification will be maintained adjusting CCD location
+    'new_energy': 9.01, # keV
+    'constant_mag': True, # 1 means magnification will be maintained adjusting CCD location
 }
 
 global_PVs = {}
@@ -39,7 +39,6 @@ def move_energy(energy, constant_mag=True, is_attached=True,
       shutters.
     
     """
-    assert energy == 11.1
     # Prepare TXM object
     txm = TXM(is_attached=is_attached, has_permit=has_permit)
     # Get variables from user dictionary.
