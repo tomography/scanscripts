@@ -67,8 +67,11 @@ def permit_required(real_func, return_value=None):
 class PVPromise():
     is_complete = False
     result = None
+
+    def __init__(self, pv_name=""):
+        self.pv_name = pv_name
     
-    def complete(self):
+    def complete(self, pvname=""):
         self.is_complete = True
 
 
@@ -315,8 +318,9 @@ class TXM(object):
         """
         if self.pv_queue is not None:
             # Non-blocking, deferred PV waiting
-            promise = PVPromise()
-            ret = self._pv_put(pv_name, value, wait=False, callback=promise.complete)
+            promise = PVPromise(pv_name=pv_name)
+            ret = self._pv_put(pv_name, value, wait=False,
+                               callback=promise.complete)
             self.pv_queue.append(promise)
         else:
             # Blocking PV waiting
@@ -359,7 +363,8 @@ class TXM(object):
         # Wait for all the PVs to be finished
         num_promises = len(self.pv_queue)
         while block and not all([pv.is_complete for pv in self.pv_queue]):
-            time.sleep(0.01)
+            time.sleep(0.5)
+            print([(pv.pv_name, pv.is_complete) for pv in self.pv_queue])
         log.debug("Completed %d queued PV's", num_promises)
         # Restore the old PV queue
         self.pv_queue = old_queue
@@ -452,10 +457,20 @@ class TXM(object):
             self.Motor_Sample_Top_Z = float(z)
         # Log actual x, y, z, θ values
         msg = "Sample moved to (x={x:.2f}, y={y:.2f}, z={z:.2f}, θ={theta:.2f}°)"
-        msg = msg.format(x=self.Motor_Sample_Top_X,
-                         y=self.Motor_SampleY,
-                         z=self.Motor_Sample_Top_Z,
-                         theta=self.Motor_SampleRot)
+        try:
+            msg = msg.format(
+                x=self.Motor_Sample_Top_X,
+                y=self.Motor_SampleY,
+                z=self.Motor_Sample_Top_Z,
+                theta=self.Motor_SampleRot)
+        except ValueError:
+            # Sometimes incomplete values come back as "None"
+            msg = "Sample moved to (x={x}, y={y}, z={z}, θ={theta}°)"
+            msg = msg.format(
+                x=self.Motor_Sample_Top_X,
+                y=self.Motor_SampleY,
+                z=self.Motor_Sample_Top_Z,
+                theta=self.Motor_SampleRot)
         log.debug(msg)
     
     def energy(self):
