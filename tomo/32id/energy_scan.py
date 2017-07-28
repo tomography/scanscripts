@@ -48,8 +48,6 @@ variableDict = {
     'Energy_Start': 8.5,
     'Energy_End': 8.980, # Inclusive
     'Energy_Step': 0.001,
-    # 'ZP_diameter': 180,
-    # 'drn': 60,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
@@ -57,7 +55,7 @@ variableDict = {
 }
 
 IOC_PREFIX = '32idcPG3:'
-SHUTTER_PERMIT = True
+SHUTTER_PERMIT = False
 DEFAULT_ENERGIES = np.arange(
     variableDict['Energy_Start'],
     variableDict['Energy_End'] + variableDict['Energy_Step'],
@@ -72,8 +70,7 @@ def getVariableDict():
 
 
 def energy_scan(energies, exposure=0.5, n_pre_dark=5,
-                is_attached=True, has_permit=False,
-                sample_pos=(None,), out_pos=(None,),
+                has_permit=False, sample_pos=(None,), out_pos=(None,),
                 constant_mag=True, stabilize_sleep_ms=1000,
                 num_recursive_images=1):
     """Collect a series of 2-dimensional projections across a range of energies.
@@ -108,11 +105,12 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     num_recursive_images: int, optional
       If greater than 1, several consecutive images can be collected.
     """
-    log.debug('start_scan() called')
+    log.debug("Starting energy_scan()")
+    assert not has_permit
     # txm.Fast_Shutter_Uniblitz = 1
     start_time = time.time()
     # Create the TXM object for this scan
-    txm = TXM(is_attached=is_attached, has_permit=has_permit,
+    txm = TXM(has_permit=has_permit,
               ioc_prefix=IOC_PREFIX, use_shutter_A=False,
               use_shutter_B=True)
     # Prepare TXM for capturing data
@@ -120,6 +118,13 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     total_projections = n_pre_dark + 2 * len(energies)
     txm.setup_hdf_writer(num_projections=total_projections,
                          num_recursive_images=num_recursive_images)
+    # ---------
+    # Debugging
+    while True:
+        log.debug("zzz...")
+        time.sleep(3)
+    raise KeyboardInterrupt
+    # ---------
     # Capture pre dark field images
     if n_pre_dark > 0:
         txm.close_shutters()
@@ -187,6 +192,12 @@ def main():
     logging.captureWarnings(True)
     # Enter the main script function
     update_variable_dict(variableDict)
+    # Abort the scan if requested
+    if variableDict.get('StopTheScan', False):
+        log.info("Aborting scan at user request.")
+        txm = TXM(has_permit=SHUTTER_PERMIT)
+        txm.stop_scan()
+        return
     # Get the requested sample positions
     sample_pos = (variableDict.get('SampleXIn', None),
                   variableDict.get('SampleYIn', None),
@@ -208,8 +219,7 @@ def main():
         log.debug("Sleeping for %f min", sleep_min)
         time.sleep(sleep_min * 60.0)
     # Start the energy scan
-    energy_scan(energies=energies,
-                is_attached=True, has_permit=SHUTTER_PERMIT,
+    energy_scan(energies=energies, has_permit=SHUTTER_PERMIT,
                 exposure=float(variableDict['ExposureTime']),
                 n_pre_dark=int(variableDict['PreDarkImages']),
                 sample_pos=sample_pos, out_pos=out_pos,

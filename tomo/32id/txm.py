@@ -641,10 +641,10 @@ class TXM(object):
         self.TIFF1_Capture = 0
         self.HDF1_Capture = 0
         self.wait_pv('HDF1_Capture', 0)
-        self.reset_CCD()
-        self.reset_CCD()
+        self.reset_ccd()
+        self.reset_ccd()
         # Open the fast shutter (FOR SUJI)
-        # global_PVs['Fast_Shutter_Uniblitz'].put(1, wait=True)
+        self.Fast_Shutter_Uniblitz = 1
         
     def setup_detector(self, exposure=0.5, live_display=True):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
