@@ -5,6 +5,12 @@ Experiment scanning scripts at APS
 
 This **scanscripts** contains the scripts used at various APS beamlines to collect data.
 
+Documentation
+=============
+
+http://scanscripts.readthedocs.io/en/latest/
+
+
 How to add your beamline scripts
 ================================
 
