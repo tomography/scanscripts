@@ -326,7 +326,7 @@ MOCK_MODULES = ['numpy', 'epics', 'h5py', 'mock',
                 'math', 'json' 'signal', 'random',
                 'unittest', 'contextlib', 'subprocess', 
                 'multiprocessing', 'multiprocessing.managers',
-                'shutil', 'logging']
+                'shutil', 'logging', 'tqdm']
 
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = Mock()

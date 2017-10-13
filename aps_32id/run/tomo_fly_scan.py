@@ -15,17 +15,14 @@ import signal
 import random
 import string
 
-from tomo_scan_lib import *
+from scanlib import *
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['set_exit_handler',
-           'getVariableDict', 
-           'get_calculated_num_projections',
-           'fly_scan',
+__all__ = ['fly_scan',
            'start_scan']
 
 # hardcoded values for verifier

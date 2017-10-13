@@ -1,7 +1,7 @@
-:mod:`tomo.32id.energy_scan`
+:mod:`aps_32id.tomo_fly_scan`
 =============================
 
-.. automodule:: tomo.32id.energy_scan
+.. automodule:: aps_32id.run.tomo_fly_scan
    :members:
    :show-inheritance:
    :undoc-members:
@@ -10,4 +10,5 @@
 
    .. autosummary::
    
-      energy_scan 
+      fly_scan
+      start_scan
