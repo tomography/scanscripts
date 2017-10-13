@@ -12,16 +12,41 @@ __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['TxmPV']
+__all__ = ['TxmPV', 'permit_required']
 
 import logging
 import warnings
 
 from epics import PV as EpicsPV
 
-import exceptions_
+from . import exceptions_
 
 log = logging.getLogger(__name__)
+
+
+def permit_required(real_func, return_value=None):
+    """Decorates a method so it can only open with a permit.
+    
+    This method decorator ensures that the decorated method can only
+    be called on an object that has a shutter permit. If it doesn't,
+    then an exceptions is raised.
+    
+    Parameters
+    ----------
+    real_func
+      The function or method to decorate.
+    
+    """
+    def wrapped_func(obj, *args, **kwargs):
+        # Inner function that checks the status of permit
+        if obj.has_permit:
+            ret = real_func(obj, *args, **kwargs)
+        else:
+            msg = "Shutter permit not granted."
+            warnings.warn(msg, RuntimeWarning)
+            ret = None
+        return ret
+    return wrapped_func
 
 
 class TxmPV(object):

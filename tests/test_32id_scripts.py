@@ -16,10 +16,11 @@ import os
 
 import numpy as np
 
-import energy_scan
-import move_energy
-import tomo_step_scan
-from txm import TXM
+# import energy_scan
+# import move_energy
+# import tomo_step_scan
+from aps_32id.run import energy_scan, move_energy, tomo_step_scan
+from aps_32id.txm import NanoTXM
 
 log = logging.getLogger(__name__)
 log.debug('Beginning tests in {}'.format(__name__))

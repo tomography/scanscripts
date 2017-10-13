@@ -46,16 +46,12 @@
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # #########################################################################
 
+
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
-from tomo.32id.energy_scan import *
-from tomo.32id.tomo_fly_scan import *
-from tomo.32id.scan_lib import *
-from tomo.32id.step_scan import *
-from tomo.32id.exceptions import *
 
-try:
-    import pkg_resources
-    __version__ = pkg_resources.working_set.require("tomo")[0].version
-except:
-    pass
+from .txm import NanoTXM
+from .run.energy_scan import energy_scan
+from .run.move_energy import move_energy
+from .run.tomo_step_scan import tomo_step_scan
+from scanlib.txm_pv import TxmPV, permit_required

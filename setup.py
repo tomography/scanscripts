@@ -4,9 +4,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='tomo',
+    name='scanscripts',
     author='Mark Wolf, Doga Gursoy, Francesco De Carlo',
-    packages=find_packages(),
+    # packages=find_packages(),
+    packages=['aps_32id', 'aps_02bm', 'scanlib'],
     version=open('VERSION').read().strip(),
     description = 'Scanning protocols for tomography.',
     license='BSD-3',

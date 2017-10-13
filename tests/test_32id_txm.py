@@ -13,9 +13,9 @@ else:
     from unittest import mock
 import warnings
 
-from txm import TXM, permit_required
-from txm_pv import TxmPV
-import exceptions_
+from aps_32id.txm import NanoTXM, permit_required
+from scanlib import TxmPV, exceptions_
+
 
 log = logging.getLogger(__name__)
 log.debug('Beginning tests in {}'.format(__name__))
@@ -43,7 +43,7 @@ class PermitDecoratorsTestCase(unittest.TestCase):
 
 
 class TXMTestCase(unittest.TestCase):
-    class StubTXM(TXM):
+    class StubTXM(NanoTXM):
         __pv_dict = {
             'ioc_sample_X': 7,
             '32ida:BraggEAO.VAL': 8.7, # DMCputEnergy
@@ -181,7 +181,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.HDF1_Capture, 1)
         self.assertTrue(txm.hdf_writer_ready)
     
-    @mock.patch('txm.EpicsPV')
+    @mock.patch('aps_32id.txm.EpicsPV')
     def test_open_shutters(self, EpicsPV):
         txm = self.StubTXM(has_permit=True)
         with warnings.catch_warnings(record=True) as w:
@@ -213,7 +213,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.ShutterA_Open, None)
         self.assertEqual(txm.ShutterB_Open, 1)
     
-    @mock.patch('txm.EpicsPV')
+    @mock.patch('aps_32id.txm.EpicsPV')
     def test_close_shutters(self, EpicsPV):
         txm = self.StubTXM(has_permit=True)
         with warnings.catch_warnings(record=True) as w:
@@ -281,14 +281,21 @@ class TXMTestCase(unittest.TestCase):
             self.assertIn('Collecting dark field with shutters open.',
                           str(w[0].message))
         # Test when calling with multiple projections
-        txm.close_shutters()
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', module='scanlib.txm_pv',
+                                    category=RuntimeWarning)
+            txm.close_shutters()
         txm._trigger_projections.reset_mock()
-        txm.capture_dark_field(num_projections=3)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
+            txm.capture_dark_field(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_DARK)
         txm._trigger_projections.assert_called_once_with(num_projections=3)
         # Test when calling only one projection
         txm._trigger_projections.reset_mock()
-        txm.capture_dark_field(num_projections=1)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
+            txm.capture_dark_field(num_projections=1)
         txm._trigger_projections.assert_called_once_with(num_projections=1)
     
     def test_capture_flat_field(self):
@@ -302,14 +309,20 @@ class TXMTestCase(unittest.TestCase):
             self.assertEqual(len(w), 1, "Did not raise shutter warning")
             self.assertIn('Collecting white field with shutters closed.', str(w[0].message))
         # Test for collecting multiple projections
-        txm.open_shutters()
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
+            txm.open_shutters()
         txm._trigger_projections.reset_mock()
-        txm.capture_white_field(num_projections=3)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
+            txm.capture_white_field(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_WHITE)
         txm._trigger_projections.assert_called_with(num_projections=3)
         # Test when calling only one projection
         txm._trigger_projections.reset_mock()
-        txm.capture_white_field(num_projections=1)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
+            txm.capture_white_field(num_projections=1)
         txm._trigger_projections.assert_called_once_with(num_projections=1)
     
     def test_reset_ccd(self):

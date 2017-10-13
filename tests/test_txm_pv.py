@@ -12,7 +12,7 @@ else:
 
 from epics import PV as EpicsPV, get_pv
 
-from txm_pv import TxmPV
+from scanlib.txm_pv import TxmPV
 
 
 log = logging.getLogger(__name__)

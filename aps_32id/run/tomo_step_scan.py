@@ -18,7 +18,7 @@ import h5py
 from epics import PV
 import numpy as np
 
-from tomo_scan_lib import *
+from scanlib.tomo_scan_lib import *
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'

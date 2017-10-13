@@ -22,8 +22,8 @@ import numpy as np
 import h5py
 import tqdm
 from epics import PV
-from tomo_scan_lib import update_variable_dict, stop_scan
-from txm import TXM
+from scanlib.tomo_scan_lib import update_variable_dict, stop_scan
+from ..txm import NanoTXM
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'

@@ -21,8 +21,7 @@ import h5py
 import tqdm
 from epics import PV as EpicsPV, get_pv
 
-import exceptions_
-from txm_pv import TxmPV
+from scanlib import TxmPV, permit_required, exceptions_
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
@@ -30,38 +29,11 @@ __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
 __all__ = ['TXM',
-           'TxmPV',
-           'permit_required',
-           'txm_required']
+           'permit_required']
 
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 
 log = logging.getLogger(__name__)
-
-
-def permit_required(real_func, return_value=None):
-    """Decorates a method so it can only open with a permit.
-    
-    This method decorator ensures that the decorated method can only
-    be called on an object that has a shutter permit. If it doesn't,
-    then an exceptions is raised.
-    
-    Parameters
-    ----------
-    real_func
-      The function or method to decorate.
-    
-    """
-    def wrapped_func(obj, *args, **kwargs):
-        # Inner function that checks the status of permit
-        if obj.has_permit:
-            ret = real_func(obj, *args, **kwargs)
-        else:
-            msg = "Shutter permit not granted."
-            warnings.warn(msg, RuntimeWarning)
-            ret = None
-        return ret
-    return wrapped_func
 
 
 class PVPromise():
@@ -78,7 +50,7 @@ class PVPromise():
 ############################
 # Main TXM Class definition
 ############################
-class TXM(object):
+class NanoTXM(object):
     """A class representing the Transmission X-ray Microscope at sector 32-ID-C.
     
     Attributes
@@ -558,7 +530,7 @@ class TXM(object):
         time.sleep(1)
         self.DCMmvt = old_DCM_mode
         #self.wait_pv('EnergyWait', 0)
-
+        
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
     @permit_required
@@ -669,7 +641,7 @@ class TXM(object):
         self.exposure_time = 0.01
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
-
+        
         # Now set the real settings for the detector
         self.Cam1_Display = live_display
         self.Cam1_ArrayCallbacks = 'Enable'
@@ -919,17 +891,18 @@ class TXM(object):
         # Return to the inner code block
         yield
         # Stop TIFF and HDF collection
-        global_PVs['TIFF1_AutoSave'].put('No')
-        global_PVs['TIFF1_Capture'].put(0)
-        global_PVs['HDF1_Capture'].put(0)
-        wait_pv(global_PVs['HDF1_Capture'], 0)
+        self.TIFF1_AutoSave = 'No'
+        self.TIFF1_Capture = 0
+        self.HDF1_Capture = 0
+        self.wait_pv('HDF1_Capture', 0)
         # Restore the saved initial motor positions
         self.move_sample(*init_position)
         self.move_energy(init_E)
         # Reset the CCD so it's in continuous mode
         self.reset_ccd()
         # Open the fast shutter #### FOR SUJI
-        global_PVs['Fast_Shutter_Uniblitz'].put(1, wait=True)
+        self.Fast_Shutter_Uniblitz = 1
+        self.wait_pv('HDF1_Capture', 1)
     
     def reset_ccd(self):
         log.debug("Resetting CCD")
@@ -945,7 +918,7 @@ class TXM(object):
         self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, timeout=2)
 
 
-class MicroCT(TXM):
+class MicroTXM(NanoTXM):
     """TXM operating with the front micro-CT stage."""
     # Flyscan PV's
     Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')

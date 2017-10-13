@@ -9,8 +9,8 @@ import math
 
 log = logging.getLogger(__name__)
 
-from tomo_scan_lib import update_variable_dict
-from txm import TXM
+from scanlib.tomo_scan_lib import update_variable_dict
+from ..txm import NanoTXM
 
 variableDict = {
     'new_energy': 9.01, # keV
@@ -38,7 +38,7 @@ def move_energy(energy, constant_mag=True, has_permit=False):
     
     """
     # Prepare TXM object
-    txm = TXM(has_permit=has_permit)
+    txm = NanoTXM(has_permit=has_permit)
     # Attach to the TXM and change energy
     with txm.wait_pvs():
         txm.move_energy(energy, constant_mag=constant_mag)

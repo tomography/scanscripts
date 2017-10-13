@@ -21,7 +21,6 @@ import warnings
 from epics import PV
 import h5py
 
-from txm import TXM
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
