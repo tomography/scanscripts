@@ -1,7 +1,7 @@
-:mod:`tomo.32id.txm`
-=====================
+:mod:`scanlib.txm_pv`
+===========================
 
-.. automodule:: tomo.32id.txm
+.. automodule:: scanlib.txm_pv
    :members:
    :show-inheritance:
    :undoc-members:
@@ -12,4 +12,3 @@
    
       TxmPV
       permit_required
-      txm_required 

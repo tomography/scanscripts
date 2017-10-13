@@ -22,5 +22,3 @@ Content
    source/about
    source/install
    source/api
-   source/sector32-scripts
-   source/sector32-txm

@@ -1,7 +1,7 @@
-:mod:`tomo.32id.tomo_scan_lib`
-===============================
+:mod:`scanlib.tomo_scan_lib`
+============================
 
-.. automodule:: tomo.32id.tomo_scan_lib
+.. automodule:: scanlib.tomo_scan_lib
    :members:
    :show-inheritance:
    :undoc-members:
@@ -18,8 +18,6 @@
       stop_scan
       cleanup
       reset_CCD
-      setup_hdf_writer
-      setup_detector_energy_scan
       setup_detector
       setup_writer
       setup_tiff_writer
