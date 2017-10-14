@@ -5,9 +5,14 @@ API reference
 
 .. toctree::
 
-   api/tomo.32id
+   api/modules
 
-.. automodule:: tomo
+.. automodule:: scanlib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: aps_32id
    :members:
    :undoc-members:
    :show-inheritance: 

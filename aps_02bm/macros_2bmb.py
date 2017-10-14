@@ -153,103 +153,103 @@ def changeDMMEng(eng = 24.9):
                 
 
 
-def centerAxis(axisShift = 12.5,refYofX0 = 14.976):
-    """ 
-                
-      axisShift: rotation axis shift in unit um/mm. it is defined as the shift distance when the vertical stage moves up.
-              it assumes rotation axis is at image center at posInit.
-      this is the case in which the rotation axis move toward right side (larger 'center' in reconstruction)
-      when the sample stage moves up.                                                        
+def centerAxis(axisShift=12.5, refYofX0=14.976):
+    """Shift the center axis
+    
+    Parameters
+    ----------
+    axisShift: float, optional
+      rotation axis shift in unit um/mm. it is defined as the shift
+      distance when the vertical stage moves up.  it assumes rotation
+      axis is at image center at posInit.  this is the case in which
+      the rotation axis move toward right side (larger 'center' in
+      reconstruction) when the sample stage moves up.
+    
     """
     posRefPos = refYofX0 
-                                
-##### AHutch tomo configurations -- start                           
-#### for LAT                
+    
+    ##### AHutch tomo configurations -- start                           
+    #### for LAT                
     samStage = "2bma:m49"
     posStage = "2bma:m20"        
-                
-### for SAT                
-#    samStage = "2bma:m49"
-#    posStage = "2bma:m46"                        
-               
-##### AHutch tomo configurations -- end                    
-
-####### BHutch tomo configurations -- start              
-#### for SAT                
-#    samStage = "2bmb:m63"
-#    posStage = "2bmb:m57"
-#                
-#### for LAT
-##    samStage = "2bmb:m58"
-##    posStage = "2bmb:m4"              
-####### BHutch tomo configurations -- end                   
-
+    
+    ### for SAT                
+    #    samStage = "2bma:m49"
+    #    posStage = "2bma:m46"                        
+    
+    ##### AHutch tomo configurations -- end                    
+    
+    ####### BHutch tomo configurations -- start              
+    #### for SAT                
+    #    samStage = "2bmb:m63"
+    #    posStage = "2bmb:m57"
+    #                
+    #### for LAT
+    ##    samStage = "2bmb:m58"
+    ##    posStage = "2bmb:m4"              
+    ####### BHutch tomo configurations -- end                   
+    
     posCurr = epics.caget(posStage + ".VAL")    
     samStageOffset = axisShift * (posCurr - posRefPos)/1000.0  
     print samStageOffset                                               
     epics.caput(samStage + ".VAL",str(samStageOffset), wait=True, timeout=1000.0) 
     print 'done'                
-               
-             
-                            
-                
+
 
 def initDimax(samInPos = 0, hutch='A'):
     if hutch == 'A' or hutch == 'a':    
         camPrefix = "PCOIOC2"                            
         shutter = "2bma:A_shutter"
-    #    samStage = "2bma:m49"
-    #    rotStage = "2bmb:m100"    
-                    
+        #    samStage = "2bma:m49"
+        #    rotStage = "2bmb:m100"    
+        
         samStage = "2bmb:m58"                
         rotStage = "2bmb:m82" 
         epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)                
         epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)
-        epics.caput(camPrefix+":cam1:pco_cancel_dump.VAL","1", wait=True, timeout=1000.0)                    
-        epics.caput(camPrefix+":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)                
-        epics.caput(camPrefix+":HDF1:NumCaptured_RBV.VAL","0", wait=True, timeout=1000.0)    
+        epics.caput(camPrefix+":cam1:pco_cancel_dump.VAL","1", wait=True, timeout=1000.0)
+        epics.caput(camPrefix+":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
+        epics.caput(camPrefix+":HDF1:NumCaptured_RBV.VAL","0", wait=True, timeout=1000.0)
         epics.caput(camPrefix+":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
         epics.caput(camPrefix+":cam1:pco_trigger_mode.VAL","Auto", wait=True, timeout=1000.0)
-        epics.caput(camPrefix+":cam1:pco_live_view.VAL","Yes", wait=True, timeout=1000.0)    
+        epics.caput(camPrefix+":cam1:pco_live_view.VAL","Yes", wait=True, timeout=1000.0)
         epics.caput(rotStage+".CNEN","Enable", wait=True, timeout=1000.0)
-    #    epics.caput("2bmb:tableFly2:sseq2.PROC", 1, wait=True, timeout=1000.0)                
+        # epics.caput("2bmb:tableFly2:sseq2.PROC", 1, wait=True, timeout=1000.0)
         epics.caput(rotStage+".VELO","360", wait=True, timeout=1000.0)
-        epics.caput(rotStage+".ACCL","3", wait=True, timeout=1000.0)                
-        epics.caput(rotStage+".VAL","0", wait=True, timeout=1000.0)                                
+        epics.caput(rotStage+".ACCL","3", wait=True, timeout=1000.0)
+        epics.caput(rotStage+".VAL","0", wait=True, timeout=1000.0)
         epics.caput(samStage+".VAL",str(samInPos), wait=True, timeout=1000.0)
-    elif hutch == 'B' or hutch == 'b':    
-        camPrefix = "PCOIOC2"                            
+    elif hutch == 'B' or hutch == 'b':
+        camPrefix = "PCOIOC2"
         shutter = "2bma:B_shutter"
-        samStage = "2bmb:m63"                
-        rotStage = "2bmb:m100"     
-                    
-#        samStage = "2bmb:m58"                
-#        rotStage = "2bmb:m82"                 
+        samStage = "2bmb:m63"
+        rotStage = "2bmb:m100"
+        
+        # samStage = "2bmb:m58"                
+        # rotStage = "2bmb:m82"                 
         epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)
-        epics.caput(camPrefix+":cam1:pco_cancel_dump.VAL","1", wait=True, timeout=1000.0)                    
-        epics.caput(camPrefix+":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)                
-        epics.caput(camPrefix+":HDF1:NumCaptured_RBV.VAL","0", wait=True, timeout=1000.0)    
+        epics.caput(camPrefix+":cam1:pco_cancel_dump.VAL","1", wait=True, timeout=1000.0)
+        epics.caput(camPrefix+":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
+        epics.caput(camPrefix+":HDF1:NumCaptured_RBV.VAL","0", wait=True, timeout=1000.0)
         epics.caput(camPrefix+":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
         epics.caput(camPrefix+":cam1:pco_trigger_mode.VAL","Auto", wait=True, timeout=1000.0)
-        epics.caput(camPrefix+":cam1:pco_live_view.VAL","Yes", wait=True, timeout=1000.0)    
+        epics.caput(camPrefix+":cam1:pco_live_view.VAL","Yes", wait=True, timeout=1000.0)
         epics.caput(rotStage+".CNEN","Enable", wait=True, timeout=1000.0)
-    #    epics.caput("2bmb:tableFly2:sseq2.PROC", 1, wait=True, timeout=1000.0)                
+        # epics.caput("2bmb:tableFly2:sseq2.PROC", 1, wait=True, timeout=1000.0)
         epics.caput(rotStage+".VELO","360", wait=True, timeout=1000.0)
-        epics.caput(rotStage+".ACCL","3", wait=True, timeout=1000.0)                
-        epics.caput(rotStage+".VAL","0", wait=True, timeout=1000.0)                                
-        epics.caput(samStage+".VAL",str(samInPos), wait=True, timeout=1000.0)                    
-    print "Dimax is reset!"                
-
-
+        epics.caput(rotStage+".ACCL","3", wait=True, timeout=1000.0)
+        epics.caput(rotStage+".VAL","0", wait=True, timeout=1000.0)
+        epics.caput(samStage+".VAL",str(samInPos), wait=True, timeout=1000.0)
+    print "Dimax is reset!"
 
 
 def initEdge(samInPos = 0):
-    camPrefix = "PCOIOC3"                            
+    camPrefix = "PCOIOC3"
     shutter = "2bma:A_shutter"
-#    samStage = "2bmb:m63"
+    # samStage = "2bmb:m63"
     samStage = "2bma:m49"                
     rotStage = "2bmb:m82"
-#    epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)                
+    # epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)                
     epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)
     epics.caput(camPrefix+":HDF1:EnableCallbacks.VAL",1, wait=True, timeout=1000.0)    
     epics.caput(camPrefix+":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)   
@@ -262,10 +262,10 @@ def initEdge(samInPos = 0):
     epics.caput(camPrefix+":cam1:pco_edge_fastscan.VAL","Normal", wait=True, timeout=1000.0)
     epics.caput(camPrefix+":cam1:SizeX.VAL","2560", wait=True, timeout=1000.0)
     epics.caput(camPrefix+":cam1:SizeY.VAL","1200", wait=True, timeout=1000.0)
-#    epics.caput("2bmb:tableFly2:sseq2.PROC", 1, wait=True, timeout=1000.0)                                
+#    epics.caput("2bmb:tableFly2:sseq2.PROC", 1, wait=True, timeout=1000.0)
     epics.caput(rotStage+".STOP",1, wait=True, timeout=1000.0)
-    epics.caput(rotStage+".VELO","30", wait=True, timeout=1000.0)    
-    epics.caput(rotStage+".ACCL","3", wait=True, timeout=1000.0)                
+    epics.caput(rotStage+".VELO","30", wait=True, timeout=1000.0)
+    epics.caput(rotStage+".ACCL","3", wait=True, timeout=1000.0)
     epics.caput(rotStage+".VAL","0", wait=True, timeout=1000.0)
     epics.caput(samStage+".VAL",str(samInPos), wait=True, timeout=1000.0)  
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)              

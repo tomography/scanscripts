@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 '''
-TomoScan for Sector 32 ID C
-
+Tomography scan for Sector 32 ID C
 '''
+
 import sys
 import json
 import time
@@ -25,11 +25,7 @@ __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['set_exit_handler',
-           'getVariableDict',
-           'tomo_scan',
-           'mirror_fly_scan',
-           'full_tomo_scan']
+__all__ = ['tomo_step_scan']
 
 # Hardcoded values for verifier and TXM
 VER_HOST = "txmtwo"

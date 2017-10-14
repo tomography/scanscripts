@@ -15,7 +15,7 @@ import signal
 import random
 import string
 
-from tomo_scan_lib import *
+from scanlib import *
 import tomo_fly_scan
 
 __author__ = 'Mark Wolf'

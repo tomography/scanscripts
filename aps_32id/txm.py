@@ -3,9 +3,9 @@
 """Defines TXM classes for controlling the Transmission X-ray
 Microscope at Advanced Photon Source beamline 32-ID-C.
 
-TXM
+NanoTXM
   A nano-CT transmission X-ray microscope.
-MicroCT
+MicroTXM
   Similar to the nano-CT but for micro-CT.
 
 """
@@ -28,8 +28,8 @@ __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['TXM',
-           'permit_required']
+__all__ = ['NanoTXM',
+           'MicroTXM']
 
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 
@@ -267,7 +267,7 @@ class NanoTXM(object):
         """
         epics_pv = EpicsPV(pv_name)
         return epics_pv.get(*args, **kwargs)
-
+    
     def pv_put(self, pv_name, value, wait, *args, **kwargs):
         """Set the current process variable value.
         
@@ -389,7 +389,7 @@ class NanoTXM(object):
             else:
                 log.debug("Ended wait_pv()")
                 return True
-
+    
     def sample_position(self):
         """Retrieve the x, y, z and theta positions of the sample stage.
         
@@ -408,7 +408,6 @@ class NanoTXM(object):
         return position
     
     def move_sample(self, x=None, y=None, z=None, theta=None):
-
         """Move the sample to the given (x, y, z) position.
         
         Parameters
@@ -829,7 +828,7 @@ class NanoTXM(object):
         # Collect the data
         ret = self._trigger_projections(num_projections=num_projections)
         return ret
-
+    
     def capture_tomogram(self, angles, num_projections=1,
                          stabilize_sleep=10):
         """Collect data frames over a range of angles.
@@ -898,6 +897,8 @@ class NanoTXM(object):
         # Restore the saved initial motor positions
         self.move_sample(*init_position)
         self.move_energy(init_E)
+        # Close the shutter
+        self.close_shutters()
         # Reset the CCD so it's in continuous mode
         self.reset_ccd()
         # Open the fast shutter #### FOR SUJI
