@@ -6,7 +6,7 @@ class EnergyError(ValueError):
     pass
 
 class PermitError(RuntimeError):
-    """The TXM tried to do something the required a shutter permit but
+    """The TXM tried to do something requiring a shutter permit, but it
     didn't have one.
     
     """

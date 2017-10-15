@@ -17,6 +17,23 @@ magnification. The equivalent function
 :func:`~aps_32id.run.move_energy.move_energy` can be used
 programatically.
 
+Energy Scan
+===========
+
+.. warning::
+
+   This function has not yet replaced the "old style" script at the
+   beamline.
+
+The :mod:`~aps_32id.run.energy_scan` script collects 2D frames over a
+range of energies, as well as the corresponding flat-field and
+dark-field images. The equivalent function
+:func:`~aps_32id.run.energy_scan.energy_scan` lets this script be called
+programatically. The variable dictionary contains parameters for
+``Energy_Start``, ``Energy_End`` and ``Energy_Step``. If more control
+is needed (eg, non-evenly spaced energies), then the function should
+be used with the ``energies`` argument.
+
 Tomography Step Scan
 ====================
 
@@ -57,20 +74,9 @@ The :mod:`~aps_32id.run.mosaic_tomo_fly_scan` script and
 similar to :mod:`~aps_32id.run.tomo_step_scan` except multiple fields
 of view are collected.
 
-Energy Scan
-===========
+Roll-Your-Own Scripts
+=====================
 
-.. warning::
-
-   This function has not yet replaced the "old style" script at the
-   beamline.
-
-The :mod:`~aps_32id.run.energy_scan` script collects 2D frames over a
-range of energies, as well as the corresponding flat-field and
-dark-field images. The equivalent function
-:func:`~aps_32id.run.energy_scan.energy_scan` lets this script be called
-programatically. The variable dictionary contains parameters for
-``Energy_Start``, ``Energy_End`` and ``Energy_Step``. If more control
-is needed (eg, non-evenly spaced energies), then the function should
-be used with the ``energies`` argument.
-
+Those with a sense of adventure can write their own scripts for
+Sector 32. It's highly recommended to become familiar with the
+:doc:`sector32-txm` and :doc:`examples` pages.

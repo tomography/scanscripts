@@ -29,7 +29,22 @@ def permit_required(real_func, return_value=None):
     
     This method decorator ensures that the decorated method can only
     be called on an object that has a shutter permit. If it doesn't,
-    then an exceptions is raised.
+    then an exceptions is raised:
+    
+    .. code:: python
+        
+        class MyTXM(NanoTXM):
+            @permit_required
+            def open_shutters(self):
+                pass
+        
+        # This will work as expected
+        txm = MyTXM(has_permit=True)
+        txm.open_shutters()
+        
+        # This will raise a warning and do nothing else
+        txm = MyTXM(has_permit=False)
+        txm.open_shutters()
     
     Parameters
     ----------
@@ -97,6 +112,12 @@ class TxmPV(object):
         self.as_string = as_string
     
     def epics_PV(self, txm):
+        """Gets the underlying epics process variable object.
+        
+        Goes down one level of abstraction to allow a finer level of
+        control if necessary.
+        
+        """
         # Only create a PV if one doesn't exist or the IOC prefix has changed
         is_cached = (self._epicsPV is not None)
         if not is_cached:
