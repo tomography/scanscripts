@@ -293,18 +293,19 @@ class NanoTXM(object):
             promise = PVPromise(pv_name=pv_name)
             ret = self._pv_put(pv_name, value, wait=False,
                                callback=promise.complete)
+            # Remove any existing promises for this PV
+            existing = [p for p in self.pv_queue if p.pv_name == pv_name]
+            for old_promise in existing:
+                self.pv_queue.remove(old_promise)
+            # Add the new promise to the PV queue
             self.pv_queue.append(promise)
         else:
             # Blocking PV waiting
             ret = self._pv_put(pv_name, value, wait=wait, *args, **kwargs)
         return ret
     
-    def _complete_promise(self, promise):
-        print(promise)
-    
     def _pv_put(self, pv_name, value, wait, *args, **kwargs):
         """Retrieves the epics PV and calls its ``put`` method."""
-        print(pv_name, value, wait)
         epics_pv = EpicsPV(pv_name)
         return epics_pv.put(value, wait=wait, *args, **kwargs)
     
