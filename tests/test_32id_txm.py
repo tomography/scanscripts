@@ -73,7 +73,22 @@ class TXMTestCase(unittest.TestCase):
         # Check that the method adds a promise if a PV queue is present
         txm.pv_queue = []
         txm.pv_put('my_pv', 3, wait=True)
-        self.assertEqual(len(txm.pv_queue), 1, "No PV promise added to queue")
+        self.assertEqual(len(txm.pv_queue), 1, "%d PV promises added to queue" % len(txm.pv_queue))
+
+    def test_pv_put_twice(self):
+        """Check what happens if two non-blocking calls to pv_put are made."""
+        # Have a dummy PV method to check if it actually calls
+        class StubTXM2(self.StubTXM):
+            _test_value = 0
+            def _pv_put(self, pv_name, value, *args, **kwargs):
+                self._test_value = value
+                return True
+        txm = StubTXM2()
+        # Check that the method adds a promise if a PV queue is present
+        txm.pv_queue = []
+        txm.pv_put('my_pv', 3, wait=True)
+        txm.pv_put('my_pv', 3, wait=True)
+        self.assertEqual(len(txm.pv_queue), 1, "%d PV promises added to queue" % len(txm.pv_queue))
     
     def test_move_sample(self):
         txm = self.StubTXM()
