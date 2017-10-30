@@ -10,7 +10,7 @@ import math
 log = logging.getLogger(__name__)
 
 from scanlib.tomo_scan_lib import update_variable_dict
-from ..txm import NanoTXM
+from aps_32id.txm import NanoTXM
 
 variableDict = {
     'new_energy': 9.01, # keV
@@ -54,7 +54,7 @@ def main(variableDict, has_permit):
     energy = float(variableDict['new_energy'])
     constant_mag = bool(variableDict['constant_mag'])
     # Create a TXM object and move its energy
-    move_energy(energy, constant_mag=constant_mag, is_attached=True,
+    move_energy(energy, constant_mag=constant_mag,
                 has_permit=has_permit)
 
 

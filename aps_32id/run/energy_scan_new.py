@@ -23,7 +23,7 @@ import h5py
 import tqdm
 from epics import PV
 from scanlib.tomo_scan_lib import update_variable_dict, stop_scan
-from ..txm import NanoTXM
+from aps_32id.txm import NanoTXM
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
@@ -38,9 +38,11 @@ variableDict = {
     'SampleXOut': 0.0,
     # 'SampleYOut': 0.0,
     # 'SampleZOut': 12.5,
+    # 'SampleRotOut': 90, # In degrees
     'SampleXIn': 0.0,
     # 'SampleYIn': 0.0,
     # 'SampleZIn': 0.0,
+    # 'SampleRotIn': 0, # In degrees
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 1,
@@ -55,7 +57,7 @@ variableDict = {
 }
 
 IOC_PREFIX = '32idcPG3:'
-SHUTTER_PERMIT = False
+SHUTTER_PERMIT = True
 DEFAULT_ENERGIES = np.arange(
     variableDict['Energy_Start'],
     variableDict['Energy_End'] + variableDict['Energy_Step'],
@@ -106,11 +108,11 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
       If greater than 1, several consecutive images can be collected.
     """
     log.debug("Starting energy_scan()")
-    assert not has_permit
+    assert has_permit
     # txm.Fast_Shutter_Uniblitz = 1
     start_time = time.time()
     # Create the TXM object for this scan
-    txm = TXM(has_permit=has_permit,
+    txm = NanoTXM(has_permit=has_permit,
               ioc_prefix=IOC_PREFIX, use_shutter_A=False,
               use_shutter_B=True)
     # Prepare TXM for capturing data
@@ -118,13 +120,6 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     total_projections = n_pre_dark + 2 * len(energies)
     txm.setup_hdf_writer(num_projections=total_projections,
                          num_recursive_images=num_recursive_images)
-    # ---------
-    # Debugging
-    while True:
-        log.debug("zzz...")
-        time.sleep(3)
-    raise KeyboardInterrupt
-    # ---------
     # Capture pre dark field images
     if n_pre_dark > 0:
         txm.close_shutters()
@@ -141,7 +136,6 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
         sample_first = not bool(idx % 2)
         log.info("Collecting %s first.", "sample" if sample_first else "white-field")
         # Move sample and energy
-        # with txm.wait_pvs():
         if sample_first:
             txm.move_sample(*sample_pos)
         else:
@@ -201,10 +195,12 @@ def main():
     # Get the requested sample positions
     sample_pos = (variableDict.get('SampleXIn', None),
                   variableDict.get('SampleYIn', None),
-                  variableDict.get('SampleZIn', None))
+                  variableDict.get('SampleZIn', None),
+                  variableDict.get('SampleRotIn', None))
     out_pos = (variableDict.get('SampleXOut', None),
                variableDict.get('SampleYOut', None),
-               variableDict.get('SampleZOut', None))
+               variableDict.get('SampleZOut', None),
+               variableDict.get('SampleRotOut', None))
     # Prepare the list of energies requested
     energy_start = float(variableDict['Energy_Start'])
     energy_end = float(variableDict['Energy_End'])
