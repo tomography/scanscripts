@@ -336,8 +336,7 @@ class NanoTXM(object):
         # Wait for all the PVs to be finished
         num_promises = len(self.pv_queue)
         while block and not all([pv.is_complete for pv in self.pv_queue]):
-            time.sleep(0.5)
-            print([(pv.pv_name, pv.is_complete) for pv in self.pv_queue])
+            time.sleep(0.01)
         log.debug("Completed %d queued PV's", num_promises)
         # Restore the old PV queue
         self.pv_queue = old_queue
@@ -364,9 +363,14 @@ class NanoTXM(object):
         Returns
         -------
         val : bool
-          True if value was set properly, False if the timeout expired
-          before the target value was reached.
-        
+            True if value was set properly.
+
+        Raises
+        ------
+        exceptions_.TimeoutError
+            If the PV did not reach the target value before the
+            timeout expired.
+
         """
         log_msg = "called wait_pv({name}, {val}, timeout={timeout})"
         log.debug(log_msg.format(name=pv_name, val=target_val,

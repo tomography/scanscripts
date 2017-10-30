@@ -69,6 +69,7 @@ def update_variable_dict(variableDict):
     argDic = {}
     if len(sys.argv) > 1:
         strArgv = sys.argv[1]
+        print(strArgv)
         argDic = json.loads(strArgv)
     log.debug('Orig variable dict: %s', variableDict)
     for k, v in argDic.iteritems():

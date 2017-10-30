@@ -13,12 +13,14 @@ import traceback
 import signal
 import random
 import string
+import logging
 
 import h5py
 from epics import PV
 import numpy as np
 
-from scanlib.tomo_scan_lib import *
+from aps_32id import NanoTXM
+from scanlib import update_variable_dict
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
@@ -33,31 +35,33 @@ VER_PORT = "5011"
 VER_DIR = "/local/usr32idc/conda/data-quality/"
 INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
 IOC_PREFIX = '32idcPG3'
-SHUTTER_PERMIT = False
+SHUTTER_PERMIT = True
+
+log = logging.getLogger(__name__)
 
 variableDict = {
     'PreDarkImages': 5,
     'PreWhiteImages': 5,
-    'Projections': 361,
-    'PostDarkImages': 0,
+    'Projections': 1281,
+    'PostDarkImages': 5,
     'PostWhiteImages': 5,
-    'SampleXOut': 0.05,
+    'SampleXOut': 12.25,
     # 'SampleYOut': 0.1,
     # 'SampleZOut': 0,
-    # 'SampleRotOut': 90.0,
+    'SampleRotOut': 0.0,
     'SampleXIn': 0.0,
     # 'SampleYIn': 0.1,
     # 'SampleZIn': 0.0,
-    'SampleStart_Rot': -90.,
-    'SampleEnd_Rot': 90.,
-    'StartSleep_min': 1,
+    'SampleStart_Rot': -75.,
+    'SampleEnd_Rot': 75.,
+    'StartSleep_min': 0,
     'StabilizeSleep_ms': 10,
-    'ExposureTime_sec': 0.5,
+    'ExposureTime_sec': 1.0,
     # 'ShutterOpenDelay': 0.05,
     # 'ExternalShutter': 0,
     # 'FileWriteMode': 'Stream',
     'rot_speed_deg_per_s': 0.5,
-    'Recursive_Filter_N_Images': 2,
+    'Recursive_Filter_N_Images': 1,
 }
 
 
@@ -98,9 +102,9 @@ def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
     num_dark : 2-tuple(int), optional
       (pre, post) tuple for number of dark field images to collect.
     sample_pos : 4-tuple(float), optional
-      4 (or less) tuple of (x, y, z, θ) for the sample position.
+      4 (or less) tuple of (x, y, z, θ°) for the sample position.
     out_pos : 4-tuple(float), optional
-      4 (or less) tuple of (x, y, z, θ) for white field position.
+      4 (or less) tuple of (x, y, z, θ°) for white field position.
     rot_speed_deg_per_s : float, optional
       Angular speed for the rotation stage.
     key : 
@@ -115,10 +119,10 @@ def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
     # Some intial debugging
     start_time = time.time()
     log.debug('called start_scan()')
-    # Start verifier on remote machine
-    start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
+    # # Start verifier on remote machine
+    # start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
     # Prepare X-ray microscope
-    txm = TXM(has_permit=has_permit)
+    txm = NanoTXM(has_permit=has_permit)
     # Prepare the microscope for collecting data
     txm.setup_detector(exposure=exposure)
     total_projections = len(angles)
@@ -133,15 +137,18 @@ def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
     # Collect pre-scan white-field images
     if num_pre_white_images > 0:
         logging.info("Capturing %d white-fields at %s", num_pre_white_images, out_pos)
+        # Move the sample out and collect whitefields
+        txm.move_sample(theta=out_pos[3]) # So we don't have crashes
         with txm.wait_pvs():
             txm.move_sample(*out_pos)
             txm.open_shutters()
         txm.capture_white_field(num_projections=num_pre_white_images)
     # Capture the actual sample data
+    txm.move_sample(theta=0) # So we don't have crashes
     with txm.wait_pvs():
         txm.move_sample(*sample_pos)
         txm.open_shutters()
-        log.debug('Starting tomography scan')
+    log.debug('Starting tomography scan')
     txm.capture_tomogram(angles=angles, num_projections=num_recursive_images,
                          stabilize_sleep=stabilize_sleep_ms)
     # Capture post-scan white-field images
@@ -192,7 +199,7 @@ def main():
     out_pos = (variableDict.get('SampleXOut', None),
                variableDict.get('SampleYOut', None),
                variableDict.get('SampleZOut', None),
-               0)
+               variableDict.get('SampleRotOut', None))
     num_recursive_images = int(variableDict['Recursive_Filter_N_Images'])
     step_size = ((sample_rot_end - sample_rot_start) / (num_projections - 1.0))
     stabilize_sleep_ms = float(variableDict['StabilizeSleep_ms'])
