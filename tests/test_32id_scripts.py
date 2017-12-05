@@ -1,5 +1,7 @@
 """This file runs integration tests on the actual execution scripts
-themselves."""
+themselves.
+
+"""
 
 # Logging
 import logging
@@ -40,6 +42,12 @@ class ScriptTestCase(unittest.TestCase):
             os.remove(self.hdf_filename)
 
 
+class TXMStub(NanoTXM):
+    def pv_put(self, pv_name, *args, **kwargs):
+        """Stubbed pv_put that does nothing."""
+        return True # To simulate a successful ``put``
+
+
 class MoveEnergyTests(ScriptTestCase):
     @unittest.skip('Need to re-work the integrations tests')
     def test_move_energy(self):
@@ -72,21 +80,21 @@ class TomoStepScanTests(ScriptTestCase):
                                                      num_recursive_images=3)
 
 
-@unittest.skip('Need to re-work the integrations tests')
+# @unittest.skip('Need to re-work the integrations tests')
 class EnergyScanTests(unittest.TestCase):
     def setUp(self):
-        self.txm = TXM(has_permit=True)
+        self.txm = TXMStub(has_permit=True)
     
     def tearDown(self):
         # Get rid of the temporary HDF5 file
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')
     
-    @mock.patch('txm.TXM.capture_projections')
-    @mock.patch('txm.TXM.capture_dark_field')
-    @mock.patch('txm.TXM.capture_white_field')
-    @mock.patch('txm.TXM.setup_hdf_writer')
-    @mock.patch('txm.TXM.setup_detector')
+    # @mock.patch('txm.TXM.capture_projections')
+    # @mock.patch('txm.TXM.capture_dark_field')
+    # @mock.patch('txm.TXM.capture_white_field')
+    # @mock.patch('txm.TXM.setup_hdf_writer')
+    # @mock.patch('txm.TXM.setup_detector')
     def test_start_scan(self, *args):
         # Get rid of any old files hanging around
         if os.path.exists('/tmp/test_file.h5'):
@@ -97,11 +105,9 @@ class EnergyScanTests(unittest.TestCase):
         energies = np.linspace(8.6, 8.8, num=4)
         n_pre_dark = 4
         expected_projections = n_pre_dark + 2 * len(energies)
-        txm = energy_scan.energy_scan(energies=energies,
-                                      n_pre_dark=n_pre_dark,
-                                      exposure=0.77,
-                                      is_attached=False,
-                                      has_permit=True)
+        txm = energy_scan._energy_scan(txm, energies=energies,
+                                       n_pre_dark=n_pre_dark,
+                                       exposure=0.77)
         # Check that what happened was done correctly
         self.assertEqual(txm.capture_projections.call_count, len(energies))
         txm.capture_projections.assert_called_with()

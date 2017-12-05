@@ -17,6 +17,19 @@ variableDict = {
 def getVariableDict():
     return variableDict
 
+# Separate out the work-horse code so that it can be better tested
+# with a stubbed NanoTXM object.
+def _my_experiment(txm, param_a, param_b):
+    # Setup the microscope as desired
+    txm.setup_detector()
+    txm.setup_hdf_writer()
+    txm.open_shutters()
+    # Now do some tomography or XANES or whatever
+    pass
+    # Close the shutters and shutdown
+    txm.close_shutters()
+
+
 def my_experiment(param_a, param_b=9.8, has_permit=False):
     """My amazing experiment that will change the world.
     
@@ -35,16 +48,10 @@ def my_experiment(param_a, param_b=9.8, has_permit=False):
     txm = NanoTXM(has_permit=has_permit,
                   use_shutter_A=False,
                   use_shutter_B=True)
-    # Setup the microscope as desired
-    txm.setup_detector()
-    txm.setup_hdf_writer()
-    txm.open_shutters()
     # Run the experiment in this context manager so it stops properly
     with txm.run_scan():
-        # Now do some tomography or XANES or whatever
-        pass
-    # Close the shutters and shutdown
-    txm.close_shutters()
+        result = _my_experiment(txm, param_a, param_b)
+    return result
 
 def main():
     # The script was launched (not imported) so use the variable dictionary
