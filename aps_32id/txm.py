@@ -55,32 +55,21 @@ class NanoTXM(object):
     
     Attributes
     ----------
-    is_attached : bool
-      Is this computer able to communicate with the instrument. If
-      False, communication methods will be simulated.
     has_permit : bool
       Is the instrument authorized to open shutters and change the
       X-ray source. Could be false for any number of reasons, most
       likely the beamline is set for hutch B to operate.
-    ioc_prefix : str, optional
-      The prefix to use for the camera's I/O controller when conneting
-      certain PV's. PV descriptor's can then use "{ioc_prefix}" in
-      their PV nam and have it format automatically.
     use_shutter_A : bool, optional
       Whether shutter A should be used when getting light.
     use_shutter_B : bool, optional
       Whether shutter B should be used when getting light.
-    zp_diameter : float, optional
-      The diameter (in nanometers) of the zone-plate currently
-      installed in the instrument.
-    drn : float, optional
-      The width of the zoneplate's outermost diffraction zone.
     
     """
     zp_diameter = 180
     drn = 60
     gap_offset = 0.17 # Added to undulator gap setting
     pv_queue = None
+    ioc_prefix = "32idcPG3:"
     hdf_writer_ready = False
     tiff_writer_ready = False
     pg_external_trigger = True
@@ -249,10 +238,9 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False, ioc_prefix="32idcPG3:",
+    def __init__(self, has_permit=False,
                  use_shutter_A=False, use_shutter_B=True):
         self.has_permit = has_permit
-        self.ioc_prefix = ioc_prefix
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
     
@@ -364,13 +352,13 @@ class NanoTXM(object):
         -------
         val : bool
             True if value was set properly.
-
+        
         Raises
         ------
         exceptions_.TimeoutError
             If the PV did not reach the target value before the
             timeout expired.
-
+        
         """
         log_msg = "called wait_pv({name}, {val}, timeout={timeout})"
         log.debug(log_msg.format(name=pv_name, val=target_val,
@@ -380,7 +368,7 @@ class NanoTXM(object):
         startTime = time.time()
         # Enter into infinite loop polling the PV status
         while(True):
-            real_PV = self.__class__.__dict__[pv_name]
+            real_PV = getattr(type(self), pv_name)
             pv_val = real_PV.__get__(self)
             if (pv_val != target_val):
                 if timeout > -1:
@@ -435,10 +423,10 @@ class NanoTXM(object):
         msg = "Sample moved to (x={x:.2f}, y={y:.2f}, z={z:.2f}, θ={theta:.2f}°)"
         try:
             msg = msg.format(
-                x=self.Motor_Sample_Top_X,
-                y=self.Motor_SampleY,
-                z=self.Motor_Sample_Top_Z,
-                theta=self.Motor_SampleRot)
+                x=self.Motor_Sample_Top_X or 0.,
+                y=self.Motor_SampleY or 0.,
+                z=self.Motor_Sample_Top_Z or 0.,
+                theta=self.Motor_SampleRot or 0.)
         except ValueError:
             # Sometimes incomplete values come back as "None"
             msg = "Sample moved to (x={x}, y={y}, z={z}, θ={theta}°)"
@@ -460,7 +448,6 @@ class NanoTXM(object):
         energy = self.DCMputEnergy
         return energy
     
-    @permit_required
     def move_energy(self, energy, constant_mag=True,
                     correct_backlash=True):
         """Change the energy of the X-ray source and optics.
@@ -484,10 +471,10 @@ class NanoTXM(object):
         # Check that the energy given is valid for this instrument
         in_range = self.E_RANGE[0] <= energy <= self.E_RANGE[1]
         if not in_range:
-            msg = "Energy {energy} keV not in range {lower} - {upper} keV"
-            msg = msg.format(energy=energy, lower=self.E_RANGE[0],
-                             upper=self.E_RANGE[1])
-            raise exceptions_.EnergyError(msg)
+            raise exceptions_.EnergyError(
+                "Energy {energy} keV not in range {lower} - {upper} keV"
+                "".format(energy=energy, lower=self.E_RANGE[0],
+                          upper=self.E_RANGE[1]))
         # Get the current values
         old_energy = self.energy()
         old_CCD = self.CCD_Motor
@@ -534,10 +521,8 @@ class NanoTXM(object):
         time.sleep(1)
         self.DCMmvt = old_DCM_mode
         #self.wait_pv('EnergyWait', 0)
-        
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
-    @permit_required
     def open_shutters(self):
         """Open the shutters to allow light in. The specific shutter(s) that
         opens depends on the values of ``self.use_shutter_A`` and
@@ -573,7 +558,6 @@ class NanoTXM(object):
         else:
             warnings.warn("Neither shutter A nor B enabled.")
     
-    @permit_required
     def close_shutters(self):
         """Close the shutters to stop light in. The specific shutter(s) that
         closes depends on the values of ``self.use_shutter_A`` and
@@ -600,7 +584,7 @@ class NanoTXM(object):
             which_shutters = "shutter B"
         else:
             which_shutters = "no shutters"
-        if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
+        if self.use_shutter_A or self.use_shutter_B:
             duration = time.time() - starttime
             log.info("Closed %s in %.2f sec", which_shutters, duration)
         else:

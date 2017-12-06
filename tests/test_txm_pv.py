@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class PVDescriptorTestCase(unittest.TestCase):
+    
     class FakeTXM(object):
         pv_queue = []
         _pv_dict = {'ioc_sample_X': 7}

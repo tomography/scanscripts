@@ -54,7 +54,7 @@ def permit_required(real_func, return_value=None):
     """
     def wrapped_func(obj, *args, **kwargs):
         # Inner function that checks the status of permit
-        if obj.has_permit:
+        if obj.has_permit and False:
             ret = real_func(obj, *args, **kwargs)
         else:
             msg = "Shutter permit not granted."
@@ -70,7 +70,9 @@ class TxmPV(object):
     This allows accessing process variables as if they were object
     attributes. If the descriptor owner (ie. TXM) is not attached,
     this descriptor performs like a regular attribute. Optionally,
-    this can also be done for objects that have no shutter permit.
+    this can also be done for objects that have no shutter permit. If
+    access from a class, rather than an instance, it just returns the
+    descriptor itself.
     
     Attributes
     ----------
@@ -97,7 +99,7 @@ class TxmPV(object):
       If truthy, the string representation of the process variable
       will be given, otherwise the raw bytes will be returned for
       character array variables.
-    
+
     """
     _epicsPV = None
     put_complete = True
@@ -130,17 +132,22 @@ class TxmPV(object):
         return self._namestring.format(ioc_prefix=txm.ioc_prefix)
     
     def __get__(self, txm, type=None):
-        # Ask the PV for an updated value if possible
-        pv_name = self.pv_name(txm)
-        result = txm.pv_get(pv_name, as_string=self.as_string)
-        # Convert to correct datatype if given
-        if self.dtype is not None:
-            try:
-                result = self.dtype(result)
-            except TypeError:
-                msg = "Could not cast {} to type {}".format(result, self.dtype)
-                warnings.warn(msg, RuntimeWarning)
-                log.warn(msg)
+        if txm is None:
+            # Allows for the retrieval of the descriptor itself if
+            # called on a class
+            result = self
+        else:
+            # Ask the PV for an updated value if possible
+            pv_name = self.pv_name(txm)
+            result = txm.pv_get(pv_name, as_string=self.as_string)
+            # Convert to correct datatype if given
+            if self.dtype is not None:
+                try:
+                    result = self.dtype(result)
+                except TypeError:
+                    msg = "Could not cast {} to type {}".format(result, self.dtype)
+                    warnings.warn(msg, RuntimeWarning)
+                    log.warning(msg)
         return result
     
     def __set__(self, txm, val):

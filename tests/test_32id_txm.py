@@ -15,6 +15,7 @@ import warnings
 
 from aps_32id.txm import NanoTXM, permit_required
 from scanlib import TxmPV, exceptions_
+from tools import UnpluggedTXM
 
 
 log = logging.getLogger(__name__)
@@ -43,25 +44,10 @@ class PermitDecoratorsTestCase(unittest.TestCase):
 
 
 class TXMTestCase(unittest.TestCase):
-    class StubTXM(NanoTXM):
-        __pv_dict = {
-            'ioc_sample_X': 7,
-            '32ida:BraggEAO.VAL': 8.7, # DMCputEnergy
-            '32idcTXM:mxv:c1:m6.VAL': 3400, # CCD_Motor
-        }
-        def _pv_put(self, pv_name, value, *args, **kwargs):
-            self.__pv_dict[pv_name] = value
-            return True
-        
-        def pv_get(self, pv_name, *args, **kwargs):
-            return self.__pv_dict.get(pv_name, None)
-        
-        def wait_pv(self, *args, **kwargs):
-            return True
     
     def test_pv_put(self):
         # Have a dummy PV method to check if it actually calls
-        class StubTXM2(self.StubTXM):
+        class StubTXM2(UnpluggedTXM):
             _test_value = 0
             def _pv_put(self, pv_name, value, *args, **kwargs):
                 self._test_value = value
@@ -78,7 +64,7 @@ class TXMTestCase(unittest.TestCase):
     def test_pv_put_twice(self):
         """Check what happens if two non-blocking calls to pv_put are made."""
         # Have a dummy PV method to check if it actually calls
-        class StubTXM2(self.StubTXM):
+        class StubTXM2(UnpluggedTXM):
             _test_value = 0
             def _pv_put(self, pv_name, value, *args, **kwargs):
                 self._test_value = value
@@ -91,7 +77,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(len(txm.pv_queue), 1, "%d PV promises added to queue" % len(txm.pv_queue))
     
     def test_move_sample(self):
-        txm = self.StubTXM()
+        txm = UnpluggedTXM()
         txm.Motor_SampleX = 0.
         txm.Motor_SampleY = 0.
         txm.Motor_SampleZ = 0.
@@ -104,7 +90,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Motor_SampleRot, 45)
     
     def test_move_energy(self):
-        txm = self.StubTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True)
         # Check what happens if we accidentally give the energy in eV
         with self.assertRaises(exceptions_.EnergyError):
             txm.move_energy(8500)
@@ -117,7 +103,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.DCMmvt, 14)
     
     def test_setup_tiff_writer(self):
-        txm = self.StubTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True)
         txm.setup_tiff_writer(filename="hello.h5",
                               num_recursive_images=1, num_projections=5)
         # Test without recursive filter
@@ -131,7 +117,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.TIFF1_Capture, txm.CAPTURE_ENABLED)
     
     def test_setup_tiff_writer_recursive(self):
-        txm = self.StubTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True)
         txm.setup_tiff_writer(filename="hello.h5", num_recursive_images=3, num_projections=5)
         # Test *with* recursive filter
         self.assertEqual(txm.Proc1_Callbacks, 'Enable')
@@ -154,7 +140,7 @@ class TXMTestCase(unittest.TestCase):
     
     def test_setup_detector(self):
         log.error("test_setup_detector() needs to be checked")
-        txm = self.StubTXM(has_permit=False)
+        txm = UnpluggedTXM(has_permit=False)
         txm.pg_external_trigger = False
         txm.setup_detector(live_display=False)
         # Check that PV values were set
@@ -166,7 +152,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Cam1_TriggerMode, "Overlapped")
     
     def test_setup_hdf_writer(self):
-        txm = self.StubTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True)
         txm.Proc1_ArrayPort = "test_value"
         txm.setup_hdf_writer(num_projections=3, write_mode="stream")
         # Test without recursive filter
@@ -178,7 +164,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertTrue(txm.hdf_writer_ready)
     
     def test_setup_hdf_writer_recursive(self):
-        txm = self.StubTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True)
         txm.Proc1_ArrayPort = "test_value"
         txm.setup_hdf_writer(num_recursive_images=3,
                              num_projections=3, write_mode="stream")
@@ -198,18 +184,17 @@ class TXMTestCase(unittest.TestCase):
     
     @mock.patch('aps_32id.txm.EpicsPV')
     def test_open_shutters(self, EpicsPV):
-        txm = self.StubTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True)
         with warnings.catch_warnings(record=True) as w:
             txm.is_attached = True
             txm.use_shutter_A = False
             txm.use_shutter_B = False
             txm.shutters_are_open = True
             txm.open_shutters()
-            txm.is_attached = False
             self.assertEqual(len(w), 1)
             self.assertFalse(txm.shutters_are_open)
         # Now check with only shutter A
-        txm = self.StubTXM(has_permit=True, use_shutter_A=True,
+        txm = UnpluggedTXM(has_permit=True, use_shutter_A=True,
                            use_shutter_B=False)
         txm.ShutterA_Move_Status = 0
         txm.ShutterA_Open = None
@@ -228,22 +213,22 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.ShutterA_Open, None)
         self.assertEqual(txm.ShutterB_Open, 1)
     
-    @mock.patch('aps_32id.txm.EpicsPV')
-    def test_close_shutters(self, EpicsPV):
-        txm = self.StubTXM(has_permit=True)
+    def test_close_shutters(self):
+        txm = UnpluggedTXM(has_permit=True)
         with warnings.catch_warnings(record=True) as w:
             txm.ShutterA_Move_Status = 1
+            txm.ShutterA_Close = None
             txm.ShutterB_Move_Status = 1
+            txm.ShutterB_Close = None
             txm.shutters_are_open = True
-            txm.is_attached = True
             txm.use_shutter_A = False
             txm.use_shutter_B = False
             txm.close_shutters()
-            txm.is_attached = False
             self.assertEqual(len(w), 1)
-            self.assertFalse(txm.shutters_are_open)
+            self.assertEqual(txm.ShutterA_Close, None)
+            self.assertEqual(txm.ShutterB_Close, None)
         # Now check with only shutter A
-        txm = self.StubTXM(has_permit=True, use_shutter_A=True,
+        txm = UnpluggedTXM(has_permit=True, use_shutter_A=True,
                            use_shutter_B=False)
         txm.ShutterA_Close = None
         txm.ShutterB_Close = None
@@ -261,11 +246,11 @@ class TXMTestCase(unittest.TestCase):
     @unittest.skip('while loop runs forever')
     def test_trigger_projections(self):
         # Currently this test only checks that the method can run without error
-        txm = self.StubTXM()
+        txm = UnpluggedTXM()
         txm._trigger_projections(num_projections=3)
     
     def test_capture_projections(self):
-        txm = self.StubTXM()
+        txm = UnpluggedTXM()
         txm._trigger_projections = mock.MagicMock()
         # Check for warning if collecting with shutters closed
         txm.shutters_are_open = False
@@ -285,7 +270,7 @@ class TXMTestCase(unittest.TestCase):
         txm._trigger_projections.assert_called_with(num_projections=1)
     
     def test_capture_dark_field(self):
-        txm = self.StubTXM()
+        txm = UnpluggedTXM()
         txm._trigger_projections = mock.MagicMock()
         # Check for warning if collecting with shutters open
         txm.shutters_are_open = True
@@ -314,7 +299,7 @@ class TXMTestCase(unittest.TestCase):
         txm._trigger_projections.assert_called_once_with(num_projections=1)
     
     def test_capture_flat_field(self):
-        txm = self.StubTXM()
+        txm = UnpluggedTXM()
         txm._trigger_projections = mock.MagicMock()
         # Check for warning if collecting with shutters closed
         txm.shutters_are_open = False
@@ -341,7 +326,7 @@ class TXMTestCase(unittest.TestCase):
         txm._trigger_projections.assert_called_once_with(num_projections=1)
     
     def test_reset_ccd(self):
-        txm = self.StubTXM()
+        txm = UnpluggedTXM()
         txm.Cam1_ImageMode = mock.MagicMock()
         # Set some fake intial values to check if they change
         txm.Cam1_TriggerMode = "Nonsense"
@@ -358,7 +343,7 @@ class TXMTestCase(unittest.TestCase):
         txm.wait_pv.assert_called_once_with('Cam1_Acquire', txm.DETECTOR_ACQUIRE, timeout=2)
 
     def test_sample_position(self):
-        txm = self.StubTXM()
+        txm = UnpluggedTXM()
         txm.Motor_Sample_Top_X = 3
         txm.Motor_SampleY = 5
         txm.Motor_Sample_Top_Z = 7
@@ -366,7 +351,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.sample_position(), (3, 5, 7, 9))
     
     def test_run_scan(self):
-        txm = self.StubTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True)
         # Set the initial values
         init_position = (3., 4, 5, 90)
         txm.move_sample(*init_position)

@@ -17,6 +17,7 @@ import traceback
 import math
 import time
 import logging
+import warnings
 
 import numpy as np
 import h5py
@@ -74,7 +75,7 @@ def getVariableDict():
 def energy_scan(energies, exposure=0.5, n_pre_dark=5,
                 has_permit=False, sample_pos=(None,), out_pos=(None,),
                 constant_mag=True, stabilize_sleep_ms=1000,
-                num_recursive_images=1):
+                num_recursive_images=1, txm=None):
     """Collect a series of 2-dimensional projections across a range of energies.
     
     At each position, a sample projection and white-field projection
@@ -104,17 +105,21 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     stabilize_sleep_ms : int, optional
       How long, in milliseconds, to wait for the beam to stabilize
       before collecting projections.
-    num_recursive_images: int, optional
+    num_recursive_images : int, optional
       If greater than 1, several consecutive images can be collected.
+    txm : optional
+      An instance of the NanoTXM class. If not given, a new one will
+      be created. Mostly used for testing.
     """
     log.debug("Starting energy_scan()")
-    assert has_permit
+    assert not has_permit
     # txm.Fast_Shutter_Uniblitz = 1
     start_time = time.time()
     # Create the TXM object for this scan
-    txm = NanoTXM(has_permit=has_permit,
-              ioc_prefix=IOC_PREFIX, use_shutter_A=False,
-              use_shutter_B=True)
+    if txm is None:
+        txm = NanoTXM(has_permit=has_permit,
+                      ioc_prefix=IOC_PREFIX, use_shutter_A=False,
+                      use_shutter_B=True)
     # Prepare TXM for capturing data
     txm.setup_detector(exposure=exposure)
     total_projections = n_pre_dark + 2 * len(energies)
@@ -167,10 +172,16 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
             txm.capture_projections(num_projections=num_recursive_images)
     txm.close_shutters()
     # Add the energy array to the active HDF file
-    with txm.hdf_file(mode="r+") as hdf_f:
-        log.debug('Saving energies to file: %s', txm.hdf_filename)
-        hdf_f.create_dataset('/exchange/energy',
-                             data=energies)
+    try:
+        with txm.hdf_file(mode="r+") as hdf_f:
+            log.debug('Saving energies to file: %s', txm.hdf_filename)
+            hdf_f.create_dataset('/exchange/energy',
+                                 data=energies)
+    except OSError:
+        # Could not load HDF file, so raise a warning
+        msg = "Could not save energies to file %s" % txm.hdf_filename
+        warnings.warn(msg, RuntimeWarning)
+        log.warning(msg)
     # Log the duration and output file
     duration = time.time() - start_time
     log.info('Energy scan took %d sec and saved in file %s', duration, txm.hdf_filename)
