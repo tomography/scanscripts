@@ -7,7 +7,7 @@ python:
 # Commands to set up the environment
 install:
   - pip install -r requirements.txt
-  - pip install pytest
+  - pip install -e .
 # Command to run tests
 script:
   - pytest
