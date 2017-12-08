@@ -7,6 +7,7 @@ themselves.
 import logging
 logging.basicConfig(level=logging.ERROR)
 
+import warnings
 import unittest
 import six
 if six.PY2:
@@ -97,9 +98,12 @@ class EnergyScanTests(unittest.TestCase):
         n_pre_dark = 4
         expected_projections = n_pre_dark + 2 * len(energies)
         self.txm.Cam1_Acquire = self.txm.DETECTOR_IDLE
-        txm = energy_scan.energy_scan(energies=energies,
-                                      n_pre_dark=n_pre_dark,
-                                      exposure=0.77, txm=self.txm)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='Could not cast None')
+            warnings.filterwarnings('ignore', message='Could not save energies')
+            txm = energy_scan.energy_scan(energies=energies,
+                                          n_pre_dark=n_pre_dark,
+                                          exposure=0.77, txm=self.txm)
         # Check that what happened was done correctly
         self.assertEqual(txm.capture_projections.call_count, len(energies))
         txm.capture_projections.assert_called_with(num_projections=1)

@@ -177,7 +177,7 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
             log.debug('Saving energies to file: %s', txm.hdf_filename)
             hdf_f.create_dataset('/exchange/energy',
                                  data=energies)
-    except OSError:
+    except (OSError, IOError):
         # Could not load HDF file, so raise a warning
         msg = "Could not save energies to file %s" % txm.hdf_filename
         warnings.warn(msg, RuntimeWarning)

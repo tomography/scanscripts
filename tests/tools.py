@@ -1,4 +1,8 @@
-from unittest import mock
+import six
+if six.PY2:
+    import mock
+else:
+    from unittest import mock
 from aps_32id.txm import NanoTXM
 
 class UnpluggedTXM(NanoTXM):

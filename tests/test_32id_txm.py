@@ -311,6 +311,7 @@ class TXMTestCase(unittest.TestCase):
         # Test for collecting multiple projections
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
+            warnings.filterwarnings('ignore', message=".*TXM doesn't have beamline permit.")
             txm.open_shutters()
         txm._trigger_projections.reset_mock()
         with warnings.catch_warnings():
