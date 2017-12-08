@@ -3,11 +3,17 @@ scanscripts
 
 Experiment scanning scripts at APS.
 
+.. image:: https://travis-ci.org/tomography/scanscripts.svg?branch=master
+   :target: https://travis-ci.org/tomography/scanscripts
+   :alt: Build status	    
+
 .. image:: https://readthedocs.org/projects/scanscripts/badge/?version=latest
    :target: http://scanscripts.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation status
 
-This **scanscripts** contains the scripts used at various APS beamlines to collect data.
+
+This **scanscripts** library contains the scripts used at various APS
+beamlines to collect data.
 
 Documentation
 =============
