@@ -55,6 +55,8 @@ variableDict = {
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Recursive_Filter_N_Images': 1,
+    'Use_Fast_Shutter': 0,
+    'Fast_Shutter_Sleep_ms': 100,
 }
 
 IOC_PREFIX = '32idcPG3:'
@@ -75,7 +77,8 @@ def getVariableDict():
 def energy_scan(energies, exposure=0.5, n_pre_dark=5,
                 has_permit=False, sample_pos=(None,), out_pos=(None,),
                 constant_mag=True, stabilize_sleep_ms=1000,
-                num_recursive_images=1, txm=None):
+                num_recursive_images=1, use_fast_shutter=False,
+                fast_shutter_sleep=100, txm=None):
     """Collect a series of 2-dimensional projections across a range of energies.
     
     At each position, a sample projection and white-field projection
@@ -107,9 +110,16 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
       before collecting projections.
     num_recursive_images : int, optional
       If greater than 1, several consecutive images can be collected.
+    use_fast_shutter : bool, optional
+      Whether to open and shut the fast shutter before triggering
+      projections.
+    fast_shutter_sleep, int, optional
+      If using the fast shutter, how much time to sleep (in ms) after
+      changing its status.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
+    
     """
     log.debug("Starting energy_scan()")
     assert not has_permit
@@ -119,7 +129,8 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     if txm is None:
         txm = NanoTXM(has_permit=has_permit,
                       ioc_prefix=IOC_PREFIX, use_shutter_A=False,
-                      use_shutter_B=True)
+                      use_shutter_B=True, use_fast_shutter=use_fast_shutter,
+                      fast_shutter_sleep=fast_shutter_sleep)
     # Prepare TXM for capturing data
     txm.setup_detector(exposure=exposure)
     total_projections = n_pre_dark + 2 * len(energies)
@@ -226,14 +237,17 @@ def main():
         log.debug("Sleeping for %f min", sleep_min)
         time.sleep(sleep_min * 60.0)
     # Start the energy scan
-    energy_scan(energies=energies, has_permit=SHUTTER_PERMIT,
-                exposure=float(variableDict['ExposureTime']),
-                n_pre_dark=int(variableDict['PreDarkImages']),
-                sample_pos=sample_pos, out_pos=out_pos,
-                stabilize_sleep_ms=stabilize_sleep_ms,
-                constant_mag=constant_mag,
-                num_recursive_images=num_recursive_images)
-
+    energy_scan(
+        energies=energies, has_permit=SHUTTER_PERMIT,
+        exposure=float(variableDict['ExposureTime']),
+        n_pre_dark=int(variableDict['PreDarkImages']),
+        sample_pos=sample_pos, out_pos=out_pos,
+        stabilize_sleep_ms=stabilize_sleep_ms,
+        constant_mag=constant_mag,
+        num_recursive_images=num_recursive_images,
+        use_fast_shutter=bool(variableDict['Use_Fast_Shutter']),
+        fast_shutter_sleep=bool(variableDict['Fast_Shutter_Sleep_ms'])
+    )
 
 if __name__ == '__main__':
     main()

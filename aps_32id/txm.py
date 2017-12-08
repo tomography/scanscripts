@@ -79,6 +79,8 @@ class NanoTXM(object):
     # Commonly used flags for PVs
     SHUTTER_OPEN = 0
     SHUTTER_CLOSED = 1
+    FAST_SHUTTER_CLOSED = 0
+    FAST_SHUTTER_OPEN = 1
     RECURSIVE_FILTER_TYPE = "RecursiveAve"
     CAPTURE_ENABLED = 1
     CAPTURE_DISABLED = 0
@@ -175,7 +177,8 @@ class NanoTXM(object):
     ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL')
     ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
     # State 0 = Close, 1 = Open
-    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control', permit_required=True)
+    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control', permit_required=True,
+                                  wait=False)
     
     # Fly scan PV's for nano-ct TXM using Profession Instrument air-bearing stage
     Fly_ScanDelta = TxmPV('32idcTXM:PSOFly3:scanDelta')
@@ -238,11 +241,13 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False,
-                 use_shutter_A=False, use_shutter_B=True):
+    def __init__(self, has_permit=False, use_shutter_A=False,
+                 use_shutter_B=True, use_fast_shutter=False, fast_shutter_sleep=0):
         self.has_permit = has_permit
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
+        self.use_fast_shutter = use_fast_shutter
+        self.fast_shutter_sleep = fast_shutter_sleep
     
     def pv_get(self, pv_name, *args, **kwargs):
         """Retrieve the current process variable value.
@@ -744,6 +749,11 @@ class NanoTXM(object):
         log.debug("Triggering %d projection%s", num_projections, suffix)
         self.Cam1_ImageMode = "Single"
         self.Cam1_NumImages = 1
+        # Open the fast shutter if necessary
+        if self.use_fast_shutter:
+            self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_OPEN
+            time.sleep(self.fast_shutter_sleep / 1000)
+        # Collect each frame one at a time
         for i in range(num_projections):
             self.Cam1_Acquire = self.DETECTOR_ACQUIRE
             self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
@@ -752,6 +762,10 @@ class NanoTXM(object):
                 time.sleep(0.01)
                 self.Cam1_SoftwareTrigger = 1
             self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
+        # Close the fast shutter
+        if self.use_fast_shutter:
+            self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_CLOSED
+            time.sleep(self.fast_shutter_sleep / 1000)
     
     def capture_projections(self, num_projections=1):
         """Trigger the capturing of projection images from the detector.

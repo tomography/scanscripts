@@ -339,7 +339,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Proc1_Filter_Callbacks, "Every array")
         self.assertEqual(txm.Cam1_ImageMode, "Continuous")
         self.assertEqual(txm.Cam1_Display, 1)
-        self.assertEqual(txm.Cam1_Acquire, txm.DETECTOR_ACQUIRE)
+        self.assertEqual(txm._pv_dict['cam1:Acquire'], txm.DETECTOR_ACQUIRE)
         # Check that the method waits for cam1_acquire
         txm.wait_pv.assert_called_once_with('Cam1_Acquire', txm.DETECTOR_ACQUIRE, timeout=2)
 
@@ -365,3 +365,24 @@ class TXMTestCase(unittest.TestCase):
         # Check that the value was restored when the context completed
         self.assertEqual(txm.sample_position(), init_position)
         self.assertEqual(txm.energy(), 8.7)
+    
+    def test_fast_shutter(self):
+        """Check if the fast hardware shutter gets triggered."""
+        # Check that it does nothing if fast shutter is disabled
+        txm = UnpluggedTXM(use_fast_shutter=False, has_permit=True)
+        txm._trigger_projections()
+        uniblitz_pv = type(txm).Fast_Shutter_Uniblitz
+        pv_name = uniblitz_pv.pv_name(txm=txm)
+        self.assertNotIn((pv_name, 1),
+                         txm._put_calls, 'Fast shutter was opened')
+        self.assertNotIn((pv_name, 0),
+                         txm._put_calls, 'Fast shutter was closed')
+        # Check that it uses the fast shutter if enabled
+        txm = UnpluggedTXM(use_fast_shutter=True, has_permit=True)
+        txm._trigger_projections()
+        uniblitz_pv = type(txm).Fast_Shutter_Uniblitz
+        pv_name = uniblitz_pv.pv_name(txm=txm)
+        self.assertIn((pv_name, 1),
+                      txm._put_calls, 'Fast shutter not opened')
+        self.assertIn((pv_name, 0),
+                      txm._put_calls, 'Fast shutter not closed')
