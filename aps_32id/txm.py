@@ -157,13 +157,13 @@ class NanoTXM(object):
     # Zone plate:
     zone_plate_x = TxmPV('32idcTXM:mcs:c2:m2.VAL')
     zone_plate_y = TxmPV('32idc01:m110.VAL')
-    zone_plate_z = TxmPV('32idcTXM:mcs:c2:m3.VAL')
+    zone_plate_2_z = TxmPV('32idcTXM:mcs:c2:m3.VAL')
     # MST2 = vertical axis
     # pv.Smaract_mode.put(':MST3,100,500,100')
     Smaract_mode = TxmPV('32idcTXM:mcsAsyn1.AOUT')
     zone_plate_2_x = TxmPV('32idcTXM:mcs:c0:m3.VAL')
     zone_plate_2_y = TxmPV('32idcTXM:mcs:c0:m1.VAL')
-    zone_plate_2_z = TxmPV('32idcTXM:mcs:c0:m2.VAL')
+    zone_plate_z = TxmPV('32idcTXM:mcs:c0:m2.VAL')
     
     # CCD motors:
     CCD_Motor = TxmPV('32idcTXM:mxv:c1:m6.VAL', float)
@@ -557,7 +557,7 @@ class NanoTXM(object):
             which_shutters = "shutter B"
         else:
             which_shutters = "no shutters"
-        if self.use_shutter_A or self.use_shutter_B or not self.is_attached:
+        if self.use_shutter_A or self.use_shutter_B:
             duration = time.time() - starttime
             log.debug("Opened %s in %.2f sec", which_shutters, duration)
         else:
@@ -906,7 +906,6 @@ class NanoTXM(object):
         self.reset_ccd()
         # Open the fast shutter #### FOR SUJI
         self.Fast_Shutter_Uniblitz = 1
-        self.wait_pv('HDF1_Capture', 1)
     
     def reset_ccd(self):
         log.debug("Resetting CCD")

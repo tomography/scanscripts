@@ -36,26 +36,26 @@ __all__ = ['energy_scan']
 
 variableDict = {
     'PreDarkImages': 5,
-    'SampleXOut': 0.0,
+    # 'SampleXOut': 0.0,
     # 'SampleYOut': 0.0,
-    # 'SampleZOut': 12.5,
-    # 'SampleRotOut': 90, # In degrees
-    'SampleXIn': 0.0,
+    'SampleZOut': -9,
+    'SampleRotOut': 90, # In degrees
+    # 'SampleXIn': 0.0,
     # 'SampleYIn': 0.0,
-    # 'SampleZIn': 0.0,
-    # 'SampleRotIn': 0, # In degrees
+    'SampleZIn': 0.0,
+    'SampleRotIn': 0, # In degrees
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
-    'ExposureTime': 1,
+    'ExposureTime': 3,
     'FileWriteMode': 'Stream',
-    'Energy_Start': 8.5,
-    'Energy_End': 8.980, # Inclusive
+    'Energy_Start': 6.519,
+    'Energy_End': 6.569, # Inclusive
     'Energy_Step': 0.001,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Recursive_Filter_N_Images': 1,
-    'Use_Fast_Shutter': 0,
+    'Use_Fast_Shutter': 1,
     'Fast_Shutter_Sleep_ms': 100,
 }
 
@@ -122,13 +122,12 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
     
     """
     log.debug("Starting energy_scan()")
-    assert not has_permit
-    # txm.Fast_Shutter_Uniblitz = 1
+    assert has_permit
     start_time = time.time()
     # Create the TXM object for this scan
     if txm is None:
         txm = NanoTXM(has_permit=has_permit,
-                      ioc_prefix=IOC_PREFIX, use_shutter_A=False,
+                      use_shutter_A=False,
                       use_shutter_B=True, use_fast_shutter=use_fast_shutter,
                       fast_shutter_sleep=fast_shutter_sleep)
     # Prepare TXM for capturing data
@@ -241,7 +240,8 @@ def main():
         energies=energies, has_permit=SHUTTER_PERMIT,
         exposure=float(variableDict['ExposureTime']),
         n_pre_dark=int(variableDict['PreDarkImages']),
-        sample_pos=sample_pos, out_pos=out_pos,
+        sample_pos=sample_pos,
+        out_pos=out_pos,
         stabilize_sleep_ms=stabilize_sleep_ms,
         constant_mag=constant_mag,
         num_recursive_images=num_recursive_images,
