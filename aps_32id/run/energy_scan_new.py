@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 #######################
-##### To be tested!
 
 '''For each energy step, a projection and then a flat field is
 acquired. The script calls the move_energy method from the TXM class.
@@ -61,7 +60,7 @@ variableDict = {
 }
 
 IOC_PREFIX = '32idcPG3:'
-SHUTTER_PERMIT = True
+SHUTTER_PERMIT = False
 DEFAULT_ENERGIES = np.arange(
     variableDict['Energy_Start'],
     variableDict['Energy_End'] + variableDict['Energy_Step'],

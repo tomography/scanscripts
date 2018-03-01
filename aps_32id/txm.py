@@ -344,7 +344,7 @@ class NanoTXM(object):
         
         Parameters
         ----------
-        pv : str
+        pv_name : str
           The process variable to be monitored, as defined by
           the pyepics system.
         target_val
@@ -377,12 +377,15 @@ class NanoTXM(object):
             pv_val = real_PV.__get__(self)
             if (pv_val != target_val):
                 if timeout > -1:
+                    # Check for timeouts and break out of the loop
                     curTime = time.time()
                     diffTime = curTime - startTime
                     if diffTime >= timeout:
-                        msg = "Timed out '{}' ({}) after {}s"
-                        msg = msg.format(pv_name, target_val, timeout)
-                        raise exceptions_.TimeoutError(msg)
+                        msg = ("Timed out '{}' ({}) after {}s"
+                               "".format(pv_name, target_val, timeout))
+                        warnings.warn(msg, RuntimeWarning)
+                        log.warn(msg)
+                        break
                 time.sleep(.01)
             else:
                 log.debug("Ended wait_pv()")
@@ -483,13 +486,17 @@ class NanoTXM(object):
         # Get the current values
         old_energy = self.energy()
         old_CCD = self.CCD_Motor
-        old_wavelength = kev_to_nm(old_energy)
-        old_ZP_focal = self.zp_diameter * self.drn / (1000.0 * old_wavelength)
-        inner =  math.sqrt(old_CCD**2 - 4.0 * old_CCD * old_ZP_focal)
-        old_D = (old_CCD + inner) / 2.0
-        # Calculate target values
-        new_wavelength = kev_to_nm(energy)
-        new_ZP_focal = self.zp_diameter * self.drn / (1000.0 * new_wavelength)
+        try:
+            old_wavelength = kev_to_nm(old_energy)
+            old_ZP_focal = self.zp_diameter * self.drn / (1000.0 * old_wavelength)
+            inner = math.sqrt(old_CCD**2 - 4.0 * old_CCD * old_ZP_focal)
+            old_D = (old_CCD + inner) / 2.0
+            # Calculate target values
+            new_wavelength = kev_to_nm(energy)
+            new_ZP_focal = self.zp_diameter * self.drn / (1000.0 * new_wavelength)
+        except (ValueError, TypeError) as e:
+            warnings.warn(str(e), RuntimeWarning)
+            return
         # Prepare the instrument for moving energy
         old_DCM_mode = self.DCMmvt
         self.DCMmvt = 1
@@ -534,6 +541,12 @@ class NanoTXM(object):
         ``self.use_shutter_B``.
         
         """
+        # If not permit enabled, don't do anything
+        if not self.has_permit:
+            warnings.warn("Shutters not opened because TXM does not have permit",
+                          RuntimeWarning)
+            return
+        # TXM has shutter permit, so open the shutters
         starttime = time.time()
         if self.use_shutter_A:
             log.debug("Opening shutter A")
@@ -569,11 +582,17 @@ class NanoTXM(object):
         ``self.use_shutter_B``.
         
         """
+        # If not permit enabled, don't do anything
+        if not self.has_permit:
+            warnings.warn("Shutters not closed because TXM does not have permit",
+                          RuntimeWarning)
+            return
+        # TXM has shutter permit, so open the shutters
         starttime = time.time()
         if self.use_shutter_A:
             log.debug("Closing shutter A")
             self.ShutterA_Close = 1
-            self.wait_pv('ShutteA_Move_Status', self.SHUTTER_CLOSED)
+            self.wait_pv('ShutterA_Move_Status', self.SHUTTER_CLOSED)
         if self.use_shutter_B:
             log.debug("Closing shutter B")
             self.ShutterB_Close = 1
@@ -891,21 +910,33 @@ class NanoTXM(object):
         init_position = self.sample_position()
         init_E = self.energy()
         # Return to the inner code block
-        yield
-        # Stop TIFF and HDF collection
-        self.TIFF1_AutoSave = 'No'
-        self.TIFF1_Capture = 0
-        self.HDF1_Capture = 0
-        self.wait_pv('HDF1_Capture', 0)
-        # Restore the saved initial motor positions
-        self.move_sample(*init_position)
-        self.move_energy(init_E)
-        # Close the shutter
-        self.close_shutters()
-        # Reset the CCD so it's in continuous mode
-        self.reset_ccd()
-        # Open the fast shutter #### FOR SUJI
-        self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_OPEN
+        try:
+            yield
+        except Exception as e:
+            log.info("Scan finished with exception ", str(e))
+            raise
+        else:
+            log.info("Scan finished.")
+        finally:
+            log.debug("Shutting down")
+            # Stop TIFF and HDF collection
+            self.TIFF1_AutoSave = 'No'
+            self.TIFF1_Capture = 0
+            self.HDF1_Capture = 0
+            self.wait_pv('HDF1_Capture', 0)
+            # Restore the saved initial motor positions
+            self.move_sample(*init_position)
+            try:
+                self.move_energy(init_E)
+            except exceptions_.EnergyError as e:
+                log.warning(e)
+            # Close the shutter
+            self.close_shutters()
+            # Reset the CCD so it's in continuous mode
+            self.reset_ccd()
+            # Open the fast shutter #### FOR SUJI
+            self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_OPEN
+            log.debug("Finished shutting down")
     
     def reset_ccd(self):
         log.debug("Resetting CCD")
