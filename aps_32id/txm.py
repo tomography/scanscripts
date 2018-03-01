@@ -905,7 +905,7 @@ class NanoTXM(object):
         # Reset the CCD so it's in continuous mode
         self.reset_ccd()
         # Open the fast shutter #### FOR SUJI
-        self.Fast_Shutter_Uniblitz = 1
+        self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_OPEN
     
     def reset_ccd(self):
         log.debug("Resetting CCD")

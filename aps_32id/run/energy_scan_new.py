@@ -55,6 +55,7 @@ variableDict = {
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Recursive_Filter_N_Images': 1,
+    'Repetitions': 1,
     'Use_Fast_Shutter': 1,
     'Fast_Shutter_Sleep_ms': 100,
 }
@@ -74,76 +75,14 @@ def getVariableDict():
     return variableDict
 
 
-def energy_scan(energies, exposure=0.5, n_pre_dark=5,
-                has_permit=False, sample_pos=(None,), out_pos=(None,),
-                constant_mag=True, stabilize_sleep_ms=1000,
-                num_recursive_images=1, use_fast_shutter=False,
-                fast_shutter_sleep=100, txm=None):
-    """Collect a series of 2-dimensional projections across a range of energies.
+def _capture_energy_frames(txm, energies, constant_mag,
+                           stabilize_sleep_ms, sample_pos, out_pos,
+                           num_recursive_images):
+    """A helper method for collected a set of energy frames.
     
-    At each position, a sample projection and white-field projection
-    will be collected by moving the sample along the X direction.
-    
-    Parameters
-    ----------
-    energies : np.ndarray
-      An array with the list of energies to scan, in keV.
-    exposure : float, optional
-      How long to collect each frame for, in seconds.
-    n_pre_dark : int, optional
-      How many dark-field projections to collect before starting the
-      energy scan.
-    is_attached : bool, optional
-      Determines whether the instrument is available.
-    has_permit : bool, optional
-      Does the user have permission to open the shutters and change
-      source energy.
-    sample_pos : 4-tuple, optional
-      (x, y, z, θ) tuple for positioning the sample in the beam.
-    out_pos : 4-tuple, optional
-      (x, y, z, θ) tuple for removing the sample from the beam.
-    constant_mag : bool, optional
-      Whether to adjust the camera position to maintain a constant
-      focus.
-    stabilize_sleep_ms : int, optional
-      How long, in milliseconds, to wait for the beam to stabilize
-      before collecting projections.
-    num_recursive_images : int, optional
-      If greater than 1, several consecutive images can be collected.
-    use_fast_shutter : bool, optional
-      Whether to open and shut the fast shutter before triggering
-      projections.
-    fast_shutter_sleep, int, optional
-      If using the fast shutter, how much time to sleep (in ms) after
-      changing its status.
-    txm : optional
-      An instance of the NanoTXM class. If not given, a new one will
-      be created. Mostly used for testing.
+    The TXM should already be set up before calling this function.
     
     """
-    log.debug("Starting energy_scan()")
-    assert has_permit
-    start_time = time.time()
-    # Create the TXM object for this scan
-    if txm is None:
-        txm = NanoTXM(has_permit=has_permit,
-                      use_shutter_A=False,
-                      use_shutter_B=True, use_fast_shutter=use_fast_shutter,
-                      fast_shutter_sleep=fast_shutter_sleep)
-    # Prepare TXM for capturing data
-    txm.setup_detector(exposure=exposure)
-    total_projections = n_pre_dark + 2 * len(energies)
-    txm.setup_hdf_writer(num_projections=total_projections,
-                         num_recursive_images=num_recursive_images)
-    # Capture pre dark field images
-    if n_pre_dark > 0:
-        txm.close_shutters()
-        log.info('Capturing %d Pre Dark Field images', n_pre_dark)
-        txm.capture_dark_field(num_projections=n_pre_dark * num_recursive_images)
-    # Calculate the array of energies that will be scanned
-    log.info('Capturing %d energies', len(energies))
-    # Collect each energy frame
-    txm.open_shutters()
     correct_backlash = True # First energy only
     for idx, energy in enumerate(tqdm.tqdm(energies, "Energy scan")):
         log.debug('Preparing to capture energy: %f keV', energy)
@@ -180,21 +119,105 @@ def energy_scan(energies, exposure=0.5, n_pre_dark=5,
             txm.move_sample(*sample_pos)
             log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
             txm.capture_projections(num_projections=num_recursive_images)
-    txm.close_shutters()
-    # Add the energy array to the active HDF file
-    try:
-        with txm.hdf_file(mode="r+") as hdf_f:
-            log.debug('Saving energies to file: %s', txm.hdf_filename)
-            hdf_f.create_dataset('/exchange/energy',
-                                 data=energies)
-    except (OSError, IOError):
-        # Could not load HDF file, so raise a warning
-        msg = "Could not save energies to file %s" % txm.hdf_filename
-        warnings.warn(msg, RuntimeWarning)
-        log.warning(msg)
-    # Log the duration and output file
-    duration = time.time() - start_time
-    log.info('Energy scan took %d sec and saved in file %s', duration, txm.hdf_filename)
+
+
+def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
+                    has_permit=False, sample_pos=(None,), out_pos=(None,),
+                    constant_mag=True, stabilize_sleep_ms=1000,
+                    num_recursive_images=1, repetitions=1,
+                    use_fast_shutter=False, fast_shutter_sleep=100,
+                    txm=None):
+    """Collect a series of 2-dimensional projections across a range of energies.
+    
+    At each position, a sample projection and white-field projection
+    will be collected by moving the sample along the X direction.
+    
+    Parameters
+    ----------
+    energies : np.ndarray
+      An array with the list of energies to scan, in keV.
+    exposure : float, optional
+      How long to collect each frame for, in seconds.
+    n_pre_dark : int, optional
+      How many dark-field projections to collect before starting the
+      energy scan.
+    is_attached : bool, optional
+      Determines whether the instrument is available.
+    has_permit : bool, optional
+      Does the user have permission to open the shutters and change
+      source energy.
+    sample_pos : 4-tuple, optional
+      (x, y, z, θ) tuple for positioning the sample in the beam.
+    out_pos : 4-tuple, optional
+      (x, y, z, θ) tuple for removing the sample from the beam.
+    constant_mag : bool, optional
+      Whether to adjust the camera position to maintain a constant
+      focus.
+    stabilize_sleep_ms : int, optional
+      How long, in milliseconds, to wait for the beam to stabilize
+      before collecting projections.
+    num_recursive_images : int, optional
+      If greater than 1, several consecutive images can be collected.
+    repetitions : int, optional
+      How many times to run this energy scan, including the first one.
+    use_fast_shutter : bool, optional
+      Whether to open and shut the fast shutter before triggering
+      projections.
+    fast_shutter_sleep, int, optional
+      If using the fast shutter, how much time to sleep (in ms) after
+      changing its status.
+    txm : optional
+      An instance of the NanoTXM class. If not given, a new one will
+      be created. Mostly used for testing.
+    
+    """
+    log.debug("Starting run_energy_scan()")
+    assert not has_permit
+    start_time = time.time()
+    total_projections = n_pre_dark + 2 * len(energies)
+    # Create the TXM object for this scan
+    if txm is None:
+        txm = NanoTXM(has_permit=has_permit,
+                      use_shutter_A=False,
+                      use_shutter_B=True, use_fast_shutter=use_fast_shutter,
+                      fast_shutter_sleep=fast_shutter_sleep)
+    # Execute the actual scan script
+    with txm.run_scan():
+        # Prepare TXM for capturing data
+        txm.setup_detector(exposure=exposure)
+        # Collect repetitions of the energy scan
+        for rep in range(repetitions):
+            txm.setup_hdf_writer(num_projections=total_projections,
+                                 num_recursive_images=num_recursive_images)
+            # Capture pre dark field images
+            if n_pre_dark > 0:
+                txm.close_shutters()
+                log.info('Capturing %d Pre Dark Field images', n_pre_dark)
+                txm.capture_dark_field(num_projections=n_pre_dark * num_recursive_images)
+            # Calculate the array of energies that will be scanned
+            log.info('Capturing %d energies', len(energies))
+            # Collect frames at each energy
+            txm.open_shutters()
+            _capture_energy_frames(txm=txm, energies=energies,
+                                   constant_mag=constant_mag,
+                                   stabilize_sleep_ms=stabilize_sleep_ms,
+                                   sample_pos=sample_pos, out_pos=out_pos,
+                                   num_recursive_images=num_recursive_images)
+            txm.close_shutters()
+            # Add the energy array to the active HDF file
+            try:
+                with txm.hdf_file(mode="r+") as hdf_f:
+                    log.debug('Saving energies to file: %s', txm.hdf_filename)
+                    hdf_f.create_dataset('/exchange/energy',
+                                         data=energies)
+            except (OSError, IOError):
+                # Could not load HDF file, so raise a warning
+                msg = "Could not save energies to file %s" % txm.hdf_filename
+                warnings.warn(msg, RuntimeWarning)
+                log.warning(msg)
+        # Log the duration and output file
+        duration = time.time() - start_time
+        log.info('Energy scan took %d sec and saved in file %s', duration, txm.hdf_filename)
     return txm
 
 
@@ -231,12 +254,13 @@ def main():
     sleep_min = float(variableDict.get('StartSleep_min', 0))
     stabilize_sleep_ms = float(variableDict.get("StabilizeSleep_ms"))
     num_recursive_images = int(variableDict['Recursive_Filter_N_Images'])
+    repetitions = int(variableDict['Repetitions'])
     constant_mag = bool(variableDict['constant_mag'])
     if sleep_min > 0:
         log.debug("Sleeping for %f min", sleep_min)
         time.sleep(sleep_min * 60.0)
     # Start the energy scan
-    energy_scan(
+    run_energy_scan(
         energies=energies, has_permit=SHUTTER_PERMIT,
         exposure=float(variableDict['ExposureTime']),
         n_pre_dark=int(variableDict['PreDarkImages']),
@@ -245,6 +269,7 @@ def main():
         stabilize_sleep_ms=stabilize_sleep_ms,
         constant_mag=constant_mag,
         num_recursive_images=num_recursive_images,
+        repetitions=repetitions,
         use_fast_shutter=bool(variableDict['Use_Fast_Shutter']),
         fast_shutter_sleep=bool(variableDict['Fast_Shutter_Sleep_ms'])
     )

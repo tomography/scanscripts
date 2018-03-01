@@ -6,15 +6,18 @@ else:
 from aps_32id.txm import NanoTXM
 
 class UnpluggedTXM(NanoTXM):
-    pv_queue = []
     _pv_dict = {
         'ioc_sample_X': 7,
         '32ida:BraggEAO.VAL': 8.7, # DMCputEnergy
         '32idcTXM:mxv:c1:m6.VAL': 3400, # CCD_Motor
     }
-    _put_calls = []
-    _get_kwargs = {}
     ioc_prefix = ''
+
+    def __init__(self, *args, **kwargs):
+        self.pv_queue = []
+        self._put_calls = []
+        self._get_kwargs = {}
+        super(UnpluggedTXM, self).__init__(*args, **kwargs)
     
     def pv_get(self, pv_name, *args, **kwargs):
         if pv_name == 'cam1:Acquire':

@@ -73,7 +73,6 @@ class TomoStepScanTests(ScriptTestCase):
                                                      num_recursive_images=3)
 
 
-# @unittest.skip('Need to re-work the integrations tests')
 class EnergyScanTests(unittest.TestCase):
     def setUp(self):
         self.txm = TXMStub(has_permit=True)
@@ -98,14 +97,15 @@ class EnergyScanTests(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message='Could not cast None')
             warnings.filterwarnings('ignore', message='Could not save energies')
-            txm = energy_scan.energy_scan(energies=energies,
-                                          n_pre_dark=n_pre_dark,
-                                          exposure=0.77, txm=self.txm)
+            txm = energy_scan.run_energy_scan(energies=energies,
+                                              n_pre_dark=n_pre_dark,
+                                              exposure=0.77, repetitions=2,
+                                              txm=self.txm)
         # Check that what happened was done correctly
-        self.assertEqual(txm.capture_projections.call_count, len(energies))
+        self.assertEqual(txm.capture_projections.call_count, 2*len(energies))
         txm.capture_projections.assert_called_with(num_projections=1)
-        txm.capture_dark_field.assert_called_once_with(num_projections=4)
+        txm.capture_dark_field.assert_called_with(num_projections=4)
         # Verify the detector and hdf writer were colled properly
-        txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections,
+        txm.setup_hdf_writer.assert_called_with(num_projections=expected_projections,
                                                      num_recursive_images=1)
-        txm.setup_detector.assert_called_once_with(exposure=0.77)
+        txm.setup_detector.assert_called_with(exposure=0.77)
