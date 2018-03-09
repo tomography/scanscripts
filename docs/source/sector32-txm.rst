@@ -209,7 +209,19 @@ PV's that should not be changed can be given the
 
    There is no check that the C-hutch actually *has* permission to
    open the shutter, etc. It's controlled only by the ``has_permit``
-   argument given to the :py:class:`~tomo.32id.txm.TXM`
+   argument given to the :py:class:`~aps_32id.txm.TXM`
    constructor. Please be considerate.
+
+Fast Shutter
+------------
+
+The instrument is equipped with a "fast shutter" than protects the
+specimen from excessive X-ray exposure. Calling
+:py:meth:`~aps_32id.txm.TXM.enable_fast_shutter` turns this feature
+on. If using the :py:meth:`~aps_32id.txm.TXM.run_scan` context manage
+(recommended), the fast shutter is automatically disabled, otherwise
+the :py:meth:`~aps_32id.txm.TXM.disable_fast_shutter` method should be
+called to return to normal behavior. The fast shutter respects
+:py:attribute:`~aps_32id.txm.TXM.exposure_time` attribute.
 
 .. _submit an issue: https://github.com/tomography/scanscripts/issues

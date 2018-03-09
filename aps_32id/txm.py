@@ -74,6 +74,7 @@ class NanoTXM(object):
     tiff_writer_ready = False
     pg_external_trigger = True
     shutters_are_open = False
+    fast_shutter_enabled = True
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
     # Commonly used flags for PVs
@@ -81,6 +82,15 @@ class NanoTXM(object):
     SHUTTER_CLOSED = 1
     FAST_SHUTTER_CLOSED = 0
     FAST_SHUTTER_OPEN = 1
+    FAST_SHUTTER_TRIGGERED = 1
+    FAST_SHUTTER_DONE = 0
+    FAST_SHUTTER_TRIGGER_MANUAL = 0
+    FAST_SHUTTER_TRIGGER_ROTATION = 1
+    FAST_SHUTTER_CONTROL_MANUAL = 0
+    FAST_SHUTTER_CONTROL_AUTO = 1
+    FAST_SHUTTER_RELAY_DIRECT = 0
+    FAST_SHUTTER_RELAY_SYNCED = 1
+    FAST_SHUTTER_TRIGGER_ENCODER = 1 # TXM Ensemble PSO
     RECURSIVE_FILTER_TYPE = "RecursiveAve"
     CAPTURE_ENABLED = 1
     CAPTURE_DISABLED = 0
@@ -175,10 +185,15 @@ class NanoTXM(object):
     ShutterB_Open = TxmPV('32idb:fbShutter:Open.PROC', permit_required=True)
     ShutterB_Close = TxmPV('32idb:fbShutter:Close.PROC', permit_required=True)
     ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL')
-    ExternalShutter_Trigger = TxmPV('32idcTXM:shutCam:go', permit_required=True)
-    # State 0 = Close, 1 = Open
-    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control', permit_required=True,
-                                  wait=False)
+    
+    # Fast shutter controls
+    Fast_Shutter_Open = TxmPV('32idcTXM:shutCam:ShutterManual')
+    Fast_Shutter_Exposure = TxmPV('32idcTXM:shutCam:tDly')
+    Fast_Shutter_Delay = TxmPV('32idcTXM:shutCam:tExpose')
+    Fast_Shutter_Trigger_Mode = TxmPV('32idcTXM:shutCam:Triggered')
+    Fast_Shutter_Control = TxmPV('32idcTXM:shutCam:ShutterCtrl')
+    Fast_Shutter_Relay = TxmPV('32idcTXM:shutCam:Enable')
+    Fast_Shutter_Trigger_Source = TxmPV('32idcTXM:flyTriggerSelect')
     
     # Fly scan PV's for nano-ct TXM using Profession Instrument air-bearing stage
     Fly_ScanDelta = TxmPV('32idcTXM:PSOFly3:scanDelta')
@@ -200,7 +215,6 @@ class NanoTXM(object):
     
     # Misc PV's
     Image1_Callbacks = TxmPV('{ioc_prefix}image1:EnableCallbacks')
-    ExternShutterExposure = TxmPV('32idcTXM:shutCam:tExpose')
     SetSoftGlueForStep = TxmPV('32idcTXM:SG3:MUX2-1_SEL_Signal')
     # ClearTheta = TxmPV('32idcTXM:recPV:PV1_clear')
     ExternShutterDelay = TxmPV('32idcTXM:shutCam:tDly')
@@ -242,19 +256,17 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
     def __init__(self, has_permit=False, use_shutter_A=False,
-                 use_shutter_B=True, use_fast_shutter=False, fast_shutter_sleep=0):
+                 use_shutter_B=True):
         self.has_permit = has_permit
         self.use_shutter_A = use_shutter_A
         self.use_shutter_B = use_shutter_B
-        self.use_fast_shutter = use_fast_shutter
-        self.fast_shutter_sleep = fast_shutter_sleep
     
     def pv_get(self, pv_name, *args, **kwargs):
         """Retrieve the current process variable value.
         
         Parameters
         ----------
-        *args, **kwargs
+        args, kwargs
           Extra arguments that get passed to :py:meth:``epics.PV.get``
         
         """
@@ -277,7 +289,7 @@ class NanoTXM(object):
         ----------
         wait : bool, optional
           If true, the method will keep track of when PV has been set.
-        *args, **kwargs
+        args, kwargs
           Extra arguments that get passed to :py:meth:``epics.PV.get``
         
         """
@@ -535,6 +547,67 @@ class NanoTXM(object):
         #self.wait_pv('EnergyWait', 0)
         log.debug("Changed energy to %.4f keV (%.4f nm).", energy, new_wavelength)
     
+    def enable_fast_shutter(self, rotation_trigger=False, delay=0.02):
+        """Enable the hardware-triggered fast shutter.
+        
+        When this shutter is enabled, actions that capture a
+        projection from the CCD will first open the fast shutter, then
+        close it again afterwards. With ``rotation_trigger=True``, the
+        CCD and shutter are triggered directly by the rotation stage
+        (useful for fly scans). This method leaves the shutter closed
+        by default.
+        
+        Parameters
+        ----------
+        rotation_trigger : bool, optional
+          If false (default) the shutter/CCD are controlled by
+          software. If true, the rotation stage encoder will trigger
+          the shutter/CCD.
+        delay : float, optional
+          Time (in seconds) to wait for the fast shutter to close.
+        
+        """
+        # Close the shutter to start with
+        self.Fast_Shutter_Control = self.FAST_SHUTTER_CONTROL_MANUAL
+        self.Fast_Shutter_Open = self.FAST_SHUTTER_CLOSED
+        # Determine what trigger the opening/closing of the shutter
+        if rotation_trigger:
+            # Put the FPGA input under rotary encoder control
+            self.Fast_Shutter_Trigger_Mode = self.FAST_SHUTTER_TRIGGER_ROTATION
+        else:
+            # Put the FPGA input under software control
+            self.Fast_Shutter_Trigger_Mode = self.FAST_SHUTTER_TRIGGER_MANUAL
+        # Connect the shutter to the FPGA
+        self.Fast_Shutter_Control = self.FAST_SHUTTER_CONTROL_AUTO
+        # Connect the camera to the fast shutter FPGA
+        self.Fast_Shutter_Relay = self.FAST_SHUTTER_RELAY_SYNCED
+        # Set the FPGA trigger to the rotary encoder for this TXM
+        self.Fast_Shutter_Trigger_Source = self.FAST_SHUTTER_TRIGGER_ENCODER
+        # Set the status flag for later use
+        self.fast_shutter_enabled = True
+        # Set the camera delay
+        self.Fast_Shutter_Delay = delay
+    
+    def disable_fast_shutter(self):
+        """Disable the hardware-triggered fast shutter.
+        
+        This returns the TXM to the conventional software trigger
+        mode, with the fast shutter open.
+        
+        """
+        # Connect the trigger to the rotary encoder (to be safe)
+        self.Fast_Shutter_Trigger_Mode = self.FAST_SHUTTER_TRIGGER_ROTATION
+        # Disconnect the shutter from the FPGA
+        self.Fast_Shutter_Control = self.FAST_SHUTTER_CONTROL_MANUAL
+        # Connect the camera to the fast shutter FPGA
+        self.Fast_Shutter_Relay = self.FAST_SHUTTER_RELAY_DIRECT
+        # Set the FPGA trigger to the rotary encoder for this TXM
+        self.Fast_Shutter_Trigger_Source = self.FAST_SHUTTER_TRIGGER_ENCODER
+        # Set the status flag for later use
+        self.fast_shutter_enabled = False
+        # Open the shutter so it doesn't interfere with measurements
+        self.Fast_Shutter_Open = self.FAST_SHUTTER_OPEN
+    
     def open_shutters(self):
         """Open the shutters to allow light in. The specific shutter(s) that
         opens depends on the values of ``self.use_shutter_A`` and
@@ -633,6 +706,7 @@ class NanoTXM(object):
     def exposure_time(self, val):
         self.Cam1_AcquireTime = val
         self.Cam1_AcquirePeriod = val
+        self.Fast_Shutter_Exposure = val
         
     def stop_scan(self):
         log.debug("stop_scan called")
@@ -642,8 +716,6 @@ class NanoTXM(object):
         self.wait_pv('HDF1_Capture', 0)
         self.reset_ccd()
         self.reset_ccd()
-        # Open the fast shutter (FOR SUJI)
-        self.Fast_Shutter_Uniblitz = 1
         
     def setup_detector(self, exposure=0.5, live_display=True):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
@@ -661,12 +733,6 @@ class NanoTXM(object):
         self.Cam1_FrameRateOnOff = False
         self.Cam1_TriggerMode = 'Overlapped'
         self.exposure_time = exposure
-        # Prepare external shutter if necessary
-        external_shutter = False
-        if external_shutter:
-            global_PVs['ExternShutterExposure'].put(float(variableDict['ExposureTime']))
-            global_PVs['ExternShutterDelay'].put(float(variableDict['Ext_ShutterOpenDelay']))
-            global_PVs['SetSoftGlueForStep'].put('1')
         log.debug("Finished setting up detector.")
     
     def setup_hdf_writer(self, num_projections=1, write_mode="Stream",
@@ -768,23 +834,21 @@ class NanoTXM(object):
         log.debug("Triggering %d projection%s", num_projections, suffix)
         self.Cam1_ImageMode = "Single"
         self.Cam1_NumImages = 1
-        # Open the fast shutter if necessary
-        if self.use_fast_shutter:
-            self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_OPEN
-            time.sleep(self.fast_shutter_sleep / 1000)
         # Collect each frame one at a time
         for i in range(num_projections):
-            self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-            self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
-            # Wait for the camera to be ready
-            while self.Cam1_Acquire != self.DETECTOR_IDLE:
-                time.sleep(0.01)
-                self.Cam1_SoftwareTrigger = 1
-            self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
-        # Close the fast shutter
-        if self.use_fast_shutter:
-            self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_CLOSED
-            time.sleep(self.fast_shutter_sleep / 1000)
+            if self.fast_shutter_enabled:
+                # Fast shutter triggering
+                self.Fast_Shutter_Trigger = self.FAST_SHUTTER_TRIGGERED
+                self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
+            else:
+                # Regular triggering
+                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+                self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
+                # Wait for the camera to be ready
+                while self.Cam1_Acquire != self.DETECTOR_IDLE:
+                    time.sleep(0.01)
+                    self.Cam1_SoftwareTrigger = 1
+                self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
     
     def capture_projections(self, num_projections=1):
         """Trigger the capturing of projection images from the detector.
@@ -919,6 +983,8 @@ class NanoTXM(object):
             log.info("Scan finished.")
         finally:
             log.debug("Shutting down")
+            # Disable the fast shutter
+            self.disable_fast_shutter()
             # Stop TIFF and HDF collection
             self.TIFF1_AutoSave = 'No'
             self.TIFF1_Capture = 0
@@ -934,8 +1000,7 @@ class NanoTXM(object):
             self.close_shutters()
             # Reset the CCD so it's in continuous mode
             self.reset_ccd()
-            # Open the fast shutter #### FOR SUJI
-            self.Fast_Shutter_Uniblitz = self.FAST_SHUTTER_OPEN
+            # Notify the user of that we're done
             log.debug("Finished shutting down")
     
     def reset_ccd(self):
@@ -954,6 +1019,8 @@ class NanoTXM(object):
 
 class MicroTXM(NanoTXM):
     """TXM operating with the front micro-CT stage."""
+    # Common settings for this TXM
+    FAST_SHUTTER_TRIGGER_ENCODER = 0 # Hydra encoder
     # Flyscan PV's
     Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')
     Fly_StartPos = TxmPV('32idcTXM:eFly:startPos')

@@ -139,14 +139,14 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.TIFF1_Capture, txm.CAPTURE_ENABLED)
     
     def test_setup_detector(self):
-        log.error("test_setup_detector() needs to be checked")
         txm = UnpluggedTXM(has_permit=False)
         txm.pg_external_trigger = False
-        txm.setup_detector(live_display=False)
+        txm.setup_detector(live_display=False, exposure=1.3)
         # Check that PV values were set
         self.assertEqual(txm.Cam1_Display, False)
         self.assertEqual(txm.Cam1_ImageMode, 'Single')
         self.assertEqual(txm.Cam1_ArrayCallbacks, 'Enable')
+        self.assertEqual(txm.Fast_Shutter_Exposure, 1.3)
         self.assertEqual(txm.SetSoftGlueForStep, '0')
         self.assertEqual(txm.Cam1_FrameRateOnOff, 0)
         self.assertEqual(txm.Cam1_TriggerMode, "Overlapped")
@@ -182,11 +182,55 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.HDF1_Capture, 1)
         self.assertTrue(txm.hdf_writer_ready)
     
-    @mock.patch('aps_32id.txm.EpicsPV')
-    def test_open_shutters(self, EpicsPV):
+    def test_enable_fast_shutter(self):
+        txm = UnpluggedTXM(has_permit=True)
+        # Test with software trigger
+        txm.enable_fast_shutter(rotation_trigger=False, delay=1.5)
+        # Check the state
+        self.assertEqual(txm.Fast_Shutter_Trigger_Mode,
+                         txm.FAST_SHUTTER_TRIGGER_MANUAL)
+        self.assertEqual(txm.Fast_Shutter_Control,
+                         txm.FAST_SHUTTER_CONTROL_AUTO)
+        self.assertEqual(txm.Fast_Shutter_Relay,
+                         txm.FAST_SHUTTER_RELAY_SYNCED)
+        self.assertEqual(txm.Fast_Shutter_Trigger_Source,
+                         txm.FAST_SHUTTER_TRIGGER_ENCODER)
+        self.assertEqual(txm.Fast_Shutter_Delay,
+                         1.5)
+        self.assertEqual(txm.Fast_Shutter_Open,
+                         txm.FAST_SHUTTER_CLOSED)
+        self.assertTrue(txm.fast_shutter_enabled)
+        # Test with rotation trigger
+        txm.enable_fast_shutter(rotation_trigger=True)
+        # Check the state
+        self.assertEqual(txm.Fast_Shutter_Trigger_Mode,
+                         txm.FAST_SHUTTER_TRIGGER_ROTATION)
+    
+    def test_disable_fast_shutter(self):
+        txm = UnpluggedTXM(has_permit=True)
+        # Set the wrong values first
+        txm.Fast_Shutter_Trigger_Mode = txm.FAST_SHUTTER_TRIGGER_MANUAL
+        txm.Fast_Shutter_Control = txm.FAST_SHUTTER_CONTROL_AUTO
+        txm.Fast_Shutter_Relay = txm.FAST_SHUTTER_RELAY_SYNCED
+        txm.Fast_Shutter_Trigger_Source = -1
+        # Test with software trigger
+        txm.disable_fast_shutter()
+        # Check the state
+        self.assertEqual(txm.Fast_Shutter_Trigger_Mode,
+                         txm.FAST_SHUTTER_TRIGGER_ROTATION)
+        self.assertEqual(txm.Fast_Shutter_Control,
+                         txm.FAST_SHUTTER_CONTROL_MANUAL)
+        self.assertEqual(txm.Fast_Shutter_Relay,
+                         txm.FAST_SHUTTER_RELAY_DIRECT)
+        self.assertEqual(txm.Fast_Shutter_Trigger_Source,
+                         txm.FAST_SHUTTER_TRIGGER_ENCODER)
+        self.assertEqual(txm.Fast_Shutter_Open,
+                         txm.FAST_SHUTTER_OPEN)
+        self.assertFalse(txm.fast_shutter_enabled)
+    
+    def test_open_shutters(self):
         txm = UnpluggedTXM(has_permit=True)
         with warnings.catch_warnings(record=True) as w:
-            txm.is_attached = True
             txm.use_shutter_A = False
             txm.use_shutter_B = False
             txm.shutters_are_open = True
@@ -365,24 +409,3 @@ class TXMTestCase(unittest.TestCase):
         # Check that the value was restored when the context completed
         self.assertEqual(txm.sample_position(), init_position)
         self.assertEqual(txm.energy(), 8.7)
-    
-    def test_fast_shutter(self):
-        """Check if the fast hardware shutter gets triggered."""
-        # Check that it does nothing if fast shutter is disabled
-        txm = UnpluggedTXM(use_fast_shutter=False, has_permit=True)
-        txm._trigger_projections()
-        uniblitz_pv = type(txm).Fast_Shutter_Uniblitz
-        pv_name = uniblitz_pv.pv_name(txm=txm)
-        self.assertNotIn((pv_name, 1),
-                         txm._put_calls, 'Fast shutter was opened')
-        self.assertNotIn((pv_name, 0),
-                         txm._put_calls, 'Fast shutter was closed')
-        # Check that it uses the fast shutter if enabled
-        txm = UnpluggedTXM(use_fast_shutter=True, has_permit=True)
-        txm._trigger_projections()
-        uniblitz_pv = type(txm).Fast_Shutter_Uniblitz
-        pv_name = uniblitz_pv.pv_name(txm=txm)
-        self.assertIn((pv_name, 1),
-                      txm._put_calls, 'Fast shutter not opened')
-        self.assertIn((pv_name, 0),
-                      txm._put_calls, 'Fast shutter not closed')

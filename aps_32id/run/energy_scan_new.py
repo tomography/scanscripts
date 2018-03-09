@@ -182,6 +182,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                       fast_shutter_sleep=fast_shutter_sleep)
     # Execute the actual scan script
     with txm.run_scan():
+        txm.enable_fast_shutter()
         # Prepare TXM for capturing data
         txm.setup_detector(exposure=exposure)
         # Collect repetitions of the energy scan
