@@ -56,12 +56,6 @@ def my_experiment(param_a, param_b=9.8, has_permit=False):
 def main():
     # The script was launched (not imported) so use the variable dictionary
     update_variable_dict(variableDict)
-    # Abort the scan if requested
-    if variableDict.get('StopTheScan', False):
-        log.info("Aborting scan at user request.")
-        txm = TXM(has_permit=SHUTTER_PERMIT)
-        txm.stop_scan()
-        return
     # Start the experiment
     my_experiment(param_a=variableDict['Parameter A'],
                   param_b=variableDict['Parameter B'])

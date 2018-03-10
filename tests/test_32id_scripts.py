@@ -19,10 +19,10 @@ import os
 
 import numpy as np
 
-# import energy_scan
-# import move_energy
-# import tomo_step_scan
-from aps_32id.run import energy_scan_new as energy_scan, move_energy_new as move_energy, tomo_step_scan_new as tomo_step_scan
+from aps_32id.run import (energy_scan_new as energy_scan,
+                          move_energy_new as move_energy,
+                          tomo_step_scan_new as tomo_step_scan,
+                          tomo_fly_scan_new as tomo_fly_scan)
 from aps_32id.txm import NanoTXM
 from tools import TXMStub
 
@@ -73,6 +73,15 @@ class TomoStepScanTests(ScriptTestCase):
                                                      num_recursive_images=3)
 
 
+class TomoFlyScanTests(unittest.TestCase):
+    def setUp(self):
+        self.txm = TXMStub(has_permit=True)
+
+    def test_start_fly_scan(self):
+        txm = tomo_fly_scan.tomo_fly_scan()
+    
+
+
 class EnergyScanTests(unittest.TestCase):
     def setUp(self):
         self.txm = TXMStub(has_permit=True)
@@ -83,7 +92,6 @@ class EnergyScanTests(unittest.TestCase):
             os.remove('/tmp/test_file.h5')
     
     def test_start_scan(self, *args):
-        real_txm = NanoTXM()
         # Get rid of any old files hanging around
         if os.path.exists('/tmp/test_file.h5'):
             os.remove('/tmp/test_file.h5')

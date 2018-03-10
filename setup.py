@@ -10,7 +10,7 @@ setup(
     # packages=find_packages(),
     packages=['aps_32id', 'aps_02bm', 'scanlib'],
     version=open(os.path.join(os.path.dirname(__file__), 'VERSION')).read().strip(),
-    description = 'Scanning protocols for tomography.',
+    description = 'Control software for various X-ray imaging beamlines.',
     license='BSD-3',
     platforms='Any',
     classifiers=[

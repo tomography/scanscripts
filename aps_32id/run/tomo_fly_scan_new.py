@@ -2,6 +2,9 @@
 	FlyScan for Sector 32 ID C
 
 '''
+
+import logging
+
 import sys
 import json
 import time
@@ -15,8 +18,6 @@ import signal
 import random
 import string
 
-from scanlib import *
-
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
@@ -24,6 +25,8 @@ __platform__ = 'Unix'
 __version__ = '1.6'
 __all__ = ['fly_scan',
            'start_scan']
+
+log = logging.getLogger(__name__)
 
 # hardcoded values for verifier
 VER_HOST = "txmtwo"
@@ -59,51 +62,34 @@ variableDict = {'PreDarkImages': 5,
                 }
 
 
-global_PVs = {}
-
-def set_exit_handler(func):
-    signal.signal(signal.SIGTERM, func)
-
-#def getVariableDict():
-#	return variableDict
 def getVariableDict():
     global variableDict
     return variableDict
 
 def get_calculated_num_projections(variableDict):
-    print 'get_calculated_num_projections'
     delta = ((float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections'])))
     slew_speed = (float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections']) * (float(variableDict['ExposureTime']) + float(variableDict['CCD_Readout'])))
     global_PVs['Fly_ScanDelta'].put(delta)
-    print 'start pos ',float(variableDict['SampleStartPos']),'end pos', float(variableDict['SampleEndPos'])
+    log.debug('start pos: %f, end pos: %f',
+              float(variableDict['SampleStartPos']),
+              float(variableDict['SampleEndPos']))
     global_PVs['Fly_StartPos'].put(float(variableDict['SampleStartPos']))
     global_PVs['Fly_EndPos'].put(float(variableDict['SampleEndPos']))
     global_PVs['Fly_SlewSpeed'].put(slew_speed)
     time.sleep(0.25)
     calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
     if calc_num_proj == None:
-        print 'Error getting fly calculated number of projections!'
+        # Error getting fly calculated number of projections!
         calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
     if calc_num_proj < int(variableDict['Projections']):
-        print 'Updating number of projections from:', variableDict['Projections'], ' to: ', calc_num_proj
         variableDict['Projections'] = int(calc_num_proj)
-    print 'Num projections = ',int(variableDict['Projections']), ' fly calc triggers = ', calc_num_proj
+
 
 def fly_scan(variableDict):
-    print 'fly_scan()'
     theta = []
     global_PVs['Reset_Theta'].put(1)
     global_PVs['Cam1_AcquireTime'].put(float(variableDict['ExposureTime']) )
-    # setup fly scan macro
-    #delta = ((float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections']) ))
-    # slew_speed = (end - start) / (proj * (exposure + ccd_readout))
-    #slew_speed = (float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / ( float(variableDict['Projections']) * (float(variableDict['ExposureTime']) + float(variableDict['CCD_Readout'])))
-    #global_PVs['Fly_ScanDelta'].put(delta)
-    #global_PVs['Fly_StartPos'].put(float(variableDict['SampleStartPos']))
-    #global_PVs['Fly_EndPos'].put(float(variableDict['SampleEndPos']))
-    #global_PVs['Fly_SlewSpeed'].put(slew_speed)
-
-    #num_images1 = ((float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (delta + 1.0))
+    
     num_images = int(variableDict['Projections'])
     global_PVs['Cam1_FrameType'].put(FrameTypeData, wait=True)
     global_PVs['Cam1_NumImages'].put(num_images, wait=True)
@@ -111,10 +97,8 @@ def fly_scan(variableDict):
     # start acquiring
     global_PVs['Cam1_Acquire'].put(DetectorAcquire)
     wait_pv(global_PVs['Cam1_Acquire'], 1)
-    print 'Taxi'
     global_PVs['Fly_Taxi'].put(1, wait=True)
     wait_pv(global_PVs['Fly_Taxi'], 0)
-    print 'Fly'
     global_PVs['Fly_Run'].put(1, wait=True)
     wait_pv(global_PVs['Fly_Run'], 0)
     # wait for acquire to finish
@@ -127,13 +111,25 @@ def fly_scan(variableDict):
     return theta
 
 
-def start_scan(variableDict, detector_filename, key):
-    print 'start_scan()'
-    init_general_PVs(global_PVs, variableDict)
-    if variableDict.has_key('StopTheScan'):
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
-        return
-    start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
+def tomo_fly_scan(projections=3000, rotation_start=0, rotation_end=180):
+    """Collect a 180° tomogram in fly-scan mode.
+    
+    The defining feature here is that the rotation axis does not stop,
+    giving more projections in less time. It is common to set the
+    number of projections to be significantly higher than when
+    executing a step scan.
+    
+    Parameters
+    ----------
+    projections : int, optional
+      How many total projections to collect over the full rotation
+      range.
+    rotation_start : float, optional
+      Initial angle for the tomogram, in degrees.
+    rotation_end : float, optional
+      Final angle for the tomogram, in degrees.
+    
+    """
     get_calculated_num_projections(variableDict)
     global_PVs['Fly_ScanControl'].put('Custom')
     # Start scan sleep in min so min * 60 = sec
@@ -142,10 +138,8 @@ def start_scan(variableDict, detector_filename, key):
     setup_writer(global_PVs, variableDict, detector_filename)
     if int(variableDict['PreDarkImages']) > 0:
         close_shutters(global_PVs, variableDict)
-        print 'Capturing Pre Dark Field'
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreDarkImages']), FrameTypeDark)
     if int(variableDict['PreWhiteImages']) > 0:
-        print 'Capturing Pre White Field'
         open_shutters(global_PVs, variableDict)
         move_sample_out(global_PVs, variableDict)
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreWhiteImages']), FrameTypeWhite)
@@ -156,11 +150,11 @@ def start_scan(variableDict, detector_filename, key):
     theta = fly_scan(variableDict)
     ###wait_pv(global_PVs['HDF1_NumCaptured'], expected_num_cap, 60)
     if int(variableDict['PostWhiteImages']) > 0:
-        print 'Capturing Post White Field'
+        # Capturing Post White Field
         move_sample_out(global_PVs, variableDict)
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostWhiteImages']), FrameTypeWhite)
     if int(variableDict['PostDarkImages']) > 0:
-        print 'Capturing Post Dark Field'
+        # Capturing Post Dark Field
         close_shutters(global_PVs, variableDict)
         capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostDarkImages']), FrameTypeDark)
     close_shutters(global_PVs, variableDict)
@@ -174,19 +168,15 @@ def start_scan(variableDict, detector_filename, key):
     # move_dataset_to_run_dir(global_PVs, variableDict)
 
 
-def main(key):
+def main():
+    # The script was launched (not imported) so use the variable dictionary
     update_variable_dict(variableDict)
-    init_general_PVs(global_PVs, variableDict)
-    FileName = global_PVs['HDF1_FileName'].get(as_string=True)
-    start_scan(variableDict, FileName, key)
+    # Prepare variables
+    angles = []
+    # Start the experiment
+    tomo_fly_scan(projections=variableDict['Projections'])
 
 
 if __name__ == '__main__':
-    key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
-    def on_exit(sig, func=None):
-        cleanup(global_PVs, variableDict, VER_HOST, VER_PORT, key)
-        sys.exit(0)
-    set_exit_handler(on_exit)
-
-    main(key)
+    main()
 
