@@ -160,10 +160,10 @@ class TxmPV(object):
             was_successful = txm.pv_put(pv_name=pv_name, value=val,
                                         wait=self.wait)
             # Check that setting the new value was successful
-            if not was_successful:
-                msg = "Error waiting on response from PV {}".format(str(self))
+            if not was_successful and self.wait:
+                msg = "Error setting value to PV {}".format(str(self))
                 log.error(msg)
-                raise exceptions_.PVError(msg)
+                warnings.warn(msg, RuntimeWarning)
         else:
             # There's a valid TXM but we can't operate this PV
             msg = "PV {pv} was not set because TXM doesn't have beamline permit."

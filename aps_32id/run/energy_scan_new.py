@@ -121,7 +121,7 @@ def _capture_energy_frames(txm, energies, constant_mag,
 
 
 def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
-                    has_permit=False, sample_pos=(None,), out_pos=(None,),
+                    has_permit=True, sample_pos=(None,), out_pos=(None,),
                     constant_mag=True, stabilize_sleep_ms=1000,
                     num_recursive_images=1, repetitions=1,
                     use_fast_shutter=False, fast_shutter_sleep=100,
@@ -171,18 +171,17 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     
     """
     log.debug("Starting run_energy_scan()")
-    assert not has_permit
+    assert has_permit
     start_time = time.time()
     total_projections = n_pre_dark + 2 * len(energies)
     # Create the TXM object for this scan
     if txm is None:
         txm = NanoTXM(has_permit=has_permit,
                       use_shutter_A=False,
-                      use_shutter_B=True, use_fast_shutter=use_fast_shutter,
-                      fast_shutter_sleep=fast_shutter_sleep)
+                      use_shutter_B=True)
     # Execute the actual scan script
     with txm.run_scan():
-        txm.enable_fast_shutter()
+        # txm.enable_fast_shutter()
         # Prepare TXM for capturing data
         txm.setup_detector(exposure=exposure)
         # Collect repetitions of the energy scan
@@ -217,7 +216,8 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                 log.warning(msg)
         # Log the duration and output file
         duration = time.time() - start_time
-        log.info('Energy scan took %d sec and saved in file %s', duration, txm.hdf_filename)
+        log.info('Energy scan took %d sec and saved in file %s',
+                 duration, txm.hdf_filename)
     return txm
 
 

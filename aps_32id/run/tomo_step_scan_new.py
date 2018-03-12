@@ -73,7 +73,7 @@ def getVariableDict():
     return variableDict
 
 
-def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
+def tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
                    has_permit=False,
                    num_white=(5, 5), num_dark=(5, 0),
                    sample_pos=(None,), out_pos=(None,),
@@ -124,47 +124,47 @@ def tomo_step_scan(angles, stabilize_sleep_ms=1., exposure=0.5,
     # Prepare X-ray microscope
     txm = NanoTXM(has_permit=has_permit)
     # Prepare the microscope for collecting data
-    txm.setup_detector(exposure=exposure)
-    total_projections = len(angles)
-    total_projections += num_pre_white_images + num_post_white_images
-    total_projections += num_pre_dark_images + num_post_dark_images
-    txm.setup_hdf_writer(num_projections=total_projections,
-                         num_recursive_images=num_recursive_images)
-    # Collect pre-scan dark-field images
-    if num_pre_dark_images > 0:
-        txm.close_shutters()
-        txm.capture_dark_field(num_projections=num_pre_dark_images)
-    # Collect pre-scan white-field images
-    if num_pre_white_images > 0:
-        logging.info("Capturing %d white-fields at %s", num_pre_white_images, out_pos)
-        # Move the sample out and collect whitefields
-        txm.move_sample(theta=out_pos[3]) # So we don't have crashes
+    with txm.run_scan():
+        txm.setup_detector(exposure=exposure)
+        total_projections = len(angles)
+        total_projections += num_pre_white_images + num_post_white_images
+        total_projections += num_pre_dark_images + num_post_dark_images
+        txm.setup_hdf_writer(num_projections=total_projections,
+                             num_recursive_images=num_recursive_images)
+        # Collect pre-scan dark-field images
+        if num_pre_dark_images > 0:
+            txm.close_shutters()
+            txm.capture_dark_field(num_projections=num_pre_dark_images)
+        # Collect pre-scan white-field images
+        if num_pre_white_images > 0:
+            logging.info("Capturing %d white-fields at %s", num_pre_white_images, out_pos)
+            # Move the sample out and collect whitefields
+            txm.move_sample(theta=out_pos[3]) # So we don't have crashes
+            with txm.wait_pvs():
+                txm.move_sample(*out_pos)
+                txm.open_shutters()
+            txm.capture_white_field(num_projections=num_pre_white_images)
+        # Capture the actual sample data
+        # txm.move_sample(theta=0) # So we don't have crashes
+        txm.move_sample(sample_pos[3])
         with txm.wait_pvs():
-            txm.move_sample(*out_pos)
+            txm.move_sample(*sample_pos)
             txm.open_shutters()
-        txm.capture_white_field(num_projections=num_pre_white_images)
-    # Capture the actual sample data
-    txm.move_sample(theta=0) # So we don't have crashes
-    with txm.wait_pvs():
-        txm.move_sample(*sample_pos)
-        txm.open_shutters()
-    log.debug('Starting tomography scan')
-    txm.capture_tomogram(angles=angles, num_projections=num_recursive_images,
-                         stabilize_sleep=stabilize_sleep_ms)
-    # Capture post-scan white-field images
-    if num_post_white_images > 0:
-        with txm.wait_pvs():
-            txm.move_sample(*out_pos)
-        txm.capture_white_field(num_projections=num_post_white_images)
-    # Capture post-scan dark-field images
-    txm.close_shutters()
-    if num_post_dark_images > 0:
-        txm.capture_dark_field(num_projections=num_post_dark_images)
+        log.debug('Starting tomography scan')
+        txm.capture_tomogram(angles=angles, num_projections=num_recursive_images,
+                             stabilize_sleep=stabilize_sleep_ms)
+        # Capture post-scan white-field images
+        if num_post_white_images > 0:
+            with txm.wait_pvs():
+                txm.move_sample(*out_pos)
+            txm.capture_white_field(num_projections=num_post_white_images)
+        # Capture post-scan dark-field images
+        txm.close_shutters()
+        if num_post_dark_images > 0:
+            txm.capture_dark_field(num_projections=num_post_dark_images)
     # Save metadata
     with txm.hdf_file() as f:
         f.create_dataset('/exchange/theta', data=angles)
-    # Clean up
-    txm.reset_ccd()
     log.info("Captured %d projections in %d sec.", total_projections, time.time() - start_time)
     return txm
 

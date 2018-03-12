@@ -10,6 +10,8 @@ MicroTXM
 
 """
 
+from __future__ import print_function
+
 import time
 import math
 import logging
@@ -74,7 +76,7 @@ class NanoTXM(object):
     tiff_writer_ready = False
     pg_external_trigger = True
     shutters_are_open = False
-    fast_shutter_enabled = True
+    fast_shutter_enabled = False
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
     # Commonly used flags for PVs
@@ -99,6 +101,15 @@ class NanoTXM(object):
     FRAME_WHITE = 2
     DETECTOR_IDLE = 0
     DETECTOR_ACQUIRE = 1
+    DETECTOR_READOUT = 2
+    DETECTOR_CORRECT = 3
+    DETECTOR_SAVING = 4
+    DETECTOR_ABORTING = 5
+    DETECTOR_ERROR = 6
+    DETECTOR_WAITING = 7
+    DETECTOR_INITIALIZING = 8
+    DETECTOR_DISCONNECTED = 9
+    DETECTOR_ABORTED = 10
     HDF_IDLE = 0
     HDF_WRITING = 1
     
@@ -119,7 +130,7 @@ class NanoTXM(object):
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
     Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
-    Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV', as_string=True)
+    Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV')
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -188,8 +199,9 @@ class NanoTXM(object):
     
     # Fast shutter controls
     Fast_Shutter_Open = TxmPV('32idcTXM:shutCam:ShutterManual')
-    Fast_Shutter_Exposure = TxmPV('32idcTXM:shutCam:tDly')
-    Fast_Shutter_Delay = TxmPV('32idcTXM:shutCam:tExpose')
+    Fast_Shutter_Delay = TxmPV('32idcTXM:shutCam:tDly')
+    Fast_Shutter_Exposure = TxmPV('32idcTXM:shutCam:tExpose')
+    Fast_Shutter_Trigger = TxmPV('32idcTXM:shutCam:go', wait=False)
     Fast_Shutter_Trigger_Mode = TxmPV('32idcTXM:shutCam:Triggered')
     Fast_Shutter_Control = TxmPV('32idcTXM:shutCam:ShutterCtrl')
     Fast_Shutter_Relay = TxmPV('32idcTXM:shutCam:Enable')
@@ -398,9 +410,10 @@ class NanoTXM(object):
                         warnings.warn(msg, RuntimeWarning)
                         log.warn(msg)
                         break
-                time.sleep(.01)
+                time.sleep(0.01)
             else:
-                log.debug("Ended wait_pv()")
+                log.debug("Ended wait_pv() after {:.2f} sec."
+                          "".format(time.time() - startTime))
                 return True
     
     def sample_position(self):
@@ -595,6 +608,7 @@ class NanoTXM(object):
         mode, with the fast shutter open.
         
         """
+        return
         # Connect the trigger to the rotary encoder (to be safe)
         self.Fast_Shutter_Trigger_Mode = self.FAST_SHUTTER_TRIGGER_ROTATION
         # Disconnect the shutter from the FPGA
@@ -699,8 +713,8 @@ class NanoTXM(object):
     @property
     def exposure_time(self):
         """Exposure time for the CCD in seconds."""
-        current_exposure = max(self.Cam1_AcquireTime, self.Cam1AcquirePeriod)
-        return self.current_exposure
+        current_exposure = max(self.Cam1_AcquireTime, self.Cam1_AcquirePeriod)
+        return current_exposure
     
     @exposure_time.setter
     def exposure_time(self, val):
@@ -816,7 +830,7 @@ class NanoTXM(object):
         self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
         log.debug("Finished setting up TIFF writer for %s.", filename)
     
-    def _trigger_projections(self, num_projections=1):
+    def _trigger_projections(self, num_projections=1, exposure=None):
         """Trigger the detector to capture one (or more) projections.
         
         This method should only be used after setup_detector() and
@@ -828,8 +842,13 @@ class NanoTXM(object):
         ==========
         num_projections : int, optional
           How many projections to trigger.
-        
+        exposure : float, optional
+          Exposure time, in second. If omitted, the value will be read
+          from instrument (takes 10-20 ms)
+
         """
+        if exposure is None:
+            exposure = self.exposure_time
         suffix = 's' if num_projections > 1 else ''
         log.debug("Triggering %d projection%s", num_projections, suffix)
         self.Cam1_ImageMode = "Single"
@@ -840,15 +859,17 @@ class NanoTXM(object):
                 # Fast shutter triggering
                 self.Fast_Shutter_Trigger = self.FAST_SHUTTER_TRIGGERED
                 self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
-            else:
-                # Regular triggering
+            elif self.Cam1_TriggerMode == "Internal":
+                # Faster, but less reliable exposure times
                 self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-                self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, 5)
+                time.sleep(exposure)
+            else:
+                # Regular external triggering
+                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+                self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
                 # Wait for the camera to be ready
-                while self.Cam1_Acquire != self.DETECTOR_IDLE:
-                    time.sleep(0.01)
-                    self.Cam1_SoftwareTrigger = 1
-                self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE, 5)
+                self.Cam1_SoftwareTrigger = 1
+                self.wait_pv('Cam1_Status', self.DETECTOR_IDLE)
     
     def capture_projections(self, num_projections=1):
         """Trigger the capturing of projection images from the detector.
@@ -939,13 +960,17 @@ class NanoTXM(object):
         if num_projections > 1:
             old_filter = self.Proc1_Filter_Enable
             self.Proc1_Filter_Enable = 'Enable'
+        # Configure detector to be more efficient
+        exposure = self.exposure_time
+        # self.Cam1_TriggerMode = "Internal"
         # Cycle through each angle and collect data
-        for sample_rot in tqdm.tqdm(angles, desc="Capturing tomogram", unit='rot'):
+        for sample_rot in tqdm.tqdm(angles, desc="Capturing tomogram", unit='ang'):
             self.move_sample(theta=sample_rot)
             log.debug('Stabilize Sleep: %d ms', stabilize_sleep)
-            time.sleep(stabilize_sleep / 1000)
+            time.sleep(stabilize_sleep / 1000.)
             # Trigger the camera
-            self._trigger_projections(num_projections=num_projections)
+            self._trigger_projections(num_projections=num_projections,
+                                      exposure=exposure)
         # Restore previous filter enabled state
         if num_projections > 1:
             self.Proc1_Filter_Enable = old_filter
@@ -973,16 +998,18 @@ class NanoTXM(object):
         # Save the initial values
         init_position = self.sample_position()
         init_E = self.energy()
+        init_exposure = self.exposure_time
         # Return to the inner code block
         try:
             yield
         except Exception as e:
-            log.info("Scan finished with exception ", str(e))
+            print("Aborting scan...")
+            log.error("Scan finished with exception: %s", str(e))
             raise
         else:
             log.info("Scan finished.")
         finally:
-            log.debug("Shutting down")
+            log.debug("Restoring previous state")
             # Disable the fast shutter
             self.disable_fast_shutter()
             # Stop TIFF and HDF collection
@@ -992,14 +1019,17 @@ class NanoTXM(object):
             self.wait_pv('HDF1_Capture', 0)
             # Restore the saved initial motor positions
             self.move_sample(*init_position)
-            try:
-                self.move_energy(init_E)
-            except exceptions_.EnergyError as e:
-                log.warning(e)
+            # Restore the initial energy if necessary
+            if self.energy() != init_E:
+                try:
+                    self.move_energy(init_E)
+                except exceptions_.EnergyError as e:
+                    log.warning(e)
             # Close the shutter
             self.close_shutters()
             # Reset the CCD so it's in continuous mode
             self.reset_ccd()
+            self.exposure_time = init_exposure
             # Notify the user of that we're done
             log.debug("Finished shutting down")
     
