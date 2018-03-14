@@ -6,12 +6,19 @@ Created on Wed Jul 22 09:57:05 2015
 @author: xhxiao
 """
 
+from __future__ import print_function
+
 import time
 import epics
 import numpy as np
 import os
-import Tkinter
-import tkMessageBox as mbox
+try:
+    # Python 2
+    import Tkinter
+    import tkMessageBox as mbox
+except ImportError:
+    import tkinter as Tkinter
+    from tkinter import messagebox as mbox
 #from caputRecorder import _getGlobals
 
 # The function "_abort" is special: it's used by caputRecorder.py to abort an
@@ -177,7 +184,7 @@ def change2Pink(ang=2.657):
                 
                 
 def change2PinkDummy():
-    print 'Caution!!! You are running wrong routine ...'
+    print('Caution!!! You are running wrong routine ...')
     pass
 
 def changeDMMEng(eng = 24.9):
@@ -190,7 +197,7 @@ def changeDMMEng(eng = 24.9):
     else:                                
         epics.caput(BL+":fltr1:select.VAL",0, wait=True, timeout=1000.0)
 #    if epics.caget(BL+":M1angl.VAL") is not 2.657:
-#        print 'mirror angle is wrong. quit!'
+#        print('mirror angle is wrong. quit!')
 #        return 0
     caliEng_list = np.array([40.0,35.0,31.0,27.4,24.9,22.7,21.1,20.2,18.9,17.6,16.8,16.0,15.0,14.4])
     XIASlit_list = np.array([37.35,37.35,42.35,44.35,43.35,46.35,44.35,48.35,50.35,50.35,52.35,53.35,54.35,55.35])    
@@ -212,7 +219,7 @@ def changeDMMEng(eng = 24.9):
 
     idx = np.where(caliEng_list==eng)                
     if idx[0].size == 0:
-        print 'there is no specified energy in the energy lookup table. please choose a calibrated energy.'
+        print('there is no specified energy in the energy lookup table. please choose a calibrated energy.')
         return    0                            
     USArm = USArm_list[idx[0]]                
     DSArm = DSArm_list[idx[0]]
@@ -241,18 +248,22 @@ def changeDMMEng(eng = 24.9):
     epics.caput(BL+":m25.VAL",DMM_USX, wait=False, timeout=1000.0)
     epics.caput(BL+":m28.VAL",DMM_DSX, wait=True, timeout=1000.0)
     epics.caput(BL+":m7.VAL",XIASlit, wait=True, timeout=1000.0)                
-    print 'DMM energy is set to ', eng, 'keV.'                
+    print('DMM energy is set to ', eng, 'keV.')
                 
                 
 
 
 def centerAxis(axisShift = 12.5,refYofX0 = 14.976):
-    """ 
-                
-      axisShift: rotation axis shift in unit um/mm. it is defined as the shift distance when the vertical stage moves up.
-              it assumes rotation axis is at image center at posInit.
-      this is the case in which the rotation axis move toward right side (larger 'center' in reconstruction)
-      when the sample stage moves up.                                                        
+    """
+    Parameters
+    ==========
+    axisShift : 
+      rotation axis shift in unit um/mm. it is defined as the shift
+      distance when the vertical stage moves up. It assumes rotation
+      axis is at image center at posInit. This is the case in which
+      the rotation axis move toward right side (larger 'center' in
+      reconstruction) when the sample stage moves up.
+    
     """
     posRefPos = refYofX0 
                                 
@@ -279,13 +290,10 @@ def centerAxis(axisShift = 12.5,refYofX0 = 14.976):
 
     posCurr = epics.caget(posStage + ".VAL")    
     samStageOffset = axisShift * (posCurr - posRefPos)/1000.0  
-    print samStageOffset                                               
+    print(samStageOffset)
     epics.caput(samStage + ".VAL",str(samStageOffset), wait=True, timeout=1000.0) 
-    print 'done'                
-               
-             
-                            
-                
+    print('done')
+
 
 def initDimax(samInPos = 0, hutch='A'):
     camPrefix = "PCOIOC2" 
@@ -339,7 +347,7 @@ def initDimax(samInPos = 0, hutch='A'):
         epics.caput(rotStage+".ACCL","3", wait=True, timeout=1000.0)                
         epics.caput(rotStage+".VAL","0", wait=True, timeout=1000.0)                                
         epics.caput(samStage+".VAL",str(samInPos), wait=True, timeout=1000.0)                    
-    print "Dimax is reset!"                
+    print("Dimax is reset!")
 
 
 
@@ -381,7 +389,7 @@ def initEdge(samInPos = 0):
     epics.caput(rotStage+".VAL","0", wait=True, timeout=1000.0)
     epics.caput(samStage+".VAL",str(samInPos), wait=True, timeout=1000.0)  
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)               
-    print "Edge is reset!"
+    print("Edge is reset!")
 
 
 
@@ -439,7 +447,7 @@ def _DimaxSingleScanTempTrigger(exposureTime=0.01, slewSpeed=10,angEnd = 180,
 
     epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
                 
-    print "Scan starts ..."                
+    print("Scan starts ...")
 #    epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
     epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                 
@@ -458,7 +466,7 @@ def _DimaxSingleScanTempTrigger(exposureTime=0.01, slewSpeed=10,angEnd = 180,
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your scan is logged in ", logFileName
+    print("Your scan is logged in ", logFileName)
     
     numImage = numProjPerSweep
     
@@ -471,7 +479,7 @@ def _DimaxSingleScanTempTrigger(exposureTime=0.01, slewSpeed=10,angEnd = 180,
     _setPSO(slewSpeed, scanDelta, acclTime, angEnd=angEnd, PSO=PSO,rotStage=rotStage)
     # set scan parameters -- end
                 
-    print "start sample scan ... "    
+    print("start sample scan ... ")
     preTemp = epics.caget(BL+":ET2k:1:Temperature.VAL")
     while ((epics.caget(BL+":ET2k:1:Temperature.VAL")-trigTemp)*(preTemp-trigTemp)>0):    
         preTemp = epics.caget(BL+":ET2k:1:Temperature.VAL")            
@@ -481,20 +489,20 @@ def _DimaxSingleScanTempTrigger(exposureTime=0.01, slewSpeed=10,angEnd = 180,
     
     logFile = open(logFileName,'a')
     logFile.write("Scan was done at time: " + time.asctime() + '\n')
-    logFile.close()                                                                    
-    print "sample scan is done!"                          
+    logFile.close()
+    print("sample scan is done!")
     # scan sample -- end
     
     # set for white field -- start
-    print "Acquiring flat images ..."     
+    print("Acquiring flat images ...")
     _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)        
-    print "flat is done!"                
+    print("flat is done!")
     # set for white field -- end
     
     # set for dark field -- start
-    print "Acquiring dark images ..."                
+    print("Acquiring dark images ...")
     _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)                
-    print "dark is done!"  
+    print("dark is done!")
 
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
     # set for dark field -- end
@@ -510,7 +518,7 @@ def _DimaxSingleScanTempTrigger(exposureTime=0.01, slewSpeed=10,angEnd = 180,
     if epics.caget(BL + ":caputRecorderGbl_3.VAL",as_string=True) == 'Yes':
         epics.caput(BL + ":caputRecorderGbl_2.VAL", str(int(epics.caget(BL + ":caputRecorderGbl_2.VAL",as_string=True))+1), wait=True, timeout=1000.0)                
     # set for new scans -- end
-    print "Scan is done."    
+    print("Scan is done.")
 
 
 
@@ -580,7 +588,7 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
     
         epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
                     
-        print "Scan starts ..."                
+        print("Scan starts ...")
     #    epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
         epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                     
@@ -597,7 +605,7 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
                 
         logFile = open(logFileName,'w')
         logFile.close()                
-        print "Your scan is logged in ", logFileName
+        print("Your scan is logged in ", logFileName)
         
         numImage = numProjPerSweep
         
@@ -610,7 +618,7 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
         _setPSO(slewSpeed, scanDelta, acclTime, angEnd=angEnd, PSO=PSO,rotStage=rotStage)                 
         # set scan parameters -- end
                     
-        print "start sample scan ... "    
+        print("start sample scan ... ")
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
         time.sleep(2)        
         _dimaxAcquisition(samInPos,samStage,numProjPerSweep,shutter,filepath,filename,PSO = PSO,rotStage=rotStage)                        
@@ -619,23 +627,23 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
         logFile = open(logFileName,'a')
         logFile.write("Scan was done at time: " + time.asctime() + '\n')
         logFile.close()                                                                    
-        print "sample scan is done!"                          
+        print("sample scan is done!")
         # scan sample -- end
         
         # set for white field -- start
-        print "Acquiring flat images ..."    
+        print("Acquiring flat images ...")
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
         time.sleep(5)                
         _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput('PCOIOC2:HDF1:Capture.VAL','Done',wait=True,timeout=1000.0)
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
         
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput('PCOIOC2:HDF1:Capture.VAL','Done',wait=True,timeout=1000.0)              
-        print "dark is done!"  
+        print("dark is done!")
     
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
         # set for dark field -- end
@@ -694,7 +702,7 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
     
         epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
                     
-        print "Scan starts ..."                
+        print("Scan starts ...")
     #    epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
         epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                     
@@ -711,7 +719,7 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
                 
         logFile = open(logFileName,'w')
         logFile.close()                
-        print "Your scan is logged in ", logFileName
+        print("Your scan is logged in ", logFileName)
         
         numImage = numProjPerSweep
         
@@ -724,7 +732,7 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
         _setPSO(slewSpeed, scanDelta, acclTime, angEnd=angEnd, PSO=PSO,rotStage=rotStage)                 
         # set scan parameters -- end
                     
-        print "start sample scan ... "    
+        print("start sample scan ... ")
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
         time.sleep(2)        
         _dimaxAcquisition(samInPos,samStage,numProjPerSweep,shutter,filepath,filename,PSO = PSO,rotStage=rotStage)                        
@@ -732,22 +740,21 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
         logFile = open(logFileName,'a')
         logFile.write("Scan was done at time: " + time.asctime() + '\n')
         logFile.close()                                                                    
-        print "sample scan is done!"                          
+        print("sample scan is done!")
         # scan sample -- end
         
         # set for white field -- start
-        print "Acquiring flat images ..."    
+        print("Acquiring flat images ...")
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
         time.sleep(5)                
         _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)        
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
         
         # set for dark field -- start
-        print "Acquiring dark images ..."                
-        _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)                
-        print "dark is done!"  
-    
+        print("Acquiring dark images ...")
+        _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)
+        print("dark is done!")
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
         # set for dark field -- end
         
@@ -763,7 +770,7 @@ def DimaxSingleScan(exposureTime=0.05, slewSpeed=2,angEnd = 180,
         if epics.caget(BL + ":caputRecorderGbl_3.VAL",as_string=True) == 'Yes':
             epics.caput(BL + ":caputRecorderGbl_2.VAL", str(int(epics.caget(BL + ":caputRecorderGbl_2.VAL",as_string=True))+1), wait=True, timeout=1000.0)                                    
     # set for new scans -- end
-    print "Scan is done."    
+    print("Scan is done.")
 
 
 
@@ -831,7 +838,7 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
     
         epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
                     
-        print "Scan starts ..."                
+        print("Scan starts ...")
     #    epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
         epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                     
@@ -847,7 +854,7 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
 #                
 #        logFile = open(logFileName,'w')
 #        logFile.close()                
-#        print "Your scan is logged in ", logFileName
+#        print("Your scan is logged in ", logFileName)
         
 #        numImage = (numProjPerSweep+1)*repeats + 3
         numImage = (numProjPerSweep+1)*repeats
@@ -866,7 +873,7 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
             timeSeq = tf.readlines()
             tf.close()   
                   
-        print "start sample scan ... "    
+        print("start sample scan ... ")
         cnt = 0  
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
         for ii in range(repeats): 
@@ -897,11 +904,11 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
 #            epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)    
             cnt += 1                    
 #            logFile.close()                                
-            print "scan #: ", str(ii+1), " is done at" + time.asctime() + "!"            
+            print("scan #: ", str(ii+1), " is done at" + time.asctime() + "!")
             if cnt != repeats:
                 time.sleep(delay)                                                            
     
-        print "Saving sample data ..."  
+        print("Saving sample data ...")
         epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)                
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)                    
         _dimaxDump(filepath, filename)                                             
@@ -912,21 +919,21 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
 #        logFile = open(logFileName,'a')
 #        logFile.write("Scan was done at time: " + time.asctime() + '\n')
 #        logFile.close()                                                                    
-        print "sample scan is done!"                          
+        print("sample scan is done!")
         # scan sample -- end
         
         # set for white field -- start
-        print "Acquiring flat images ..."     
+        print("Acquiring flat images ...")
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
         time.sleep(2)                
         _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)        
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
         
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)                
-        print "dark is done!"  
+        print("dark is done!")
     
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
         # set for dark field -- end
@@ -985,7 +992,7 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
     
         epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
                     
-        print "Scan starts ..."                
+        print("Scan starts ...")
     #    epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
         epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                     
@@ -1001,7 +1008,7 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
                 
         logFile = open(logFileName,'w')
         logFile.close()                
-        print "Your scan is logged in ", logFileName
+        print("Your scan is logged in ", logFileName)
         
         numImage = (numProjPerSweep+1)*repeats
         
@@ -1014,7 +1021,7 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
         _setPSO(slewSpeed, scanDelta, acclTime, angEnd=angEnd, PSO=PSO,rotStage=rotStage)        
         # set scan parameters -- end
                     
-        print "start sample scan ... "    
+        print("start sample scan ... ")
         cnt = 0    
         for ii in range(repeats): 
             epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
@@ -1025,11 +1032,11 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
             epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)    
             cnt += 1                    
             logFile.close()                                
-            print "scan #: ", str(ii+1), " is done!"            
+            print("scan #: ", str(ii+1), " is done!")
             if cnt != repeats:
                 time.sleep(delay-2)                                                            
     
-        print "Saving sample data ..."  
+        print("Saving sample data ...")
         epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)                
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)                    
         _dimaxDump(filepath, filename)                                             
@@ -1040,21 +1047,21 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
         logFile = open(logFileName,'a')
         logFile.write("Scan was done at time: " + time.asctime() + '\n')
         logFile.close()                                                                    
-        print "sample scan is done!"                          
+        print("sample scan is done!")
         # scan sample -- end
         
         # set for white field -- start
-        print "Acquiring flat images ..."     
+        print("Acquiring flat images ...")
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
         time.sleep(2)                
         _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)        
-        print "flat is done!"                
+        print("flat is done!")   
         # set for white field -- end
         
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)                
-        print "dark is done!"  
+        print("dark is done!")
     
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
         # set for dark field -- end
@@ -1071,7 +1078,7 @@ def DimaxMultiScan(exposureTime=0.003, slewSpeed=90,angEnd = 180,
         if epics.caget(BL + ":caputRecorderGbl_3.VAL",as_string=True) == 'Yes':
             epics.caput(BL + ":caputRecorderGbl_2.VAL", str(int(epics.caget(BL + ":caputRecorderGbl_2.VAL",as_string=True))+1), wait=True, timeout=1000.0)                
         # set for new scans -- end                                    
-    print "Scan is done."    
+    print("Scan is done.")
 
 
 
@@ -1167,7 +1174,7 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
 
     epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
                 
-    print "Scan starts ..."                
+    print("Scan starts ...")
 #    epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
     epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                 
@@ -1186,7 +1193,7 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
 #    _setPSO(slewSpeed, scanDelta, acclTime, angEnd=angEnd, PSO=PSO,rotStage=rotStage)            
     # set scan parameters -- end
                 
-    print "start sample scan ... "
+    print("start sample scan ... ")
 
     epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)    
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)                    
@@ -1195,7 +1202,7 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
     epics.caput(camPrefix + ":cam1:pco_imgs2dump_RBV.VAL",str(numImage), wait=True, timeout=1000.0)    
     time.sleep(2)                
     for ii in range(posNum):
-        print "scan at position #", ii+1, " starts at "+time.asctime()+"!"
+        print("scan at position #", ii+1, " starts at "+time.asctime()+"!")
         timestamp = [x for x in time.asctime().rsplit(' ') if x!=''] 
         filepath = os.path.join(filepath_top, \
                epics.caget(BL + ":caputRecorderGbl_1.VAL",as_string=True)+ \
@@ -1224,7 +1231,7 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
                 
         logFile = open(logFileName,'w')
         logFile.close()                
-        print "Your scan is logged in ", logFileName
+        print("Your scan is logged in ", logFileName)
                                             
         epics.caput(posStage + ".VAL",str(posInit+ii*posStep), wait=True, timeout=1000.0)
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)         
@@ -1242,40 +1249,40 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
 #            global ansCritical
 #            ans = mbox.askquestion('Action','Have you manually remove the sample?',icon='warning')
 #            if ans != 'yes':
-#                print  'Please remove the sample from tomo stage first to proceed reference image acquisition...'
+#                print('Please remove the sample from tomo stage first to proceed reference image acquisition...')
 #            else:
-#                print 'Very good. You need to close the Action Box'
+#                print('Very good. You need to close the Action Box')
 #                ansCritical = ans
 #                
 #        B1 = Tkinter.Button(top, text = ".....Action.....", command = confirm)
 #        B1.pack()
 #        top.mainloop() 
 #        
-#        print ansCritical
+#        print(ansCritical)
 #        if ansCritical != ('yes' or 'Yes'):
-#            print ansCritical
+#            print(ansCritical)
 #            print 'I cannot take reference images with the sample in the beam!!!'
 #            return False
 #        else:
-#            print 'Good to go ...'  
+#            print('Good to go ...')
 #
-#        print "Acquiring flat images ..."    
+#        print("Acquiring flat images ...")
 #        epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
 #        time.sleep(2)                
 #        _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
 #        epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)
-#        print "flat is done!"                
+#        print("flat is done!")
 #        # set for white field -- end
 #        
 #        # set for dark field -- start
-#        print "Acquiring dark images ..."                    
+#        print("Acquiring dark images ...")
 #        _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)   
 #        epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)             
-#        print "dark is done!" 
+#        print("dark is done!")
         
 #        _dimaxAcquisitionWODump(samInPos,samStage,numImage,shutter,PSO = PSO,rotStage=rotStage)
         time.sleep(1)                                                            
-        print "scan at position #", ii+1, " is done at "+time.asctime()+"!"
+        print("scan at position #", ii+1, " is done at "+time.asctime()+"!")
         epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)    
         if ii != (posNum-1):
             epics.caput(BL + ":caputRecorderGbl_2.VAL", str(int(epics.caget(BL + ":caputRecorderGbl_2.VAL",as_string=True))+1), wait=True, timeout=1000.0)                
@@ -1283,7 +1290,7 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
 
 # this section is for _dimaxAcquisitionWODump -- start
     epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)
-    print "Saving sample data ..."                 
+    print("Saving sample data ...")
     epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)    
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)                    
     _dimaxDump(filepath, filename)                 
@@ -1296,7 +1303,7 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
     logFile = open(logFileName,'a')
     logFile.write("Scan was done at time: " + time.asctime() + '\n')
     logFile.close()                                                                    
-    print "sample scan is done!"                          
+    print("sample scan is done!")
     # scan sample -- end
     
 #    global ansCritical
@@ -1306,36 +1313,36 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
 #        global ansCritical
 #        ans = mbox.askquestion('Action','Have you manually remove the sample?',icon='warning')
 #        if ans != 'yes':
-#            print  'Please remove the sample from tomo stage first to proceed reference image acquisition...'
+#            print('Please remove the sample from tomo stage first to proceed reference image acquisition...')
 #        else:
-#            print 'Very good. You need to close the Action Box'
+#            print('Very good. You need to close the Action Box')
 #            ansCritical = ans
 #            
 #    B1 = Tkinter.Button(top, text = ".....Action.....", command = confirm)
 #    B1.pack()
 #    top.mainloop() 
 #    
-#    print ansCritical
+#    print(ansCritical)
 #    if ansCritical != ('yes' or 'Yes'):
-#        print ansCritical
-#        print 'I cannot take reference images with the sample in the beam!!!'
+#        print(ansCritical)
+#        print('I cannot take reference images with the sample in the beam!!!')
 #        return False
 #    else:
-#        print 'Good to go ...'  
+#        print('Good to go ...')
 
-    print "Acquiring flat images ..."    
+    print("Acquiring flat images ...")
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
     time.sleep(2)                
     _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
     epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)
-    print "flat is done!"                
+    print("flat is done!")
     # set for white field -- end
     
     # set for dark field -- start
-    print "Acquiring dark images ..."                    
+    print("Acquiring dark images ...")
     _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)   
     epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)             
-    print "dark is done!"  
+    print("dark is done!")
 
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
     # set for dark field -- end
@@ -1361,7 +1368,7 @@ def DimaxMultiPosScan(exposureTime=0.001, slewSpeed=180,angEnd = 180,
 #    epics.caput(samStage + ".SET",str(0), wait=True, timeout=1000.0)    
 #    epics.caput(BL + ":caputRecorderArg13Value.VAL",str(posCurr), wait=True, timeout=1000.0)    
     # set for new scans -- end
-    print "Scan is done."    
+    print("Scan is done.")
 
 
 
@@ -1406,13 +1413,13 @@ def _Dimax2D(exposureTime=0.0005,
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your measurement is logged in ", logFileName
+    print("Your measurement is logged in ", logFileName)
     
     # test camera -- start
     _dimaxTest(roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = "")
 
     camPrefix = "PCOIOC2"
-    print "Set writer ..."                
+    print("Set writer ...")
     epics.caput(camPrefix + ":cam1:NumImages.VAL",str(numImage-0), wait=True, timeout=1000.0)                
     epics.caput(camPrefix + ":cam1:pco_num_imgs_seg0_RBV.VAL","0", wait=True, timeout=1000.0)                    
     epics.caput(camPrefix + ":cam1:pco_is_frame_rate_mode.VAL","FrateExp", wait=True, timeout=1000.0)
@@ -1421,7 +1428,7 @@ def _Dimax2D(exposureTime=0.0005,
     epics.caput(camPrefix + ":cam1:pco_trigger_mode.VAL","Auto", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:pco_ready2acquire.VAL","0", wait=True, timeout=1000.0)
 #    epics.caput(camPrefix + ":cam1:Acquire.VAL","Acquire", wait=False, timeout=1000.0)
-    print "ready to take images ... "                
+    print("ready to take images ... ")
     while (epics.caget(camPrefix+":cam1:pco_num_imgs_seg0_RBV.VAL") != epics.caget(camPrefix+":cam1:pco_max_imgs_seg0_RBV.VAL")):    
         time.sleep(0.1)        
     #    epics.caput(camPrefix + ":HDF1:NumCapture.VAL",str(numImage), wait=True, timeout=1000.0)    
@@ -1451,11 +1458,11 @@ def _Dimax2D(exposureTime=0.0005,
     logFile = open(logFileName,'a')
     logFile.write("Scan was done at time: " + time.asctime() + '\n')
     logFile.close()                                                                    
-    print "sample scan is done!"                          
+    print("sample scan is done!")
     # scan sample -- end
     
     # set for white field -- start
-    print "Acquiring flat images ..."     
+    print("Acquiring flat images ...")
     epics.caput(samStage + ".VAL",str(samOutPos), wait=True, timeout=1000.0)
     epics.caput(shutter + ":open.VAL",1, wait=True, timeout=1000.0)
     time.sleep(5)
@@ -1479,11 +1486,11 @@ def _Dimax2D(exposureTime=0.0005,
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)    
     epics.caput(samStage + ".VAL","0", wait=True, timeout=1000.0)                
-    print "flat is done!"                
+    print("flat is done!")
     # set for white field -- end
     
     # set for dark field -- start
-    print "Acquiring dark images ..."                
+    print("Acquiring dark images ...")
     time.sleep(2)
     epics.caput(camPrefix + ":HDF1:NumCapture.VAL","10", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":HDF1:NumCapture_RBV.VAL","10", wait=True, timeout=1000.0)                
@@ -1502,7 +1509,7 @@ def _Dimax2D(exposureTime=0.0005,
     time.sleep(2)
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)    
-    print "dark is done!"  
+    print("dark is done!")
 
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
     # set for dark field -- end
@@ -1516,7 +1523,7 @@ def _Dimax2D(exposureTime=0.0005,
     epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                
     epics.caput(samStage + ".VAL",str(samInPos), wait=True, timeout=1000.0)
     # set for new scans -- end
-    print "Measurement is done."   
+    print("Measurement is done.")
 
 
 
@@ -1568,12 +1575,12 @@ def _Edge2D(exposureTime=0.003, frameRate=30,
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your measurement is logged in ", logFileName
+    print("Your measurement is logged in ", logFileName)
     
     # test camera -- start
     _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
 
-    print "Set writer ..."                
+    print("Set writer ...")
     epics.caput(camPrefix + ":cam1:NumImages.VAL",str(numImage-0), wait=True, timeout=1000.0)                
     epics.caput(camPrefix + ":cam1:pco_num_imgs_seg0_RBV.VAL","0", wait=True, timeout=1000.0)                    
     epics.caput(camPrefix + ":cam1:pco_is_frame_rate_mode.VAL","FrateExp", wait=True, timeout=1000.0)
@@ -1595,7 +1602,7 @@ def _Edge2D(exposureTime=0.003, frameRate=30,
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Capture", wait=False, timeout=1000.0)
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)
     time.sleep(2)                
-    print "start to take images ... "                
+    print("start to take images ... ")
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Acquire", wait=False, timeout=1000.0)
                                 
     while epics.caget(camPrefix + ":cam1:NumImagesCounter_RBV.VAL") != numImage:
@@ -1608,11 +1615,11 @@ def _Edge2D(exposureTime=0.003, frameRate=30,
     logFile = open(logFileName,'a')
     logFile.write("Scan was done at time: " + time.asctime() + '\n')
     logFile.close()                                                                    
-    print "radiography recording is done!"                          
+    print("radiography recording is done!")
     # scan sample -- end
     
     # set for white field -- start
-    print "Acquiring flat images ..."     
+    print("Acquiring flat images ...")
     epics.caput(samStage + ".VAL",str(samOutPos), wait=True, timeout=1000.0)
     epics.caput(shutter + ":open.VAL",1, wait=True, timeout=1000.0)
     time.sleep(5)
@@ -1633,11 +1640,11 @@ def _Edge2D(exposureTime=0.003, frameRate=30,
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)    
     epics.caput(samStage + ".VAL","0", wait=True, timeout=1000.0)                
-    print "flat is done!"                
+    print("flat is done!")
     # set for white field -- end
     
     # set for dark field -- start
-    print "Acquiring dark images ..."                
+    print("Acquiring dark images ...")
     time.sleep(2)
     epics.caput(camPrefix + ":HDF1:NumCapture.VAL","10", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":HDF1:NumCapture_RBV.VAL","10", wait=True, timeout=1000.0)                
@@ -1653,7 +1660,7 @@ def _Edge2D(exposureTime=0.003, frameRate=30,
     time.sleep(2)
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)    
-    print "dark is done!"  
+    print("dark is done!")
 
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
     # set for dark field -- end
@@ -1667,7 +1674,7 @@ def _Edge2D(exposureTime=0.003, frameRate=30,
     epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                
     epics.caput(samStage + ".VAL",str(samInPos), wait=True, timeout=1000.0)
     # set for new scans -- end
-    print "Measurement is done."   
+    print("Measurement is done.")
 
 
 def _testEdgeDriver(repeat=20):
@@ -1712,7 +1719,7 @@ def EdgeRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
     elif scanMode == 2:
         camScanSpeed = 'Fastest'
     else:
-        print "Wrong camera scan mode! Quit..."  
+        print("Wrong camera scan mode! Quit...")
         return False
     camShutterMode = "Rolling"                
     camPrefix = "PCOIOC3"
@@ -1791,14 +1798,14 @@ def EdgeRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
         time.sleep(2)  
                                     
         epics.caput(camPrefix+":cam1:Acquire.VAL","Acquire", wait=True, timeout=1000.0)
-        print 'data is done'    
+        print('data is done')
     
         epics.caput(camPrefix+":cam1:NumImages.VAL",10, wait=True, timeout=1000.0)      
         _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
-        print 'flat is done'           
+        print('flat is done')
              
         _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
-        print 'dark is done'           
+        print('dark is done')
     
         epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)            
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)    
@@ -1808,12 +1815,12 @@ def EdgeRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
         if epics.caget(BL + ":caputRecorderGbl_3.VAL",as_string=True) == 'Yes':
             epics.caput(BL + ":caputRecorderGbl_2.VAL", str(int(epics.caget(BL + ":caputRecorderGbl_2.VAL",as_string=True))+1), wait=True, timeout=1000.0)   
 
-        print str(ii), 'th acquistion is done at ', time.asctime() 
+        print(str(ii), 'th acquistion is done at ', time.asctime())
         if ii != repeat-1:
             time.sleep(delay)
                  
                 
-    print 'Radiography acquisition finished!'    
+    print('Radiography acquisition finished!')
 
 def DimaxRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
                     samInPos=0, samOutPos=7,
@@ -1917,7 +1924,7 @@ def DimaxRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
         epics.caput(camPrefix + ":cam1:pco_imgs2dump.VAL",str(numImage-20), wait=True, timeout=1000.0)    
         epics.caput(camPrefix + ":cam1:pco_imgs2dump_RBV.VAL",str(numImage-20), wait=True, timeout=1000.0)                
         epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)        
-        print 'data is done'    
+        print('data is done')
     
         epics.caput(camPrefix+":cam1:NumImages.VAL",10, wait=True, timeout=1000.0) 
         epics.caput("2bma:m49.VAL",str(samOutPos), wait=True, timeout=1000.0)
@@ -1929,7 +1936,7 @@ def DimaxRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
         epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)               
         epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)                   
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0) 
-        print 'flat is done'           
+        print('flat is done')
      
 #        epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0) 
         epics.caput("2bma:m49.VAL",str(samInPos), wait=True, timeout=1000.0)         
@@ -1940,7 +1947,7 @@ def DimaxRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
         epics.caput(camPrefix + ":cam1:pco_imgs2dump_RBV.VAL",'10', wait=True, timeout=1000.0)                
         epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)       
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0) 
-        print 'dark is done'           
+        print('dark is done')
     
         epics.caput(camPrefix+":HDF1:Capture.VAL","Done", wait=False, timeout=1000.0)             
         epics.caput(camPrefix+":cam1:ImageMode.VAL","Continuous", wait=True, timeout=1000.0)
@@ -1949,14 +1956,14 @@ def DimaxRadiography(exposureTime=0.1, frmRate = 9, acqPeroid = 30,
         if epics.caget(BL + ":caputRecorderGbl_3.VAL",as_string=True) == 'Yes':
             epics.caput(BL + ":caputRecorderGbl_2.VAL", str(int(epics.caget(BL + ":caputRecorderGbl_2.VAL",as_string=True))+1), wait=True, timeout=1000.0)   
 
-        print str(ii), 'th acquistion is done at ', time.asctime() 
+        print(str(ii), 'th acquistion is done at ', time.asctime())
         if ii != repeat-1:
             time.sleep(delay)
 
     epics.caput(camPrefix+":cam1:pco_live_view.VAL","Yes", wait=True, timeout=1000.0) 
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)                  
     epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)                 
-    print 'Radiography acquisition finished!'    
+    print('Radiography acquisition finished!')
 
             
 
@@ -1988,7 +1995,7 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
     elif shutterMode == 1:
         camShutterMode = "Global"
     else:
-        print "Wrong camera shutter mode! Quit ..."
+        print("Wrong camera shutter mode! Quit ...")
         return False
         
     if scanMode == 0:
@@ -1998,7 +2005,7 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
     elif scanMode == 2:
         camScanSpeed = 'Fastest'
     else:
-        print "Wrong camera scan mode! Quit ..."  
+        print("Wrong camera scan mode! Quit ...")
         return False                
                                   
     camPrefix = "PCOIOC3"                
@@ -2112,12 +2119,12 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your scan is logged in ", logFileName
+    print("Your scan is logged in ", logFileName)
     
     numImage = numProjPerSweep+20
     
     # test camera -- start
-    print roiSizeX,roiSizeY    
+    print(roiSizeX,roiSizeY)
     _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
     
                 
@@ -2128,7 +2135,7 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
         timeSeq = tf.readlines()
         tf.close() 
         posNum = len(timeSeq)            
-    print "start sample scan ... "
+    print("start sample scan ... ")
     for ii in range(posNum):    
     # set scan parameters -- start 
         if timeFile == 1:
@@ -2235,24 +2242,24 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
         time.sleep(3)                                                            
         _edgeAcquisition(samInPos,samStage,numProjPerSweep,shutter,PSO = PSO,rotStage=rotStage)
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
-        print "scan at position #",ii+1," is done!"
+        print("scan at position #",ii+1," is done!")
 
         samOutPos = samInPos + samOutDist
         
         if flatPerScan == 1:
         # set for white field -- start                   
-            print "Acquiring flat images ..."                   
+            print("Acquiring flat images ...")
             _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)       
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)               
-            print "flat for position #", ii+1, " is done!"                
+            print("flat for position #", ii+1, " is done!")
         # set for white field -- end                                            
                                 
         if darkPerScan == 1:
             # set for dark field -- start
-            print "Acquiring dark images ..."                
+            print("Acquiring dark images ...")
             _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)             
-            print "dark is done!"  
+            print("dark is done!")
         if  posNum!=1 and darkPerScan!=0 and flatPerScan!=0 and ii!=(posNum-1):       
             epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -2266,7 +2273,7 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
 
     epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)      
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)                                            
-    print "sample scan is done!"          
+    print("sample scan is done!")
                                 
 
 
@@ -2279,22 +2286,22 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
     if clShutter==1:
         if flatPerScan == 0:    
             # set for white field -- start                   
-            print "Acquiring flat images ..."    
+            print("Acquiring flat images ...")
             epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)    
             time.sleep(3)                
             _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)         
-            print "flat is done!"                
+            print("flat is done!")
             # set for white field -- end
     
         if darkPerScan == 0:    
             # set for dark field -- start
-            print "Acquiring dark images ..."                
+            print("Acquiring dark images ...")
             _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)           
-            print "dark is done!"  
+            print("dark is done!")
 
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -2307,7 +2314,7 @@ def EdgeMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angEnd = 180
     epics.caput(camPrefix + ":cam1:SizeX.VAL",str(roiSizeX), wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                                                                               
     # set for new scans -- end
-    print "Scan finished!" 
+    print("Scan finished!")
     epics.caput(posStage + ".VAL",str(posInit), wait=True, timeout=1000.0)
     
                 
@@ -2341,7 +2348,7 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
     elif shutterMode == 1:
         camShutterMode = "Global"
     else:
-        print "Wrong camera shutter mode! Quit ..."
+        print("Wrong camera shutter mode! Quit ...")
         return False
         
     if scanMode == 0:
@@ -2351,7 +2358,7 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
     elif scanMode == 2:
         camScanSpeed = 'Fastest'
     else:
-        print "Wrong camera scan mode! Quit ..."  
+        print("Wrong camera scan mode! Quit ...")
         return False                
                                   
     camPrefix = "PCOIOC3"                
@@ -2465,12 +2472,12 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your scan is logged in ", logFileName
+    print("Your scan is logged in ", logFileName)
     
     numImage = numProjPerSweep+20
     
     # test camera -- start
-    print roiSizeX,roiSizeY    
+    print(roiSizeX,roiSizeY)
     _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
     
                 
@@ -2481,7 +2488,7 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
         timeSeq = tf.readlines()
         tf.close() 
         posNum = len(timeSeq)            
-    print "start sample scan ... "
+    print("start sample scan ... ")
     for jj in range(timeNum):
         for ii in range(posNum):    
         # set scan parameters -- start 
@@ -2589,24 +2596,24 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
             time.sleep(3)                                                            
             _edgeAcquisition(samInPos,samStage,numProjPerSweep,shutter,PSO = PSO,rotStage=rotStage)
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
-            print "Sample scan at position #",ii+1, " at time point # ",str(jj+1)," is done!"
-    
+            print("Sample scan at position #",ii+1, " at time point # ",str(jj+1)," is done!")
+            
             samOutPos = samInPos + samOutDist
             
             if flatPerScan == 1:
             # set for white field -- start                   
-                print "Acquiring flat images ..."                   
-                _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)       
-                epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)               
-                print "Flat for position #", ii+1, " at time point # ",str(jj+1)," is done!"                
+                print("Acquiring flat images ...")
+                _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)
+                epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
+                print("Flat for position #", ii+1, " at time point # ",str(jj+1)," is done!")
             # set for white field -- end                                            
                                     
             if darkPerScan == 1:
                 # set for dark field -- start
-                print "Acquiring dark images ..."                
+                print("Acquiring dark images ...")
                 _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
                 epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)             
-                print "Dark for position #", ii+1, " at time point # ",str(jj+1)," is done!"
+                print("Dark for position #", ii+1, " at time point # ",str(jj+1)," is done!")
             if  posNum!=1 and darkPerScan!=0 and flatPerScan!=0 and ii!=(posNum-1):       
                 epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
             epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -2620,7 +2627,7 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
     
         epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)      
         epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)                                            
-        print "Sample scans at time point # ",str(jj+1), "is done!"          
+        print("Sample scans at time point # ",str(jj+1), "is done!")
                                     
     
     
@@ -2633,28 +2640,28 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
         if clShutter==1:
             if flatPerScan == 0:    
                 # set for white field -- start                   
-                print "Acquiring flat images ..."    
+                print("Acquiring flat images ...")
                 epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)    
                 time.sleep(3)                
                 _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
                 epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
         #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)         
-                print "flat is done!"                
+                print("flat is done!")
                 # set for white field -- end
         
             if darkPerScan == 0:    
                 # set for dark field -- start
-                print "Acquiring dark images ..."                
+                print("Acquiring dark images ...")
                 _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
                 epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
         #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)           
-                print "dark is done!"  
+                print("dark is done!")
     
         epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
     # set for dark field -- end
         if jj != (timeNum-1):
-            print timeNum,timeDelay
+            print(timeNum,timeDelay)
             time.sleep(timeDelay)    
     
     # set for new scans -- start
@@ -2664,7 +2671,7 @@ def EdgeTimeLoopMultiPosScan(exposureTime=0.15, slewSpeed=0.67, angStart=0, angE
     epics.caput(camPrefix + ":cam1:SizeX.VAL",str(roiSizeX), wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                                                                               
     # set for new scans -- end
-    print "Scan finished!" 
+    print("Scan finished!")
     epics.caput(posStage + ".VAL",str(posInit), wait=True, timeout=1000.0)
     
                 
@@ -2693,7 +2700,7 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
     elif shutterMode == 1:
         camShutterMode = "Global"
     else:
-        print "Wrong camera shutter mode! Quit ..."
+        print("Wrong camera shutter mode! Quit ...")
         return False
         
     if scanMode == 0:
@@ -2703,7 +2710,7 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
     elif scanMode == 2:
         camScanSpeed = 'Fastest'
     else:
-        print "Wrong camera scan mode! Quit ..."  
+        print("Wrong camera scan mode! Quit ...")
         return False                
                                   
     camPrefix = "PCOIOC3"                
@@ -2759,7 +2766,7 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
     filenameString = epics.caget(BL + ":caputRecorderGbl_filename.VAL",as_string=True)
     pathSep =  filepathString.rsplit('/')
     logFilePath = os.path.join('/local/user2bmb', pathSep[-3],pathSep[-2],pathSep[-1])            
-#    print 2
+#    print(2)
     if not os.path.exists(logFilePath):
         os.makedirs(logFilePath)
                         
@@ -2767,12 +2774,12 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your scan is logged in ", logFileName
+    print("Your scan is logged in ", logFileName)
     
     numImage = numProjPerSweep+20
     
     # test camera -- start
-    print roiSizeX,roiSizeY    
+    print(roiSizeX,roiSizeY)
     _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
     
                 
@@ -2783,7 +2790,7 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
         timeSeq = tf.readlines()
         tf.close() 
         posNum = len(timeSeq)            
-    print "start sample scan ... "
+    print("start sample scan ... ")
     for ii in range(posNum):    
     # set scan parameters -- start 
         if timeFile == 1:
@@ -2821,7 +2828,7 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
         _edgeAcquisition(samInPos,samStage,numProjPerSweep,shutter,PSO = PSO,rotStage=rotStage)
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
-        print "scan at position #",ii+1," is done!"
+        print("scan at position #",ii+1," is done!")
 
 #        samOutPos = samInPos + samOutPos
         samOutPos = samInInitPos + samOutPos
@@ -2829,19 +2836,19 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
         if flatPerScan == 1 or ii==0:
         # set for white field -- start   
             epics.caput(furnaceY+".VAL",90, wait=True, timeout=1000.0)                 
-            print "Acquiring flat images ..."                   
+            print("Acquiring flat images ...")
             _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)        
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)           
-            print "flat for position #", ii+1, " is done!"                
+            print("flat for position #", ii+1, " is done!")
         # set for white field -- end                                            
                                 
         if darkPerScan == 1 or ii==0:
             # set for dark field -- start
             epics.caput(furnaceY+".VAL",90, wait=True, timeout=1000.0) 
-            print "Acquiring dark images ..."                
+            print("Acquiring dark images ...")
             _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)                
-            print "dark is done!" 
+            print("dark is done!")
         # set for dark field -- end    
 
         epics.caput(furnaceY+".VAL",0, wait=True, timeout=1000.0)
@@ -2859,7 +2866,7 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
     epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)      
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0) 
     epics.caput(furnaceY+".VAL",90, wait=True, timeout=1000.0)                                             
-    print "sample scan is done!"          
+    print("sample scan is done!")
                                 
 
 
@@ -2871,22 +2878,22 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
 
     if flatPerScan == 0:    
         # set for white field -- start                   
-        print "Acquiring flat images ..."    
+        print("Acquiring flat images ...")
         epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)    
         time.sleep(3)                
         _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)         
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
 
     if darkPerScan == 0:    
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO) 
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)           
-        print "dark is done!"  
+        print("dark is done!")
 
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -2903,7 +2910,7 @@ def EdgeMultiPosScanJoseph(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 1
 #    epics.caput(samStage + ".VAL",str(samInInitPos), wait=True, timeout=1000.0)
 #    epics.caput(posStage + ".VAL",str(posInit), wait=False, timeout=1000.0)                                                                
     # set for new scans -- end
-    print "Scan finished!" 
+    print("Scan finished!")
     epics.caput(posStage + ".VAL",str(posInit), wait=True, timeout=1000.0)
     
                 
@@ -2931,7 +2938,7 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
     elif shutterMode == 1:
         camShutterMode = "Global"
     else:
-        print "Wrong camera shutter mode! Quit ..."
+        print("Wrong camera shutter mode! Quit ...")
         return False
         
     if scanMode == 0:
@@ -2941,7 +2948,7 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
     elif scanMode == 2:
         camScanSpeed = 'Fastest'
     else:
-        print "Wrong camera scan mode! Quit ..."  
+        print("Wrong camera scan mode! Quit ...")
         return False                
                                   
     camPrefix = "PCOIOC3"                
@@ -3018,7 +3025,7 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
     filenameString = epics.caget(BL + ":caputRecorderGbl_filename.VAL",as_string=True)
     pathSep =  filepathString.rsplit('/')
     logFilePath = os.path.join('/local/user2bmb', pathSep[-3],pathSep[-2],pathSep[-1])            
-#    print 2
+#    print(2)
     if not os.path.exists(logFilePath):
         os.makedirs(logFilePath)
                         
@@ -3026,12 +3033,12 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your scan is logged in ", logFileName
+    print("Your scan is logged in ", logFileName)
     
     numImage = numProjPerSweep+20
     
     # test camera -- start
-    print roiSizeX,roiSizeY    
+    print(roiSizeX,roiSizeY)
     _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
     
                 
@@ -3041,7 +3048,7 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
         tf = open('/local/user2bmb/2016_10/Qi/timeSeq.txt')                    
         timeSeq = tf.readlines()
         tf.close()             
-    print "start sample scan ... "
+    print("start sample scan ... ")
     for ii in range(posNum):    
     # set scan parameters -- start 
         if timeFile == 1:
@@ -3077,26 +3084,26 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
         _edgeAcquisition(samInPos,samStage,numProjPerSweep,shutter,PSO = PSO,rotStage=rotStage)
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
-        print "scan at position #",ii+1," is done!"
+        print("scan at position #",ii+1," is done!")
 
         samOutPos = samInPos + samOutPos
         
         if flatPerScan == 1:
         # set for white field -- start                   
-            print "Acquiring flat images ..."                   
+            print("Acquiring flat images ...")
             _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #            epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)            
-            print "flat for position #", ii+1, " is done!"                
+            print("flat for position #", ii+1, " is done!")
         # set for white field -- end                                            
                                 
         if darkPerScan == 1:
             # set for dark field -- start
-            print "Acquiring dark images ..."                
+            print("Acquiring dark images ...")
             _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #            epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)             
-            print "dark is done!"  
+            print("dark is done!")
 
         epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -3110,7 +3117,7 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
 
     epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)      
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)                                            
-    print "sample scan is done!"          
+    print("sample scan is done!")
                                 
 
 
@@ -3122,22 +3129,22 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
 
     if flatPerScan == 0:    
         # set for white field -- start                   
-        print "Acquiring flat images ..."    
+        print("Acquiring flat images ...")
         epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)    
         time.sleep(3)                
         _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)         
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
 
     if darkPerScan == 0:    
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)           
-        print "dark is done!"  
+        print("dark is done!")
 
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -3154,7 +3161,7 @@ def EdgeMultiPosScanFreeRun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 
 #    epics.caput(samStage + ".VAL",str(samInInitPos), wait=True, timeout=1000.0)
 #    epics.caput(posStage + ".VAL",str(posInit), wait=False, timeout=1000.0)                                                                
     # set for new scans -- end
-    print "Scan finished!" 
+    print("Scan finished!")
     
                 
 
@@ -3180,7 +3187,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
     elif shutterMode == 1:
         camShutterMode = "Global"
     else:
-        print "Wrong camera shutter mode! Quit ..."
+        print("Wrong camera shutter mode! Quit ...")
         return False
         
     if scanMode == 0:
@@ -3190,7 +3197,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
     elif scanMode == 2:
         camScanSpeed = 'Fastest'
     else:
-        print "Wrong camera scan mode! Quit ..."  
+        print("Wrong camera scan mode! Quit ...")
         return False                
                                   
     camPrefix = "PCOIOC3"                
@@ -3236,7 +3243,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
     filenameString = epics.caget(BL + ":caputRecorderGbl_filename.VAL",as_string=True)
     pathSep =  filepathString.rsplit('/')
     logFilePath = os.path.join('/local/user2bmb', pathSep[-3],pathSep[-2],pathSep[-1])            
-#    print 2
+#    print(2)
     if not os.path.exists(logFilePath):
         os.makedirs(logFilePath)
                         
@@ -3244,12 +3251,12 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your scan is logged in ", logFileName
+    print("Your scan is logged in ", logFileName)
     
     numImage = numProjPerSweep+20
     
     # test camera -- start
-    print roiSizeX,roiSizeY    
+    print(roiSizeX,roiSizeY)
     _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
     
                 
@@ -3258,7 +3265,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
         tf = open('/local/user2bmb/2016_10/Qi/timeSeq.txt')                    
         timeSeq = tf.readlines()
         tf.close()             
-    print "start sample scan ... "
+    print("start sample scan ... ")
     
     samInPosList = [0.038, -0.026, -0.191]
     samOutPosList = [8.52, 8.87, 8.7]
@@ -3302,26 +3309,26 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
             _edgeAcquisition(samInPos,samStage,numProjPerSweep,shutter,PSO = PSO,rotStage=rotStage)
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
-            print "scan at position #",ii+1," is done!"
+            print("scan at position #",ii+1," is done!")
     
 #            samOutPos = samInPos + samOutPos
             
             if flatPerScan == 1:
             # set for white field -- start                   
-                print "Acquiring flat images ..."                   
+                print("Acquiring flat images ...")
                 _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
                 epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #            epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)            
-                print "flat for position #", ii+1, " is done!"                
+                print("flat for position #", ii+1, " is done!")
             # set for white field -- end                                            
                                     
             if darkPerScan == 1:
                 # set for dark field -- start
-                print "Acquiring dark images ..."                
+                print("Acquiring dark images ...")
                 _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
                 epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #            epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)             
-                print "dark is done!"  
+                print("dark is done!")
     
             epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
             epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -3336,7 +3343,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 
     epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)      
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)                                            
-    print "sample scan is done!"          
+    print("sample scan is done!")
                                 
 
 
@@ -3348,22 +3355,22 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 
     if flatPerScan == 0:    
         # set for white field -- start                   
-        print "Acquiring flat images ..."    
+        print("Acquiring flat images ...")
         epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)    
         time.sleep(3)                
         _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)         
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
 
     if darkPerScan == 0:    
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)           
-        print "dark is done!"  
+        print("dark is done!")
 
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -3380,7 +3387,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 #    epics.caput(samStage + ".VAL",str(samInInitPos), wait=True, timeout=1000.0)
 #    epics.caput(posStage + ".VAL",str(posInit), wait=False, timeout=1000.0)                                                                
     # set for new scans -- end
-    print "Scan finished!" 
+    print("Scan finished!")
     
                 
 
@@ -3412,7 +3419,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 #    elif scanMode == 2:
 #        camScanSpeed = 'Fastest'
 #    else:
-#        print "Wrong camera scan mode! Quit..."  
+#        print("Wrong camera scan mode! Quit...")
 #        return False                
 #    epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)                
 #    camShutterMode = "Global"                    
@@ -3530,7 +3537,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 #    filenameString = epics.caget(BL + ":caputRecorderGbl_filename.VAL",as_string=True)
 #    pathSep =  filepathString.rsplit('/')
 #    logFilePath = os.path.join('/local/user2bmb', pathSep[-3],pathSep[-2],pathSep[-1])            
-##    print 2
+##    print(2)
 #    if not os.path.exists(logFilePath):
 #        os.makedirs(logFilePath)
 #                        
@@ -3538,12 +3545,12 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 #            
 #    logFile = open(logFileName,'w')
 #    logFile.close()                
-#    print "Your scan is logged in ", logFileName
+#    print("Your scan is logged in ", logFileName)
 #    
 #    numImage = numProjPerSweep+20
 #    
 #    # test camera -- start
-#    print roiSizeX,roiSizeY    
+#    print(roiSizeX,roiSizeY)
 #    _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
 #    
 #                
@@ -3553,7 +3560,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 #        tf = open('/local/user2bmb/2016_10/Qi/timeSeq.txt')                    
 #        timeSeq = tf.readlines()
 #        tf.close()                                                                
-#    print "start sample scan ... "
+#    print("start sample scan ... ")
 #    for jj in range(timeNum): 
 #        if timeFile == 1:
 #            timeDelay = float(timeSeq[jj])  
@@ -3590,7 +3597,7 @@ def EdgeMultiPosScanArjun(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 18
 #            _edgeAcquisition(samInPos,samStage,numProjPerSweep,shutter,PSO = PSO,rotStage=rotStage)
 #            epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 ##            epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
-#            print "scan at position #",ii+1," is done!"
+#            print("scan at position #",ii+1," is done!")
 #    
 #            # set for white field -- start
 #            epics.caput(camPrefix+":cam1:pco_edge_fastscan.VAL","Normal", wait=True, timeout=1000.0)
@@ -4029,7 +4036,7 @@ def dimaxResetCrash():
     PSO = "2bmb:PSOFly1"
     BL = "2bmb"        
     camPrefix = "PCOIOC2"    
-    print "Reseting software ..."            
+    print("Reseting software ...")
     # tomo configurations -- end                    
 
     epics.caput(PSO + ":scanControl.VAL","Standard", wait=True, timeout=1000.0) 
@@ -4062,7 +4069,7 @@ def dimaxResetCrash():
     epics.caput(rotStage + ".VAL","0.00000", wait=False, timeout=1000.0)            
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)                
     epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)    
-    print "Saving sample data ..."     
+    print("Saving sample data ...")
                     
     epics.caput(rotStage + ".VELO","50.00000", wait=True, timeout=1000.0)
     epics.caput(rotStage + ".VAL","0.00000", wait=False, timeout=1000.0)            
@@ -4081,7 +4088,7 @@ def dimaxResetCrash():
     epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                
     epics.caput(samStage + ".VAL",str(samInPos), wait=True, timeout=1000.0)
     # set for new scans -- end
-    print "Dimax is reset! Good to go."     
+    print("Dimax is reset! Good to go.")
 
 
 #
@@ -4323,7 +4330,7 @@ def InterlaceScan(exposureTime=0.006,
         epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
         epics.caput(BL+":saveData_scanNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
 
-        print "Scan starts ..."                
+        print("Scan starts ...")
 
         epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                     
@@ -4341,7 +4348,7 @@ def InterlaceScan(exposureTime=0.006,
         logFileName = os.path.join(logFilePath, filenameString+ "_" + "%(index)03d"%{"index":int(epics.caget(camPrefix + ":HDF1:FileNumber.VAL"))} + ".log")                                                                                                                    
         logFile = open(logFileName,'w')
         logFile.close()                 
-        print "Your scan is logged in ", logFileName
+        print("Your scan is logged in ", logFileName)
         
         timestamp = [x for x in time.asctime().rsplit(' ') if x!='']                                 
                                                 
@@ -4373,7 +4380,7 @@ def InterlaceScan(exposureTime=0.006,
 #        _setPSO(slewSpeed, scanDelta, acclTime, PSO=PSO,rotStage=rotStage)
             
         # sample scan -- start  
-        print "start sample scan ... "
+        print("start sample scan ... ")
         
         
         preTemp = epics.caget(BL+":ET2k:1:Temperature.VAL")
@@ -4388,7 +4395,7 @@ def InterlaceScan(exposureTime=0.006,
             epics.caput(PSO+":taxi.VAL","Taxi", wait=True, timeout=1000.0) 
             _edgeInterlaceAcquisition(samInPos,samStage,numImage,shutter,InterlacePSO = PSO,rotStage=rotStage)                                       
             if ii < (repeat-1):
-                print "repeat #", str(ii), " is done! next scan will be started in ", str(interval), " seconds ..." 
+                print("repeat #", str(ii), " is done! next scan will be started in ", str(interval), " seconds ...")
                 time.sleep(interval)  
                 
 
@@ -4396,21 +4403,21 @@ def InterlaceScan(exposureTime=0.006,
         logFile = open(logFileName,'a')
         logFile.write("Scan was done at time: " + time.asctime() + '\n')
         logFile.close()                                                                    
-        print "sample scan is done!"                          
+        print("sample scan is done!")
         # scan sample -- end                                                      
         
         # set for white field -- start
         if flatPerScan == 0: 								
-            print "Acquiring flat images ..."            
+            print("Acquiring flat images ...")
             _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)            
-            print "flat is done!"                
+            print("flat is done!")
         # set for white field -- end
         
 #        # set for dark field -- start
         if darkPerScan == 0:								
-            print "Acquiring dark images ..."                
+            print("Acquiring dark images ...")
             _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)            
-            print "dark is done!"  
+            print("dark is done!")
     
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
         if epics.caget(BL + ":caputRecorderGbl_3.VAL",as_string=True) == 'Yes':
@@ -4427,7 +4434,7 @@ def InterlaceScan(exposureTime=0.006,
         epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                
         epics.caput(samStage + ".VAL",str(samInPos), wait=True, timeout=1000.0)
         # set for new scans -- end
-        print "Scan is done."
+        print("Scan is done.")
     elif cam == "dimax":
         initDimax(samInPos=samInPos)    
         camPrefix = "PCOIOC2"        
@@ -4441,7 +4448,7 @@ def InterlaceScan(exposureTime=0.006,
         epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
         epics.caput(BL + ":saveData_scanNumber.VAL",epics.caget(BL+":caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
 #        epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget(BL+":userCalc3.CALC",as_string=True), wait=True, timeout=1000.0)
-        print "Scan starts ..."                
+        print("Scan starts ...")
 #        epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
         epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                     
@@ -4460,7 +4467,7 @@ def InterlaceScan(exposureTime=0.006,
                 
         logFile = open(logFileName,'w')
         logFile.close()                
-        print "Your scan is logged in ", logFileName
+        print("Your scan is logged in ", logFileName)
         
         numImage = epics.caget(BL+":iFly:interlaceFlySub.VALE")
 #        numImage = epics.caget(camPrefix+":cam1:pco_max_imgs_seg0_RBV.VAL")
@@ -4474,7 +4481,7 @@ def InterlaceScan(exposureTime=0.006,
 #        _setPSO(slewSpeed, scanDelta, acclTime, PSO=PSO,rotStage=rotStage)
         # set scan parameters -- end
                     
-        print "start sample scan ... "
+        print("start sample scan ... ")
         epics.caput(rotStage+".VELO","200", wait=True, timeout=1000.0)
         epics.caput(PSO+":taxi.VAL","Taxi", wait=True, timeout=1000.0)
         
@@ -4489,19 +4496,19 @@ def InterlaceScan(exposureTime=0.006,
         logFile = open(logFileName,'a')
         logFile.write("Scan was done at time: " + time.asctime() + '\n')
         logFile.close()                                                                    
-        print "sample scan is done!"                          
+        print("sample scan is done!")
         # scan sample -- end
         
         # set for white field -- start
-        print "Acquiring flat images ..."     
+        print("Acquiring flat images ...")
         _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)        
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
         
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _dimaxAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)                
-        print "dark is done!"  
+        print("dark is done!")
     
         epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
         # set for dark field -- end
@@ -4515,7 +4522,7 @@ def InterlaceScan(exposureTime=0.006,
         epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                
         epics.caput(samStage + ".VAL",str(samInPos), wait=True, timeout=1000.0)
         # set for new scans -- end
-        print "Scan is done." 
+        print("Scan is done.")
     epics.caput(PSO+":slewSpeed.VAL", slewSpeed, wait=True, timeout=1000.0)
 
 
@@ -4542,7 +4549,7 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
     elif shutterMode == 1:
         camShutterMode = "Global"
     else:
-        print "Wrong camera shutter mode! Quit ..."
+        print("Wrong camera shutter mode! Quit ...")
         return False
         
     if scanMode == 0:
@@ -4552,7 +4559,7 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
     elif scanMode == 2:
         camScanSpeed = 'Fastest'
     else:
-        print "Wrong camera scan mode! Quit ..."  
+        print("Wrong camera scan mode! Quit ...")
         return False                
                                   
     camPrefix = "PCOIOC3"                
@@ -4598,7 +4605,7 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
     filenameString = epics.caget(BL + ":caputRecorderGbl_filename.VAL",as_string=True)
     pathSep =  filepathString.rsplit('/')
     logFilePath = os.path.join('/local/user2bmb', pathSep[-3],pathSep[-2],pathSep[-1])            
-#    print 2
+#    print(2)
     if not os.path.exists(logFilePath):
         os.makedirs(logFilePath)
                         
@@ -4606,12 +4613,12 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your scan is logged in ", logFileName
+    print("Your scan is logged in ", logFileName)
     
     numImage = numProjPerSweep+20
     
     # test camera -- start
-    print roiSizeX,roiSizeY    
+    print(roiSizeX,roiSizeY)
     _edgeTest(camScanSpeed,camShutterMode,roiSizeX=roiSizeX,roiSizeY=roiSizeY,PSO = PSO)
     
                 
@@ -4620,7 +4627,7 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
         tf = open('/local/user2bmb/2016_10/Qi/timeSeq.txt')                    
         timeSeq = tf.readlines()
         tf.close()             
-    print "start sample scan ... "
+    print("start sample scan ... ")
     
     samInPosList = [0.038, -0.026, -0.191]
     samOutPosList = [8.52, 8.87, 8.7]
@@ -4664,26 +4671,26 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
             _edgeAcquisition(samInPos,samStage,numProjPerSweep,shutter,PSO = PSO,rotStage=rotStage)
             epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
-            print "scan at position #",ii+1," is done!"
+            print("scan at position #",ii+1," is done!")
     
 #            samOutPos = samInPos + samOutPos
             
             if flatPerScan == 1:
             # set for white field -- start                   
-                print "Acquiring flat images ..."                   
+                print("Acquiring flat images ...")
                 _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
                 epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #            epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)            
-                print "flat for position #", ii+1, " is done!"                
+                print("flat for position #", ii+1, " is done!")
             # set for white field -- end                                            
                                     
             if darkPerScan == 1:
                 # set for dark field -- start
-                print "Acquiring dark images ..."                
+                print("Acquiring dark images ...")
                 _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)    
                 epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     #            epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)             
-                print "dark is done!"  
+                print("dark is done!")
     
             epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
             epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -4698,7 +4705,7 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
 
     epics.caput(shutter+":close.VAL",1, wait=True, timeout=1000.0)      
     epics.caput("2bma:m23.VAL","1", wait=True, timeout=1000.0)                                            
-    print "sample scan is done!"          
+    print("sample scan is done!")
                                 
 
 
@@ -4710,22 +4717,22 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
 
     if flatPerScan == 0:    
         # set for white field -- start                   
-        print "Acquiring flat images ..."    
+        print("Acquiring flat images ...")
         epics.caput(shutter+":open.VAL",1, wait=True, timeout=1000.0)    
         time.sleep(3)                
         _edgeAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)         
-        print "flat is done!"                
+        print("flat is done!")
         # set for white field -- end
 
     if darkPerScan == 0:    
         # set for dark field -- start
-        print "Acquiring dark images ..."                
+        print("Acquiring dark images ...")
         _edgeAcquireDark(samInPos,filepath,samStage,rotStage,shutter, PSO = PSO)  
         epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
 #        epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)           
-        print "dark is done!"  
+        print("dark is done!")
 
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(BL+":caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
@@ -4742,7 +4749,7 @@ def PGMultiPosScan(exposureTime=0.1, slewSpeed=1, angStart=0, angEnd = 180,
 #    epics.caput(samStage + ".VAL",str(samInInitPos), wait=True, timeout=1000.0)
 #    epics.caput(posStage + ".VAL",str(posInit), wait=False, timeout=1000.0)                                                                
     # set for new scans -- end
-    print "Scan finished!" 
+    print("Scan finished!")
     
                 
 
@@ -4774,7 +4781,7 @@ def _edgeTest(camScanSpeed,camShutterMode,roiSizeX=2560,roiSizeY=2160,PSO = "2bm
     epics.caput(camPrefix+":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)
     epics.caput(camPrefix+":cam1:pco_trigger_mode.VAL","Auto", wait=True, timeout=1000.0)    
     epics.caput(camPrefix+":cam1:Acquire.VAL","Acquire", wait=True, timeout=1000.0)
-    print "camera passes test!"
+    print("camera passes test!")
                 
 def _edgeSet(filepath, filename, numImage, exposureTime, frate,
           PSO = "2bmb:PSOFly1"):    
@@ -4839,7 +4846,7 @@ def _edgeInterlaceAcquisition(samInPos,samStage,numProjPerSweep,shutter,clShutte
     epics.caput(rotStage + ".VELO","50.00000", wait=True, timeout=1000.0)
     epics.caput(rotStage + ".VAL","0.00000", wait=False, timeout=1000.0)    
     numProjPerSweep = epics.caget(camPrefix+":cam1:NumImagesCounter_RBV.VAL")
-    print "Saving sample data ..."                
+    print("Saving sample data ...")
     while (epics.caget(camPrefix+":HDF1:NumCaptured_RBV.VAL") != numProjPerSweep):    
         time.sleep(1)                    
 #    epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
@@ -4917,15 +4924,15 @@ def _dimaxTest(roiSizeX=2560,roiSizeY=2160,PSO = "2bmb:PSOFly1"):
     epics.caput(camPrefix + ":cam1:SizeX.VAL",str(roiSizeX), wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:pco_trigger_mode.VAL","Auto", wait=True, timeout=1000.0)
-    print "test camera ..."
+    print("test camera ...")
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Acquire", wait=False, timeout=1000.0)
-#    print 'to stop'
-#    epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
-    print "camera passes test!"
+    # print('to stop')
+    # epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
+    print("camera passes test!")
                 
 def _dimaxSet(numImage, exposureTime, frate):    
     camPrefix = "PCOIOC2"
-    print "Set writer ..."                
+    print("Set writer ...")
     epics.caput(camPrefix + ":cam1:NumImages.VAL",str(numImage-0), wait=True, timeout=1000.0)                
     epics.caput(camPrefix + ":cam1:pco_num_imgs_seg0_RBV.VAL","0", wait=True, timeout=1000.0)                    
     epics.caput(camPrefix + ":cam1:pco_is_frame_rate_mode.VAL","DelayExp", wait=True, timeout=1000.0)
@@ -4943,7 +4950,7 @@ def _dimaxSet(numImage, exposureTime, frate):
                 
 def _dimaxDump(filepath, filename):    
     camPrefix = "PCOIOC2"    
-    print filepath  
+    print(filepath)
          
     epics.caput(camPrefix + ":HDF1:NumCapture.VAL",str(epics.caget(camPrefix+":cam1:pco_max_imgs_seg0_RBV.VAL")), wait=True, timeout=1000.0)    
     epics.caput(camPrefix + ":HDF1:NumCapture_RBV.VAL",str(epics.caget(camPrefix+":cam1:pco_max_imgs_seg0_RBV.VAL")), wait=True, timeout=1000.0)
@@ -4982,7 +4989,7 @@ def _dimaxAcquisition(samInPos,samStage,numProjPerSweep,shutter,filepath,filenam
     epics.caput(rotStage + ".VAL","0.00000", wait=False, timeout=1000.0)            
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
     epics.caput("2bma:m23.VAL","0", wait=True, timeout=1000.0)                
-    print "Saving sample data ..."                 
+    print("Saving sample data ...")
     _dimaxDump(filepath, filename)                                
 #    while (epics.caget(camPrefix + ":HDF1:NumCapture_RBV.VAL") != epics.caget(camPrefix + ":HDF1:NumCaptured_RBV.VAL")):    
 #        time.sleep(1)
@@ -5026,7 +5033,7 @@ def _dimaxInterlaceAcquisition(samInPos,samStage,numProjPerSweep,shutter,Interla
     epics.caput(rotStage + ".VAL","0.00000", wait=False, timeout=1000.0)            
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)                
     epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)    
-    print "Saving sample data ..."                 
+    print("Saving sample data ...")
 #    while (epics.caget(camPrefix + ":HDF1:NumCapture_RBV.VAL") != epics.caget(camPrefix + ":HDF1:NumCaptured_RBV.VAL")):    
 #        time.sleep(1)
 #    epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)        
@@ -5034,8 +5041,8 @@ def _dimaxInterlaceAcquisition(samInPos,samStage,numProjPerSweep,shutter,Interla
 #    while (epics.caget(camPrefix+":HDF1:NumCaptured_RBV.VAL") != (numProjPerSweep-0)):
     while (epics.caget(camPrefix+":HDF1:NumCaptured_RBV.VAL") != epics.caget(camPrefix+":cam1:pco_max_imgs_seg0_RBV.VAL")):    
         time.sleep(1)
-#        print numProjPerSweep-20
-#        print epics.caget(camPrefix+":HDF1:NumCaptured_RBV.VAL")
+#        print(numProjPerSweep-20)
+#        print(epics.caget(camPrefix+":HDF1:NumCaptured_RBV.VAL"))
                                 
 def _dimaxAcquireFlat(samInPos,samOutPos,filepath,samStage,rotStage,shutter, PSO = "2bmb:PSOFly1"):    
     camPrefix = "PCOIOC2"
@@ -5240,7 +5247,7 @@ def BrianLoadScan(exposureTime=0.0002, slewSpeed=720,angEnd = 4680,
 
     epics.caput(camPrefix + ":HDF1:FileNumber.VAL",epics.caget("2bmb:caputRecorderGbl_10.VAL",as_string=True), wait=True, timeout=1000.0)
                 
-    print "in situ Scan starts ..."                
+    print("in situ Scan starts ...")
     epics.caput(shutter + ":open.VAL", 1, wait=True, timeout=1000.0)
                 
     filepath = epics.caget("2bmb:caputRecorderGbl_filepath.VAL")
@@ -5258,7 +5265,7 @@ def BrianLoadScan(exposureTime=0.0002, slewSpeed=720,angEnd = 4680,
             
     logFile = open(logFileName,'w')
     logFile.close()                
-    print "Your log file is save in ", logFileName
+    print("Your log file is save in ", logFileName)
     
     numImage = numProjPerSweep
     
@@ -5272,13 +5279,13 @@ def BrianLoadScan(exposureTime=0.0002, slewSpeed=720,angEnd = 4680,
     epics.caput(camPrefix + ":cam1:SizeX.VAL",str(roiSizeX), wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:pco_trigger_mode.VAL","Auto", wait=True, timeout=1000.0)
-    print "test camera ..."
+    print("test camera ...")
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Acquire", wait=True, timeout=1000.0)
-    print "camera passes test!"
+    print("camera passes test!")
     # test camera -- end
 
     # set for white field -- start
-    print "start acquire in situ flat ..."
+    print("start acquire in situ flat ...")
     epics.caput(camPrefix + ":cam1:AcquireTime.VAL",str(exposureTime), wait=True, timeout=1000.0)                
     epics.caput(shutter + ":open.VAL",1, wait=True, timeout=1000.0)
     time.sleep(5)
@@ -5307,17 +5314,17 @@ def BrianLoadScan(exposureTime=0.0002, slewSpeed=720,angEnd = 4680,
     epics.caput(shutter + ":close.VAL",1, wait=True, timeout=1000.0)
     time.sleep(5)
     epics.caput(camPrefix + ":cam1:pco_imgs2dump.VAL","10", wait=True, timeout=1000.0)    
-    epics.caput(camPrefix + ":cam1:pco_imgs2dump_RBV.VAL","10", wait=True, timeout=1000.0)                
+    epics.caput(camPrefix + ":cam1:pco_imgs2dump_RBV.VAL","10", wait=True, timeout=1000.0)         
     epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)
-    while (epics.caget(camPrefix + ":HDF1:NumCapture_RBV.VAL") != epics.caget(camPrefix + ":HDF1:NumCaptured_RBV.VAL")):    
-        time.sleep(1)                
+    while (epics.caget(camPrefix + ":HDF1:NumCapture_RBV.VAL") != epics.caget(camPrefix + ":HDF1:NumCaptured_RBV.VAL")):
+        time.sleep(1)
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)        
-    print "in situ flat acquire is done!"                
+    print("in situ flat acquire is done!")
     # set for white field -- end
     
     # set for dark field -- start
-    print "start acquire in situ dark ..."                
+    print("start acquire in situ dark ...")
     epics.caput(camPrefix + ":HDF1:NumCapture.VAL","10", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":HDF1:NumCapture_RBV.VAL","10", wait=True, timeout=1000.0)                
     epics.caput(camPrefix + ":HDF1:FilePath.VAL",filepath, wait=True, timeout=1000.0)
@@ -5345,11 +5352,11 @@ def BrianLoadScan(exposureTime=0.0002, slewSpeed=720,angEnd = 4680,
         time.sleep(1)                
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)    
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)                
-    print "in situ dark acquire is done!"  
+    print("in situ dark acquire is done!")
 
     
     # set scan parameters -- start
-    print "Set writer for in situ ..."                
+    print("Set writer for in situ ...")
 #    epics.caput(camPrefix + ":HDF1:NumCapture.VAL",str(numImage-5), wait=True, timeout=1000.0)    
 #    epics.caput(camPrefix + ":HDF1:NumCapture_RBV.VAL",str(numImage-5), wait=True, timeout=1000.0)    
     epics.caput(camPrefix + ":HDF1:NumCaptured_RBV.VAL","0", wait=True, timeout=1000.0)                
@@ -5383,20 +5390,20 @@ def BrianLoadScan(exposureTime=0.0002, slewSpeed=720,angEnd = 4680,
 #    epics.caput(shutter + ":open.VAL",1, wait=True, timeout=1000.0)
 #    time.sleep(5)
                 
-    print "start in situ acquisition ... "        
+    print("start in situ acquisition ... ")
     epics.caput(PSO + ":taxi.VAL","Taxi", wait=True, timeout=1000.0)
     epics.caput(shutter + ":open.VAL",1, wait=True, timeout=1000.0)                
-    print "start in situ fly"
+    print("start in situ fly")
     _loadCellAfterTaxi(PSOFly="2bmb:PSOFly1:", loadMotor="2bma:m58", MCS="2bmb:mcs:", loadIOpin=20, tomoIOpin=21)
-    print 0                
+    print(0)
     epics.caput("2bmb:loadCellStartMeasurement.PROC", 1, wait=True, timeout=1000.0)                    
-    print "in situ fly done"
+    print("in situ fly done")
                 
     epics.caput(shutter + ":close.VAL",1, wait=True, timeout=1000.0)
     epics.caput("2bmb:setModuloPos.PROC", 1, wait=True, timeout=1000.0)                            
     epics.caput(rotStage + ".VELO","50.00000", wait=True, timeout=1000.0)
     epics.caput(rotStage + ".VAL","0.00000", wait=False, timeout=1000.0)            
-    print "in situ acquisition is done! Saving images now ..."          
+    print("in situ acquisition is done! Saving images now ...")
 
 #            while (epics.caget(camPrefix + ":cam1:pco_num_imgs_seg0_RBV.VAL") != epics.caget(camPrefix + ":cam1:pco_max_imgs_seg0_RBV.VAL")):    
 #                time.sleep(1)
@@ -5409,38 +5416,37 @@ def BrianLoadScan(exposureTime=0.0002, slewSpeed=720,angEnd = 4680,
     epics.caput(camPrefix + ":cam1:pco_dump_camera_memory",1, wait=True, timeout=1000.0)    
     while (epics.caget(camPrefix + ":HDF1:NumCapture_RBV.VAL") != epics.caget(camPrefix + ":HDF1:NumCaptured_RBV.VAL")):    
         time.sleep(1)
-                    
-
+    
     epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
-
+    
     logFile = open(logFileName,'a')
     logFile.write("Scan was done at time: " + time.asctime() + '\n')
     logFile.close()    
-                                                                
-    print "in situ scan is done!"                          
+    
+    print("in situ scan is done!")
     # scan sample -- end
     
     # reset rotation stage position -- start                
     epics.caput(rotStage + ".VELO","50.00000", wait=True, timeout=1000.0)
     epics.caput(rotStage + ".VAL","0.00000", wait=True, timeout=1000.0)
-    print "stop acquire"
+    print("stop acquire")
     # reset rotation stage position -- end
     
-
+    
     epics.caput("2bmb:caputRecorderGbl_10.VAL",epics.caget(camPrefix + ":HDF1:FileNumber.VAL",as_string=True), wait=True, timeout=1000.0)
     # set for dark field -- end
     
     # set for new scans -- start
-    epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)                
+    epics.caput(camPrefix + ":HDF1:Capture.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:Acquire.VAL","Done", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:pco_trigger_mode.VAL","Auto", wait=True, timeout=1000.0)
     epics.caput(camPrefix + ":cam1:pco_live_view.VAL","Yes", wait=True, timeout=1000.0)    
     epics.caput(camPrefix + ":cam1:SizeX.VAL",str(roiSizeX), wait=True, timeout=1000.0)
-    epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)                
+    epics.caput(camPrefix + ":cam1:SizeY.VAL",str(roiSizeY), wait=True, timeout=1000.0)
     epics.caput(samStage + ".VAL",str(samInPos), wait=True, timeout=1000.0)
     epics.caput("2bmb:scaler3.CONT","AutoCount", wait=True, timeout=1000.0)                
     # set for new scans -- end
-    print "Scan is completed!!! Ready for the next scan ..."    
+    print("Scan is completed!!! Ready for the next scan ...")
 
 
 
@@ -5734,7 +5740,7 @@ def _loadCellAfterTaxi(PSOFly="2bmb:PSOFly1:", loadMotor="2bma:m58",
     startPos = epics.caget(PSOFly+"startPos")
     startDistance = abs(startPos-currPos)
     speed = epics.caget(PSOFly+"slewSpeed")
-    if (speed <= 0): print "invalid slewSpeed"
+    if (speed <= 0): print("invalid slewSpeed")
     accelDist = accelTime*speed/2
     tomoProgramTime = .0118 # time (s) from softGlue "tomo" signal to tomo motor start
     timeToFirstTrigger = tomoProgramTime + accelTime + (startDistance - accelDist) / speed
@@ -5754,7 +5760,7 @@ def _loadCellAfterTaxi(PSOFly="2bmb:PSOFly1:", loadMotor="2bma:m58",
     tomoStartTime += .002
     #print "tomoStart=%f, loadStart=%f" % (tomoStartTime, loadStartTime)
     # Program loadStart time
-#    print '001'
+    # print '001'
     clockFreq = 1000
     pulseTime = .002
     epics.caput(softGlue+"DnCntr-1_PRESET",loadStartTime*clockFreq, wait=True, timeout=1000000.0)
@@ -5929,7 +5935,7 @@ def record_loading(exposureTime=0.5):
              
     logFileName = os.path.join(logFilePath, epics.caget('2bmb:caputRecorderGbl_1',as_string=True)+\
                                           epics.caget('2bmb:caputRecorderGbl_2',as_string=True).zfill(3)+'_loading_history.log')  
-    print 'Your log file is saved at ',logFileName    
+    print('Your log file is saved at ',logFileName)
     
     epics.caput(camPrefix + ":cam1:Acquire", 'Acquire',wait=False,timeout=1000.0)
     
@@ -5940,22 +5946,22 @@ def record_loading(exposureTime=0.5):
         global ansCritical
         ans = mbox.askquestion('Action','Please ctrl+C to stop load history recording if you have done manual loading',icon='warning')
         if ans != 'yes':
-            print  'Please stop the load history recording first...'
+            print('Please stop the load history recording first...')
         else:
-            print 'Very good. You need to close this Action Box'
+            print('Very good. You need to close this Action Box')
             ansCritical = ans
             
     B1 = Tkinter.Button(top, text = ".....Action.....", command = confirm)
     B1.pack()
     top.mainloop() 
     
-    print ansCritical
+    print(ansCritical)
     if ansCritical != ('yes' or 'Yes'):
-        print ansCritical
-        print 'I wont proceed if the load history recording is still going!!!'
+        print(ansCritical)
+        print('I wont proceed if the load history recording is still going!!!')
         return False
     else:
-        print 'Good to go ...'    
+        print('Good to go ...')
             
     epics.caput(camPrefix + ":cam1:Acquire", 'Done',wait=True,timeout=1000.0) 
     epics.caput(camPrefix + ":TIFF1:FileWriteMode", 'Stream',wait=True,timeout=1000.0)   

@@ -86,9 +86,9 @@ def main():
         #wait_pv(global_PVs["Motor_Y_Tile"], y_val, 600)
         y_val += y_itr
         for x in range( int(variableDict['X_NumTiles']) ):
-            print y_val, x_val
+            print( y_val, x_val)
             global_PVs["Motor_SampleX"].put(x_val, wait=True, timeout=600.0)
-            print 'sleep', float(variableDict['MosaicMoveSleep'])
+            print('sleep', float(variableDict['MosaicMoveSleep']))
             time.sleep(float(variableDict['MosaicMoveSleep']))
             #wait_pv(global_PVs["Motor_X_Tile"], x_val, 600)
             x_val += x_itr
