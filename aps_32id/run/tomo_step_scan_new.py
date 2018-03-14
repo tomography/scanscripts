@@ -116,7 +116,7 @@ def tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
     # Unpack options
     num_pre_white_images, num_post_white_images = num_white
     num_pre_dark_images, num_post_dark_images = num_dark
-    # Some intial debugging
+    # Some intial logging
     start_time = time.time()
     log.debug('called start_scan()')
     # # Start verifier on remote machine

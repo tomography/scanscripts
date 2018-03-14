@@ -76,10 +76,18 @@ class TomoStepScanTests(ScriptTestCase):
 class TomoFlyScanTests(unittest.TestCase):
     def setUp(self):
         self.txm = TXMStub(has_permit=True)
-
-    def test_start_fly_scan(self):
-        txm = tomo_fly_scan.tomo_fly_scan()
+        self.txm.exposure_time = 1
     
+    def tearDown(self):
+        if os.path.exists(self.txm.hdf_filename):
+            os.remove(self.txm.hdf_filename)
+    
+    def test_start_fly_scan(self):
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='Could not cast None')
+            warnings.filterwarnings('ignore', message='Could not retrieve actual angles')
+            warnings.filterwarnings('ignore', message='Collecting white field')
+            txm = tomo_fly_scan.run_tomo_fly_scan(txm=self.txm)
 
 
 class EnergyScanTests(unittest.TestCase):

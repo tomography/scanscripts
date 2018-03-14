@@ -394,9 +394,27 @@ class TXMTestCase(unittest.TestCase):
         txm.Motor_Sample_Top_Z = 7
         txm.Motor_SampleRot = 9
         self.assertEqual(txm.sample_position(), (3, 5, 7, 9))
+
+    def test_capture_tomogram_flyscan(self):
+        txm = UnpluggedTXM(has_permit=True)
+        txm.exposure_time = 0.3
+        # Execute tomogram scan
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message="Could not retrieve actual angles")
+            theta = txm.capture_tomogram_flyscan(0, 180, 360, ccd_readout=0.2)
+        # Check set values
+        self.assertEqual(txm.Fly_ScanControl, "Standard")
+        self.assertEqual(txm.Fly_ScanDelta, 0.5)
+        self.assertEqual(txm.Fly_StartPos, 0)
+        self.assertEqual(txm.Fly_EndPos, 180)
+        self.assertEqual(txm.Fly_SlewSpeed, 1)
+        self.assertEqual(txm.Reset_Theta, 1)
+        self.assertEqual(txm.Cam1_TriggerMode, "Overlapped")
     
     def test_run_scan(self):
         txm = UnpluggedTXM(has_permit=True)
+        # txm.Cam1_AcquireTime = 1.
+        # txm.Cam1_AcquirePeriod = 1.
         # Set the initial values
         init_position = (3., 4, 5, 90)
         txm.move_sample(*init_position)

@@ -19,6 +19,7 @@ import warnings
 from contextlib import contextmanager
 from collections import namedtuple
 
+import numpy as np
 import h5py
 import tqdm
 from epics import PV as EpicsPV, get_pv
@@ -608,7 +609,6 @@ class NanoTXM(object):
         mode, with the fast shutter open.
         
         """
-        return
         # Connect the trigger to the rotary encoder (to be safe)
         self.Fast_Shutter_Trigger_Mode = self.FAST_SHUTTER_TRIGGER_ROTATION
         # Disconnect the shutter from the FPGA
@@ -713,7 +713,10 @@ class NanoTXM(object):
     @property
     def exposure_time(self):
         """Exposure time for the CCD in seconds."""
-        current_exposure = max(self.Cam1_AcquireTime, self.Cam1_AcquirePeriod)
+        try:
+            current_exposure = max(self.Cam1_AcquireTime, self.Cam1_AcquirePeriod)
+        except TypeError:
+            current_exposure = None
         return current_exposure
     
     @exposure_time.setter
@@ -721,7 +724,7 @@ class NanoTXM(object):
         self.Cam1_AcquireTime = val
         self.Cam1_AcquirePeriod = val
         self.Fast_Shutter_Exposure = val
-        
+    
     def stop_scan(self):
         log.debug("stop_scan called")
         self.TIFF1_AutoSave = 'No'
@@ -739,7 +742,6 @@ class NanoTXM(object):
         self.exposure_time = 0.01
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
-        
         # Now set the real settings for the detector
         self.Cam1_Display = live_display
         self.Cam1_ArrayCallbacks = 'Enable'
@@ -845,7 +847,7 @@ class NanoTXM(object):
         exposure : float, optional
           Exposure time, in second. If omitted, the value will be read
           from instrument (takes 10-20 ms)
-
+        
         """
         if exposure is None:
             exposure = self.exposure_time
@@ -935,6 +937,66 @@ class NanoTXM(object):
         # Collect the data
         ret = self._trigger_projections(num_projections=num_projections)
         return ret
+    
+    def capture_tomogram_flyscan(self, start_angle, end_angle,
+                                 num_projections, ccd_readout=0.270):
+        """Capture projections over a range of angles using fly-scan mode.
+        
+        Parameters
+        ==========
+        start_angle : float
+          Starting angle in degrees.
+        end_angle : float
+          Ending angle in degrees
+        num_projections : int
+          Number of projections to average at each angle.
+        ccd_readout : float, optional
+          Time in seconds that it takes for the CCD to read out the
+          data.
+        
+        """
+        # Calculate angle parameters
+        delta = (end_angle - start_angle) / (num_projections)
+        total_time = num_projections * (self.exposure_time + ccd_readout)
+        slew_speed = (end_angle - start_angle) / total_time
+        # Set values for fly scan parameters
+        self.Fly_ScanControl = "Custom"
+        self.Fly_ScanDelta = delta
+        self.Fly_StartPos = start_angle
+        self.Fly_EndPos = end_angle
+        self.Fly_SlewSpeed = slew_speed
+        # Pause to let the values update
+        time.sleep(0.25)
+        # Update the value for the number of projections from instrument
+        calc_num_proj = self.Fly_Calc_Projections
+        if calc_num_proj is not None:
+            num_projections = calc_num_proj
+        # Logging
+        # Prepare the instrument for scanning
+        self.Reset_Theta = 1
+        self.Cam1_TriggerMode = 'Overlapped'
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
+        # Execute the fly scan
+        theta = []
+        self.Fly_Taxi = 1
+        self.wait_pv('Fly_Taxi', 0)
+        self.Fly_Run = 1
+        self.wait_pv('Fly_Run', 0)
+        # Clean up
+        self.wait_pv('Cam1_Status', self.DETECTOR_IDLE)
+        time.sleep(0.25)
+        self.Proc_Theta = 1
+        self.Fly_ScanControl = "Standard"
+        # Retrieve the actual theta array to return
+        pv_name = getattr(type(self), 'Theta_Array').pv_name(txm=self)
+        theta = self.pv_get(pv_name, count=num_projections)
+        if theta is None:
+            # No theta array was retrieved, so calculate the angles instead
+            warnings.warn("Could not retrieve actual angles, "
+                          "storing predicted values instead.")
+            theta = np.linspace(start_angle, end_angle, num=num_projections)
+        return theta
     
     def capture_tomogram(self, angles, num_projections=1,
                          stabilize_sleep=10):

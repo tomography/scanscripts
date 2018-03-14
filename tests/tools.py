@@ -45,3 +45,4 @@ class TXMStub(UnpluggedTXM):
     capture_dark_field = mock.MagicMock()
     setup_hdf_writer = mock.MagicMock()
     setup_detector = mock.MagicMock()
+    open_shutters = mock.MagicMock()

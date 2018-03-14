@@ -18,6 +18,9 @@ import signal
 import random
 import string
 
+from aps_32id.txm import NanoTXM
+from scanlib.tools import expand_position
+
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
@@ -58,7 +61,6 @@ variableDict = {'PreDarkImages': 5,
                 #'ExternalShutter': 0,
                 'FileWriteMode': 'Stream',
                 'UseInterferometer': 0,
-                'CCD_Readout': 0.270
                 }
 
 
@@ -66,52 +68,55 @@ def getVariableDict():
     global variableDict
     return variableDict
 
-def get_calculated_num_projections(variableDict):
-    delta = ((float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections'])))
-    slew_speed = (float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections']) * (float(variableDict['ExposureTime']) + float(variableDict['CCD_Readout'])))
-    global_PVs['Fly_ScanDelta'].put(delta)
-    log.debug('start pos: %f, end pos: %f',
-              float(variableDict['SampleStartPos']),
-              float(variableDict['SampleEndPos']))
-    global_PVs['Fly_StartPos'].put(float(variableDict['SampleStartPos']))
-    global_PVs['Fly_EndPos'].put(float(variableDict['SampleEndPos']))
-    global_PVs['Fly_SlewSpeed'].put(slew_speed)
-    time.sleep(0.25)
-    calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
-    if calc_num_proj == None:
-        # Error getting fly calculated number of projections!
-        calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
-    if calc_num_proj < int(variableDict['Projections']):
-        variableDict['Projections'] = int(calc_num_proj)
-
+# def get_calculated_num_projections(variableDict):
+#     delta = ((float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections'])))
+#     slew_speed = (float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections']) * (float(variableDict['ExposureTime']) + float(variableDict['CCD_Readout'])))
+#     global_PVs['Fly_ScanDelta'].put(delta)
+#     log.debug('start pos: %f, end pos: %f',
+#               float(variableDict['SampleStartPos']),
+#               float(variableDict['SampleEndPos']))
+#     global_PVs['Fly_StartPos'].put(float(variableDict['SampleStartPos']))
+#     global_PVs['Fly_EndPos'].put(float(variableDict['SampleEndPos']))
+#     global_PVs['Fly_SlewSpeed'].put(slew_speed)
+#     time.sleep(0.25)
+#     calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
+#     if calc_num_proj == None:
+#         # Error getting fly calculated number of projections!
+#         calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
+#     if calc_num_proj < int(variableDict['Projections']):
+#         variableDict['Projections'] = int(calc_num_proj)
 
 def fly_scan(variableDict):
-    theta = []
-    global_PVs['Reset_Theta'].put(1)
-    global_PVs['Cam1_AcquireTime'].put(float(variableDict['ExposureTime']) )
+    # theta = []
+    # global_PVs['Reset_Theta'].put(1)
+    # global_PVs['Cam1_AcquireTime'].put(float(variableDict['ExposureTime']) )
     
-    num_images = int(variableDict['Projections'])
+    # num_images = int(variableDict['Projections'])
     global_PVs['Cam1_FrameType'].put(FrameTypeData, wait=True)
-    global_PVs['Cam1_NumImages'].put(num_images, wait=True)
-    global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True)
+    # global_PVs['Cam1_NumImages'].put(num_images, wait=True)
+    # global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True)
     # start acquiring
-    global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-    wait_pv(global_PVs['Cam1_Acquire'], 1)
-    global_PVs['Fly_Taxi'].put(1, wait=True)
-    wait_pv(global_PVs['Fly_Taxi'], 0)
-    global_PVs['Fly_Run'].put(1, wait=True)
-    wait_pv(global_PVs['Fly_Run'], 0)
+    # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
+    # wait_pv(global_PVs['Cam1_Acquire'], 1)
+    # global_PVs['Fly_Taxi'].put(1, wait=True)
+    # wait_pv(global_PVs['Fly_Taxi'], 0)
+    # global_PVs['Fly_Run'].put(1, wait=True)
+    # wait_pv(global_PVs['Fly_Run'], 0)
     # wait for acquire to finish
-    wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle)
+    # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle)
     # set trigger move to internal for post dark and white
-    #global_PVs['Cam1_TriggerMode'].put('Internal')
-    global_PVs['Proc_Theta'].put(1)
-    #theta_cnt = global_PVs['Theta_Cnt'].get()
-    theta = global_PVs['Theta_Array'].get(count=int(variableDict['Projections']))
+    # global_PVs['Cam1_TriggerMode'].put('Internal')
+    # global_PVs['Proc_Theta'].put(1)
+    # theta_cnt = global_PVs['Theta_Cnt'].get()
+    # theta = global_PVs['Theta_Array'].get(count=int(variableDict['Projections']))
     return theta
 
 
-def tomo_fly_scan(projections=3000, rotation_start=0, rotation_end=180):
+def run_tomo_fly_scan(projections=3000, rotation_start=0,
+                      rotation_end=180, exposure=0.2,
+                      num_white=(5, 5), num_dark=(5, 0),
+                      sample_pos=(None,), out_pos=(None,),
+                      has_permit=True, txm=None):
     """Collect a 180° tomogram in fly-scan mode.
     
     The defining feature here is that the rotation axis does not stop,
@@ -128,53 +133,94 @@ def tomo_fly_scan(projections=3000, rotation_start=0, rotation_end=180):
       Initial angle for the tomogram, in degrees.
     rotation_end : float, optional
       Final angle for the tomogram, in degrees.
-    
+    exposure : float, optional
+      How long to collect each frame for, in seconds.
+    num_white : 2-tuple(int), optional
+      (pre, post) tuple for number of white field images to collect.
+    num_dark : 2-tuple(int), optional
+      (pre, post) tuple for number of dark field images to collect.
+    sample_pos : 4-tuple(float), optional
+      4 (or less) tuple of (x, y, z, θ°) for the sample position.
+    out_pos : 4-tuple(float), optional
+      4 (or less) tuple of (x, y, z, θ°) for white field position.
+    txm : optional
+      An instance of the NanoTXM class. If not given, a new one will
+      be created. Mostly used for testing.
+    has_permit : bool, optional
+      Does the user have permission to open the shutters and change
+      source energy.    
     """
-    get_calculated_num_projections(variableDict)
-    global_PVs['Fly_ScanControl'].put('Custom')
-    # Start scan sleep in min so min * 60 = sec
-    time.sleep(float(variableDict['StartSleep_min']) * 60.0)
-    setup_detector(global_PVs, variableDict)
-    setup_writer(global_PVs, variableDict, detector_filename)
-    if int(variableDict['PreDarkImages']) > 0:
-        close_shutters(global_PVs, variableDict)
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreDarkImages']), FrameTypeDark)
-    if int(variableDict['PreWhiteImages']) > 0:
-        open_shutters(global_PVs, variableDict)
-        move_sample_out(global_PVs, variableDict)
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PreWhiteImages']), FrameTypeWhite)
-    move_sample_in(global_PVs, variableDict)
-    #time.sleep(float(variableDict['StabilizeSleep_ms']) / 1000.0)
-    open_shutters(global_PVs, variableDict)
-    # run fly scan
-    theta = fly_scan(variableDict)
-    ###wait_pv(global_PVs['HDF1_NumCaptured'], expected_num_cap, 60)
-    if int(variableDict['PostWhiteImages']) > 0:
-        # Capturing Post White Field
-        move_sample_out(global_PVs, variableDict)
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostWhiteImages']), FrameTypeWhite)
-    if int(variableDict['PostDarkImages']) > 0:
-        # Capturing Post Dark Field
-        close_shutters(global_PVs, variableDict)
-        capture_multiple_projections(global_PVs, variableDict, int(variableDict['PostDarkImages']), FrameTypeDark)
-    close_shutters(global_PVs, variableDict)
-    time.sleep(0.25)
-    wait_pv(global_PVs["HDF1_Capture_RBV"], 0, 600)
-    add_theta(global_PVs, variableDict, theta)
-    global_PVs['Fly_ScanControl'].put('Standard')
-    global_PVs['Cam1_TriggerMode'].put('Internal', wait=True)
-    global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True)
-    global_PVs['Cam1_TriggerMode'].put('Internal', wait=True)
-    # move_dataset_to_run_dir(global_PVs, variableDict)
+    logging.debug("Starting run_tomo_fly_scan()")
+    start_time = time.time()
+    # Unpack options
+    num_pre_white_images, num_post_white_images = num_white
+    num_pre_dark_images, num_post_dark_images = num_dark
+    sample_pos = expand_position(sample_pos)
+    out_pos = expand_position(out_pos)
+    total_projections = (projections + num_pre_dark_images +
+                         num_post_dark_images + num_pre_white_images +
+                         num_post_white_images)
+    # Create the TXM object for this scan
+    if txm is None:
+        txm = NanoTXM(has_permit=has_permit,
+                      use_shutter_A=False,
+                      use_shutter_B=True)
+    # Execute the actual scan script
+    with txm.run_scan():
+        # Prepare camera, etc.
+        txm.setup_detector(exposure=exposure)
+        txm.setup_hdf_writer(num_projections=total_projections)
+        # Capture pre dark field images
+        if num_pre_dark_images > 0:
+            txm.close_shutters()
+            log.info('Capturing %d Pre Dark Field images', num_pre_dark_images)
+            txm.capture_dark_field(num_projections=num_pre_dark_images)
+        # Collect pre-scan white-field images
+        if num_pre_white_images > 0:
+            logging.info("Capturing %d white-fields at %s", num_pre_white_images, out_pos)
+            # Move the sample out and collect whitefields
+            txm.move_sample(theta=out_pos[3]) # So we don't have crashes
+            with txm.wait_pvs():
+                txm.move_sample(*out_pos)
+                txm.open_shutters()
+            txm.capture_white_field(num_projections=num_pre_white_images)
+        # Collect the actual tomogram flyscan
+        txm.move_sample(theta=sample_pos[3])
+        with txm.wait_pvs():
+            txm.move_sample(*sample_pos)
+            txm.open_shutters()
+        angles = txm.capture_tomogram_flyscan(start_angle=rotation_start,
+                                              end_angle=rotation_end,
+                                              num_projections=projections)
+        # Capture post-scan white-field images
+        if num_post_white_images > 0:
+            with txm.wait_pvs():
+                txm.move_sample(*out_pos)
+            txm.capture_white_field(num_projections=num_post_white_images)
+        # Capture post-scan dark-field images
+        txm.close_shutters()
+        if num_post_dark_images > 0:
+            txm.capture_dark_field(num_projections=num_post_dark_images)
+        # wait_pv(global_PVs["HDF1_Capture_RBV"], 0, 600)
+    # Save metadata
+    with txm.hdf_file() as f:
+        f.create_dataset('/exchange/theta', data=angles)
+    logging.info("Finished fly scan tomogram in {:.2f} sec"
+                 "".format(time.time() - start_time))
 
 
 def main():
     # The script was launched (not imported) so use the variable dictionary
     update_variable_dict(variableDict)
+    # Extract variables from the global dictionary
+    sleep_time = float(variableDict['StartSleep_min']) * 60.0
     # Prepare variables
     angles = []
+    # Pre-scan sleep
+    log.debug("Sleeping for %d seconds", int(sleep_time))
+    time.sleep(sleep_time)
     # Start the experiment
-    tomo_fly_scan(projections=variableDict['Projections'])
+    run_tomo_fly_scan(projections=variableDict['Projections'])
 
 
 if __name__ == '__main__':
