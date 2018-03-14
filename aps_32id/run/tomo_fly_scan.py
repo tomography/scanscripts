@@ -3,6 +3,8 @@
 FlyScan for Sector 32-ID-C
 '''
 
+from __future__ import division, print_function
+
 import logging
 
 import sys

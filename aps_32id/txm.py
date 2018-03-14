@@ -10,7 +10,7 @@ MicroTXM
 
 """
 
-from __future__ import print_function
+from __future__ import print_function, division
 
 import time
 import math
@@ -906,6 +906,7 @@ class NanoTXM(object):
         """
         # Raise a warning if the shutters are closed.
         if not self.shutters_are_open:
+            print('raising warning')
             msg = "Collecting white field with shutters closed."
             warnings.warn(msg, RuntimeWarning)
             log.warning(msg)
