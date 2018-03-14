@@ -2,6 +2,8 @@
 
 """
 
+__all__ = ['move_energy']
+
 import logging
 import time
 from epics import PV

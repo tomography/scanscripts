@@ -328,6 +328,7 @@ class TXMTestCase(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', module='scanlib.txm_pv',
                                     category=RuntimeWarning)
+            warnings.filterwarnings('ignore', message='Shutters not closed')
             txm.close_shutters()
         txm._trigger_projections.reset_mock()
         with warnings.catch_warnings():

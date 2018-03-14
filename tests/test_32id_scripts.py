@@ -19,10 +19,7 @@ import os
 
 import numpy as np
 
-from aps_32id.run import (energy_scan_new as energy_scan,
-                          move_energy_new as move_energy,
-                          tomo_step_scan_new as tomo_step_scan,
-                          tomo_fly_scan_new as tomo_fly_scan)
+from aps_32id.run import (energy_scan, move_energy, tomo_step_scan, tomo_fly_scan)
 from aps_32id.txm import NanoTXM
 from tools import TXMStub
 
@@ -113,6 +110,7 @@ class EnergyScanTests(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message='Could not cast None')
             warnings.filterwarnings('ignore', message='Could not save energies')
+            warnings.filterwarnings('ignore', message='Collecting white field with')
             txm = energy_scan.run_energy_scan(energies=energies,
                                               n_pre_dark=n_pre_dark,
                                               exposure=0.77, repetitions=2,

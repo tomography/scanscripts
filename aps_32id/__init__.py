@@ -50,8 +50,9 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from .txm import NanoTXM
-from .run.energy_scan_new import run_energy_scan
-from .run.move_energy_new import move_energy
-from .run.tomo_step_scan_new import tomo_step_scan
+from .txm import NanoTXM, MicroTXM
+from .run.energy_scan import run_energy_scan
+from .run.move_energy import move_energy
+from .run.tomo_step_scan import run_tomo_step_scan
+from .run.tomo_fly_scan import run_tomo_fly_scan
 from scanlib.txm_pv import TxmPV, permit_required

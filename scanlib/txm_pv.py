@@ -174,7 +174,7 @@ class TxmPV(object):
     def __set_name__(self, txm, name):
         self.name = name
         # Create a new version of the docstring
-        doc = "The {pv_name} process variable."
+        doc = "The ``{pv_name}`` process variable."
         doc = doc.format(pv_name=self.pv_name(txm))
         self.__doc__ = doc
     

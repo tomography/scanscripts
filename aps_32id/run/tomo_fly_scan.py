@@ -1,6 +1,6 @@
+# -*- coding: utf-8 -*-
 '''
-	FlyScan for Sector 32 ID C
-
+FlyScan for Sector 32-ID-C
 '''
 
 import logging
@@ -21,13 +21,12 @@ import string
 from aps_32id.txm import NanoTXM
 from scanlib.tools import expand_position
 
-__author__ = 'Mark Wolf'
+__author__ = 'Mark Wolfman'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['fly_scan',
-           'start_scan']
+__all__ = ['run_tomo_fly_scan']
 
 log = logging.getLogger(__name__)
 
@@ -68,49 +67,7 @@ def getVariableDict():
     global variableDict
     return variableDict
 
-# def get_calculated_num_projections(variableDict):
-#     delta = ((float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections'])))
-#     slew_speed = (float(variableDict['SampleEndPos']) - float(variableDict['SampleStartPos'])) / (float(variableDict['Projections']) * (float(variableDict['ExposureTime']) + float(variableDict['CCD_Readout'])))
-#     global_PVs['Fly_ScanDelta'].put(delta)
-#     log.debug('start pos: %f, end pos: %f',
-#               float(variableDict['SampleStartPos']),
-#               float(variableDict['SampleEndPos']))
-#     global_PVs['Fly_StartPos'].put(float(variableDict['SampleStartPos']))
-#     global_PVs['Fly_EndPos'].put(float(variableDict['SampleEndPos']))
-#     global_PVs['Fly_SlewSpeed'].put(slew_speed)
-#     time.sleep(0.25)
-#     calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
-#     if calc_num_proj == None:
-#         # Error getting fly calculated number of projections!
-#         calc_num_proj = global_PVs['Fly_Calc_Projections'].get()
-#     if calc_num_proj < int(variableDict['Projections']):
-#         variableDict['Projections'] = int(calc_num_proj)
-
-def fly_scan(variableDict):
-    # theta = []
-    # global_PVs['Reset_Theta'].put(1)
-    # global_PVs['Cam1_AcquireTime'].put(float(variableDict['ExposureTime']) )
-    
-    # num_images = int(variableDict['Projections'])
-    global_PVs['Cam1_FrameType'].put(FrameTypeData, wait=True)
-    # global_PVs['Cam1_NumImages'].put(num_images, wait=True)
-    # global_PVs['Cam1_TriggerMode'].put('Overlapped', wait=True)
-    # start acquiring
-    # global_PVs['Cam1_Acquire'].put(DetectorAcquire)
-    # wait_pv(global_PVs['Cam1_Acquire'], 1)
-    # global_PVs['Fly_Taxi'].put(1, wait=True)
-    # wait_pv(global_PVs['Fly_Taxi'], 0)
-    # global_PVs['Fly_Run'].put(1, wait=True)
-    # wait_pv(global_PVs['Fly_Run'], 0)
-    # wait for acquire to finish
-    # wait_pv(global_PVs['Cam1_Acquire'], DetectorIdle)
-    # set trigger move to internal for post dark and white
-    # global_PVs['Cam1_TriggerMode'].put('Internal')
-    # global_PVs['Proc_Theta'].put(1)
-    # theta_cnt = global_PVs['Theta_Cnt'].get()
-    # theta = global_PVs['Theta_Array'].get(count=int(variableDict['Projections']))
-    return theta
-
+# global_PVs['Cam1_FrameType'].put(FrameTypeData, wait=True)
 
 def run_tomo_fly_scan(projections=3000, rotation_start=0,
                       rotation_end=180, exposure=0.2,

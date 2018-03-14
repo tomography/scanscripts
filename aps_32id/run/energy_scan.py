@@ -30,7 +30,7 @@ __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['energy_scan']
+__all__ = ['run_energy_scan']
 
 
 variableDict = {
@@ -59,13 +59,7 @@ variableDict = {
     'Fast_Shutter_Sleep_ms': 100,
 }
 
-IOC_PREFIX = '32idcPG3:'
 SHUTTER_PERMIT = False
-DEFAULT_ENERGIES = np.arange(
-    variableDict['Energy_Start'],
-    variableDict['Energy_End'] + variableDict['Energy_Step'],
-    variableDict['Energy_Step'],
-)
 
 log = logging.getLogger(__name__)
 
@@ -229,12 +223,6 @@ def main():
     logging.captureWarnings(True)
     # Enter the main script function
     update_variable_dict(variableDict)
-    # Abort the scan if requested
-    if variableDict.get('StopTheScan', False):
-        log.info("Aborting scan at user request.")
-        txm = TXM(has_permit=SHUTTER_PERMIT)
-        txm.stop_scan()
-        return
     # Get the requested sample positions
     sample_pos = (variableDict.get('SampleXIn', None),
                   variableDict.get('SampleYIn', None),

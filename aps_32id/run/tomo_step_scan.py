@@ -27,7 +27,7 @@ __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['tomo_step_scan']
+__all__ = ['run_tomo_step_scan']
 
 # Hardcoded values for verifier and TXM
 VER_HOST = "txmtwo"
@@ -73,7 +73,7 @@ def getVariableDict():
     return variableDict
 
 
-def tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
+def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
                    has_permit=False,
                    num_white=(5, 5), num_dark=(5, 0),
                    sample_pos=(None,), out_pos=(None,),
@@ -207,7 +207,7 @@ def main():
     log.debug("Sleeping for %d seconds", int(sleep_time))
     time.sleep(sleep_time)
     # Call the main tomography function
-    return tomo_step_scan(angles=angles,
+    return run_tomo_step_scan(angles=angles,
                           stabilize_sleep_ms=stabilize_sleep_ms,
                           exposure=exposure,
                           has_permit=SHUTTER_PERMIT, key=key,
