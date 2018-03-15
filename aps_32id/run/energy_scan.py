@@ -35,28 +35,28 @@ __all__ = ['run_energy_scan']
 
 variableDict = {
     'PreDarkImages': 5,
-    # 'SampleXOut': 0.0,
+    # 'SampleXOut': 0.5,
     # 'SampleYOut': 0.0,
-    'SampleZOut': -9,
-    'SampleRotOut': 90, # In degrees
+    'SampleZOut': 0,
+    # 'SampleRotOut': 90, # In degrees
     # 'SampleXIn': 0.0,
     # 'SampleYIn': 0.0,
-    'SampleZIn': 0.0,
-    'SampleRotIn': 0, # In degrees
+    'SampleZIn': 0.5,
+    #'SampleRotIn': 0, # In degrees
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 3,
     'FileWriteMode': 'Stream',
-    'Energy_Start': 6.519,
-    'Energy_End': 6.569, # Inclusive
+    'Energy_Start': 8.94,
+    'Energy_End': 9.04, # Inclusive
     'Energy_Step': 0.001,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Recursive_Filter_N_Images': 1,
     'Repetitions': 1,
-    'Use_Fast_Shutter': 1,
-    'Fast_Shutter_Sleep_ms': 100,
+    'Use_Fast_Shutter': 0,
+    'Fast_Shutter_Sleep_ms': 20,
 }
 
 SHUTTER_PERMIT = False

@@ -129,6 +129,7 @@ class NanoTXM(object):
     Cam1_FrameRateOnOff = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
     Cam1_NumImages = TxmPV('{ioc_prefix}cam1:NumImages')
+    Cam1_NumImagesCounter = TxmPV('{ioc_prefix}cam1:NumImagesCounter_RBV')
     Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
     Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV')
@@ -832,7 +833,8 @@ class NanoTXM(object):
         self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
         log.debug("Finished setting up TIFF writer for %s.", filename)
     
-    def _trigger_projections(self, num_projections=1, exposure=None):
+    def _trigger_projections(self, num_projections=1, exposure=None,
+                             continued=False):
         """Trigger the detector to capture one (or more) projections.
         
         This method should only be used after setup_detector() and
@@ -847,14 +849,19 @@ class NanoTXM(object):
         exposure : float, optional
           Exposure time, in second. If omitted, the value will be read
           from instrument (takes 10-20 ms)
-        
+        continued : bool, optional
+          If true, assume that this projection is one in a long series
+          that is being handled by some external function (eg
+          ``capture_tomogram``)
+
         """
         if exposure is None:
             exposure = self.exposure_time
         suffix = 's' if num_projections > 1 else ''
         log.debug("Triggering %d projection%s", num_projections, suffix)
-        self.Cam1_ImageMode = "Single"
-        self.Cam1_NumImages = 1
+        if not continued:
+            self.Cam1_ImageMode = "Single"
+            self.Cam1_NumImages = 1
         # Collect each frame one at a time
         for i in range(num_projections):
             if self.fast_shutter_enabled:
@@ -867,11 +874,16 @@ class NanoTXM(object):
                 time.sleep(exposure)
             else:
                 # Regular external triggering
-                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+                if not continued:
+                    self.Cam1_Acquire = self.DETECTOR_ACQUIRE
                 self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
                 # Wait for the camera to be ready
+                old_num = self.Cam1_NumImagesCounter
+                init_time = time.time()
                 self.Cam1_SoftwareTrigger = 1
-                self.wait_pv('Cam1_Status', self.DETECTOR_IDLE)
+                self.wait_pv('Cam1_NumImagesCounter', old_num+1)
+                log.debug('Captured projection in %f sec', time.time() - init_time)
+                # self.wait_pv('Cam1_Status', self.DETECTOR_IDLE)
     
     def capture_projections(self, num_projections=1):
         """Trigger the capturing of projection images from the detector.
@@ -1019,7 +1031,11 @@ class NanoTXM(object):
         log.debug('called tomo_scan()')
         # Prepare the instrument for data collection
         self.Cam1_FrameType = self.FRAME_DATA
-        self.Cam1_NumImages = 1
+        self.Cam1_ImageMode = "Multiple"
+        self.Cam1_NumImages = len(angles)
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        # self.Cam1_NumImages = 1
+        assert num_projections == 1
         if num_projections > 1:
             old_filter = self.Proc1_Filter_Enable
             self.Proc1_Filter_Enable = 'Enable'
@@ -1033,7 +1049,7 @@ class NanoTXM(object):
             time.sleep(stabilize_sleep / 1000.)
             # Trigger the camera
             self._trigger_projections(num_projections=num_projections,
-                                      exposure=exposure)
+                                      exposure=exposure, continued=True)
         # Restore previous filter enabled state
         if num_projections > 1:
             self.Proc1_Filter_Enable = old_filter
