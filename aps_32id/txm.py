@@ -1062,6 +1062,7 @@ class NanoTXM(object):
         init_position = self.sample_position()
         init_E = self.energy()
         init_exposure = self.exposure_time
+        fast_shutter_was_enabled = self.fast_shutter_enabled
         # Return to the inner code block
         try:
             yield
@@ -1073,8 +1074,11 @@ class NanoTXM(object):
             log.info("Scan finished.")
         finally:
             log.debug("Restoring previous state")
-            # Disable the fast shutter
-            self.disable_fast_shutter()
+            # Disable/re-enable the fast shutter
+            if fast_shutter_was_enabled:
+                self.enable_fast_shutter()
+            else:
+                self.disable_fast_shutter()
             # Stop TIFF and HDF collection
             self.TIFF1_AutoSave = 'No'
             self.TIFF1_Capture = 0

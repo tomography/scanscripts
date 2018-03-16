@@ -23,6 +23,7 @@ def _my_experiment(txm, param_a, param_b):
     # Setup the microscope as desired
     txm.setup_detector()
     txm.setup_hdf_writer()
+    txm.enable_fast_shutter() # Optional: reduces beam damage
     txm.open_shutters()
     # Now do some tomography or XANES or whatever
     pass

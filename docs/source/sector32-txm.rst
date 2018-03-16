@@ -7,28 +7,29 @@ Sector 32-ID TXM
    time. If you encounter issues, or documentation bugs, please
    `submit an issue`_.
 
-This page describes the features of the :py:class:`tomo.32id.txm.TXM`
-class, and a few supporting classes. The
-:py:class:`~tomo.32id.txm.TXM` class is the primary interface for
-controlling the Transmission X-ray Microscope (TXM) at beamline
-32-ID-C.
+This page describes the features of the
+:py:class:`aps_32id.txm.NanoTXM` class, and a few supporting
+classes. The :py:class:`~aps_32id.txm.NanoTXM` class is the primary
+interface for controlling the Transmission X-ray Microscope (TXM) at
+beamline 32-ID-C. There is also a complimentary
+:py:class:`aps_32id.txm.MicroTXM`.
 
 A **core design goal** is to keep as much of the complexity in the
-:class:`~tomo.32id.txm.TXM` class, which leaves the scripts to handle
-high-level details. It also allows for better unit and integration
-testing. When creating new scripts, it is recommended to **put all
-interactions to process variables (PVs) in methods of the
-:class:`~tomo.32id.txm.TXM` class**. This may seem silly for single PV
-situations, but will make the script more readable. A hypothetical
-example:
+:class:`~aps_32id.txm.NanoTXM` class, which leaves the scripts to
+handle high-level details. It also allows for better unit and
+integration testing. When creating new scripts, it is recommended to
+**put all interactions to process variables (PVs) in methods of the**
+:py:class:`~aps_32id.txm.NanoTXM` **class**. This may seem silly for
+single PV situations, but will make the script more readable. A
+hypothetical example:
 
 .. code:: python
 
-   # Not readable at all: what does that address mean
+   # Not readable at all: what does that address even mean??
    PV('32idcTXM:SG_RdCntr:reset.PROC').put(1, wait=True)
 	  
    # Better, but still not great: what does 1 mean?
-   txm.put_pv('Reset_Theta', 1)
+   txm.Reset_Theta = 1
 
    # Best, even though this method definition would only have one line
    txm.reset_theta()
@@ -40,14 +41,15 @@ Process variables (PVs), though the :mod:`pyepics` package are the way
 python controls the actuators and sensors of the instrument. There are
 **two ways to interact with process variables**:
 
-1. The :meth:`~tomo.32id.txm.TXM.pv_put` method on a
-   :class:`~tomo.32id.txm.TXM` object.
-2. A :class:`~tomo.32id.txm.TxmPV` descriptor on the
-   :class:`~tomo.32id.txm.TXM` class (or subclass).
+1. The :py:meth:`~aps_32id.txm.NanoTXM.pv_put` method on a
+   :py:class:`~aps_32id.txm.NanoTXM` object.
+2. A :py:class:`~scanlib.txm_pv.TxmPV` descriptor on the
+   :py:class:`~aps_32id.txm.NanoTXM` class (or subclass).
 
-The second option is more efficient, but is easier to understand in
-the context of the first option. The :meth:`~tomo.32id.txm.TXM.pv_put`
-method is a wrapper around :meth:`pyepics.PV.put`, and accepts similar
+The second option handles more of the underlying complexity, but
+understanding it requires a good grasp of the first option. The
+:py:meth:`NanoTXM.pv_put() <aps_32id.txm.NanoTXM.pv_put>` method is a
+wrapper around :py:meth:`pyepics.PV.put`, and accepts similar
 arguments:
 
 .. code:: python
@@ -65,29 +67,32 @@ Behind the scenes, there is some extra magic so :ref:`the txm can
 coordinate PVs that work together <wait_pvs>`.
 
 Manually supplying the PV name and options each time is cumbersome, so
-the\ :py:class:`~tomo.32id.txm.txm_pv.TxmPV` descriptor can be used to
+the :py:class:`~scanlib.txm_pv.TxmPV` descriptor can be used to
 **define PVs at import time**. Set instances of the
-:py:class:`~tomo.32id.txm.txm_pv.TxmPV` class as attributes on a
-:class:`~tomo.32id.txm.TXM` subclass, then assign and retrieve values
-directly from the attribute:
+:py:class:`~scanlib.txm_pv.TxmPV` class as attributes on a
+:class:`~aps_32id.txm.NanoTXM` subclass, then assign and retrieve
+values directly from the attribute:
 
 .. code:: python
 
-   class ExampleTXM(TXM):
-       # Define a PV during import time
-       my_awesome_pv = TxmPV('cryptic:pv:string', dtype=float, wait=True)
-       # More PV definitions go here
+    from aps_32id import NanoTXM
+    from scanlib import TxmPV
 
-   # Now we can use the PV attribute of the txm class
-   my_txm = ExampleTXM()
-   # Retrieve the current value
-   # Equivalent to ``float(epics.PV('cryptic:pv:string').get())``
-   my_txm.my_awesome_pv
-   # Set the value
-   # Equivalent of epics.PV('cryptic:pv:string').put(2.718, wait=True)
-   my_txm.my_awesome_pv = 2.718
+    class ExampleTXM(NanoTXM):
+        # Define a PV during import time
+        my_awesome_pv = TxmPV('cryptic:pv:string', dtype=float, wait=True)
+        # More PV definitions go here
 
-The advantage here is that boilplate, such as type-casting and
+    # Now we can use the PV attribute of the txm class
+    my_txm = ExampleTXM()
+    # Retrieve the current value
+    # Equivalent to ``float(epics.PV('cryptic:pv:string').get())``
+    curr_value = my_txm.my_awesome_pv
+    # Set the value
+    # Equivalent of epics.PV('cryptic:pv:string').put(2.718, wait=True)
+    my_txm.my_awesome_pv = 2.718
+
+The advantage here is that boilerplate, such as type-casting and
 blocking, can be defined once then forgotten. This approach also lets
 you define PVs that should not be changed when the B-hutch is being
 operated, by passing ``permit_required=True`` to the TxmPV
@@ -222,6 +227,6 @@ on. If using the :py:meth:`~aps_32id.txm.TXM.run_scan` context manage
 (recommended), the fast shutter is automatically disabled, otherwise
 the :py:meth:`~aps_32id.txm.TXM.disable_fast_shutter` method should be
 called to return to normal behavior. The fast shutter respects
-:py:attribute:`~aps_32id.txm.TXM.exposure_time` attribute.
+:py:meth:`~aps_32id.txm.TXM.exposure_time` attribute.
 
 .. _submit an issue: https://github.com/tomography/scanscripts/issues

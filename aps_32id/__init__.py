@@ -56,3 +56,4 @@ from .run.move_energy import move_energy
 from .run.tomo_step_scan import run_tomo_step_scan
 from .run.tomo_fly_scan import run_tomo_fly_scan
 from scanlib.txm_pv import TxmPV, permit_required
+from scanlib.tools import energy_range, expand_position

@@ -28,6 +28,13 @@ scanlib\.txm\_pv module
     :undoc-members:
     :show-inheritance:
 
+scanlib\.tools module
+-----------------------
+
+.. automodule:: scanlib.tools
+    :members:
+    :undoc-members:
+    :show-inheritance:
 
 Module contents
 ---------------

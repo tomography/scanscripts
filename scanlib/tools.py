@@ -17,11 +17,11 @@ __version__ = '1.6'
 
 
 def expand_position(position, length=4):
-    """Take a tuple with length <= 4 and pad it with None's up to
+    """Take a tuple with length <= 4 and pad it with ``None``'s up to
     length.
     
     Example, if ``length=4`` and ``position=(1, 0)``, then the output
-    is (1, 0, None, None).
+    is ``(1, 0, None, None)``.
     
     """
     new_position = tuple(position) + (None,) * (length-len(position))
@@ -29,9 +29,8 @@ def expand_position(position, length=4):
 
 
 def energy_range(*ranges):
-
     """Convert energy ranges to a flat energy list.
-
+    
     Each entry in ``ranges`` should be a tuple of (start, stop,
     step). Unlike the standard ``range`` function, stop is
     inclusive."""

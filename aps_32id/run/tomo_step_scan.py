@@ -74,11 +74,11 @@ def getVariableDict():
 
 
 def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
-                   has_permit=False,
-                   num_white=(5, 5), num_dark=(5, 0),
-                   sample_pos=(None,), out_pos=(None,),
-                   rot_speed_deg_per_s=0.5, key=None,
-                   num_recursive_images=1):
+                       has_permit=True,
+                       num_white=(5, 5), num_dark=(5, 0),
+                       sample_pos=(None,), out_pos=(None,),
+                       rot_speed_deg_per_s=0.5, key=None,
+                       num_recursive_images=1):
     """Collect a series of projections at multiple angles.
     
     The given angles should span a range of 180°. The frames will be
