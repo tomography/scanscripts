@@ -706,7 +706,10 @@ class NanoTXM(object):
     def hdf_filename(self):
         return self.HDF1_FullFileName_RBV
     
-    def hdf_file(self, timeout=10, *args, **kwargs):
+    def hdf_file(self, hdf_filename=None, timeout=10, *args, **kwargs):
+        # Get current hdf filename
+        if hdf_filename is None:
+            hdf_filename = self.hdf_filename
         # Wait for the HDF writer to be done using the HDF file
         self.wait_pv('HDF1_Capture_RBV', self.HDF_IDLE, timeout=timeout)
         return h5py.File(self.hdf_filename, *args, **kwargs)
@@ -878,7 +881,9 @@ class NanoTXM(object):
                     self.Cam1_Acquire = self.DETECTOR_ACQUIRE
                 self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
                 # Wait for the camera to be ready
-                old_num = self.Cam1_NumImagesCounter
+                old_num = None
+                while old_num is None:
+                    old_num = self.Cam1_NumImagesCounter
                 init_time = time.time()
                 self.Cam1_SoftwareTrigger = 1
                 self.wait_pv('Cam1_NumImagesCounter', old_num+1)

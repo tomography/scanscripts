@@ -35,20 +35,20 @@ __all__ = ['run_energy_scan']
 
 variableDict = {
     'PreDarkImages': 5,
-    # 'SampleXOut': 0.5,
+    'SampleXOut': 0.5,
     # 'SampleYOut': 0.0,
-    'SampleZOut': 0,
+    # 'SampleZOut': 0.5,
     # 'SampleRotOut': 90, # In degrees
-    # 'SampleXIn': 0.0,
+    'SampleXIn': 0.0,
     # 'SampleYIn': 0.0,
-    'SampleZIn': 0.5,
+    # 'SampleZIn': 0,
     #'SampleRotIn': 0, # In degrees
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 3,
     'FileWriteMode': 'Stream',
-    'Energy_Start': 8.94,
-    'Energy_End': 9.04, # Inclusive
+    'Energy_Start': 8.3,
+    'Energy_End': 8.5, # Inclusive
     'Energy_Step': 0.001,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
@@ -197,20 +197,21 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                                    num_recursive_images=num_recursive_images)
             txm.close_shutters()
             # Add the energy array to the active HDF file
-            try:
-                with txm.hdf_file(mode="r+") as hdf_f:
-                    log.debug('Saving energies to file: %s', txm.hdf_filename)
-                    hdf_f.create_dataset('/exchange/energy',
-                                         data=energies)
-            except (OSError, IOError):
-                # Could not load HDF file, so raise a warning
-                msg = "Could not save energies to file %s" % txm.hdf_filename
-                warnings.warn(msg, RuntimeWarning)
-                log.warning(msg)
-        # Log the duration and output file
-        duration = time.time() - start_time
-        log.info('Energy scan took %d sec and saved in file %s',
-                 duration, txm.hdf_filename)
+            hdf_filename = txm.hdf_filename
+    try:
+        with txm.hdf_file(hdf_filename, mode="r+") as hdf_f:
+            log.debug('Saving energies to file: %s', hdf_filename)
+            hdf_f.create_dataset('/exchange/energy',
+                                 data=energies)
+    except (OSError, IOError):
+        # Could not load HDF file, so raise a warning
+        msg = "Could not save energies to file %s" % hdf_filename
+        warnings.warn(msg, RuntimeWarning)
+        log.warning(msg)
+    # Log the duration and output file
+    duration = time.time() - start_time
+    log.info('Energy scan took %d sec and saved in file %s',
+             duration, hdf_filename)
     return txm
 
 

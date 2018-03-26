@@ -162,8 +162,10 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
         txm.close_shutters()
         if num_post_dark_images > 0:
             txm.capture_dark_field(num_projections=num_post_dark_images)
+        # Save hdf filename for storing angles
+        hdf_filename = txm.hdf_filename
     # Save metadata
-    with txm.hdf_file() as f:
+    with txm.hdf_file(hdf_filename, mode='r+') as f:
         f.create_dataset('/exchange/theta', data=angles)
     log.info("Captured %d projections in %d sec.", total_projections, time.time() - start_time)
     return txm
