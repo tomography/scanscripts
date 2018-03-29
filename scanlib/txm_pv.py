@@ -157,8 +157,11 @@ class TxmPV(object):
         # Check that the TXM has shutter permit if required for this PV
         if (not self.permit_required) or txm.has_permit:
             # Set the PV, but only if the TXM has the required permits)
-            was_successful = txm.pv_put(pv_name=pv_name, value=val,
-                                        wait=self.wait)
+            try:
+                was_successful = txm.pv_put(pv_name=pv_name, value=val,
+                                            wait=self.wait)
+            except TypeError:
+                was_successful = False
             # Check that setting the new value was successful
             if not was_successful and self.wait:
                 msg = "Error setting value to PV {}".format(str(self))

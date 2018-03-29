@@ -75,7 +75,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                       rotation_end=180, exposure=0.2,
                       num_white=(5, 5), num_dark=(5, 0),
                       sample_pos=(None,), out_pos=(None,),
-                      has_permit=True, txm=None):
+                      has_permit=False, txm=None):
     """Collect a 180° tomogram in fly-scan mode.
     
     The defining feature here is that the rotation axis does not stop,
@@ -161,8 +161,9 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
         if num_post_dark_images > 0:
             txm.capture_dark_field(num_projections=num_post_dark_images)
         # wait_pv(global_PVs["HDF1_Capture_RBV"], 0, 600)
+        hdf_filename = txm.hdf_filename
     # Save metadata
-    with txm.hdf_file() as f:
+    with txm.hdf_file(hdf_filename=hdf_filename) as f:
         f.create_dataset('/exchange/theta', data=angles)
     logging.info("Finished fly scan tomogram in {:.2f} sec"
                  "".format(time.time() - start_time))

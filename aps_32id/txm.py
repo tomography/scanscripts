@@ -100,6 +100,7 @@ class NanoTXM(object):
     FRAME_DATA = 0
     FRAME_DARK = 1
     FRAME_WHITE = 2
+    IMAGE_MODE_MULTIPLE = 'Multiple'
     DETECTOR_IDLE = 0
     DETECTOR_ACQUIRE = 1
     DETECTOR_READOUT = 2
@@ -218,13 +219,13 @@ class NanoTXM(object):
     Fly_Run = TxmPV('32idcTXM:PSOFly3:fly')
     Fly_ScanControl = TxmPV('32idcTXM:PSOFly3:scanControl')
     Fly_Calc_Projections = TxmPV('32idcTXM:PSOFly3:numTriggers')
-    Theta_Array = TxmPV('32idcTXM:PSOFly3:motorPos.AVAL')
     Fly_Set_Encoder_Pos = TxmPV('32idcTXM:eFly:EncoderPos')
     
     # Theta controls
     Reset_Theta = TxmPV('32idcTXM:SG_RdCntr:reset.PROC')
     Proc_Theta = TxmPV('32idcTXM:SG_RdCntr:cVals.PROC')
-    Theta_Array = TxmPV('32idcTXM:eFly:motorPos.AVAL')
+    Theta_Array = TxmPV('32idcTXM:PSOFly3:motorPos.AVAL')
+    # Theta_Array = TxmPV('32idcTXM:eFly:motorPos.AVAL')
     Theta_Cnt = TxmPV('32idcTXM:SG_RdCntr:aSub.VALB')
     
     # Misc PV's
@@ -706,7 +707,7 @@ class NanoTXM(object):
     def hdf_filename(self):
         return self.HDF1_FullFileName_RBV
     
-    def hdf_file(self, hdf_filename=None, timeout=10, *args, **kwargs):
+    def hdf_file(self, hdf_filename=None, timeout=30, *args, **kwargs):
         # Get current hdf filename
         if hdf_filename is None:
             hdf_filename = self.hdf_filename
@@ -923,7 +924,6 @@ class NanoTXM(object):
         """
         # Raise a warning if the shutters are closed.
         if not self.shutters_are_open:
-            print('raising warning')
             msg = "Collecting white field with shutters closed."
             warnings.warn(msg, RuntimeWarning)
             log.warning(msg)
@@ -986,29 +986,32 @@ class NanoTXM(object):
         # Pause to let the values update
         time.sleep(0.25)
         # Update the value for the number of projections from instrument
-        calc_num_proj = self.Fly_Calc_Projections
+        calc_num_proj = math.ceil(self.Fly_Calc_Projections)
         if calc_num_proj is not None:
             num_projections = calc_num_proj
         # Logging
         # Prepare the instrument for scanning
         self.Reset_Theta = 1
         self.Cam1_TriggerMode = 'Overlapped'
+        self.Cam1_NumImages = num_projections
+        self.Cam1_ImageMode = self.IMAGE_MODE_MULTIPLE
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
         # Execute the fly scan
         theta = []
+        self.Cam1_FrameType = self.FRAME_DATA
         self.Fly_Taxi = 1
         self.wait_pv('Fly_Taxi', 0)
         self.Fly_Run = 1
-        self.wait_pv('Fly_Run', 0)
+        self.wait_pv('Fly_Run', 0, timeout=-1)
         # Clean up
         self.wait_pv('Cam1_Status', self.DETECTOR_IDLE)
         time.sleep(0.25)
         self.Proc_Theta = 1
-        self.Fly_ScanControl = "Standard"
+        # self.Fly_ScanControl = "Standard"
         # Retrieve the actual theta array to return
         pv_name = getattr(type(self), 'Theta_Array').pv_name(txm=self)
-        theta = self.pv_get(pv_name, count=num_projections)
+        theta = self.pv_get(pv_name, count=int(num_projections))
         if theta is None:
             # No theta array was retrieved, so calculate the angles instead
             warnings.warn("Could not retrieve actual angles, "
