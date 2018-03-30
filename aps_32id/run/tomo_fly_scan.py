@@ -22,13 +22,14 @@ import string
 
 from aps_32id.txm import NanoTXM
 from scanlib.tools import expand_position
+from scanlib.scan_variables import update_variable_dict
 
 __author__ = 'Mark Wolfman'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['run_tomo_fly_scan']
+__all__ = ['run_tomo_fly_scan', 'getVariableDict']
 
 log = logging.getLogger(__name__)
 

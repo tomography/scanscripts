@@ -27,7 +27,7 @@ __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['run_tomo_step_scan']
+__all__ = ['run_tomo_step_scan', 'getVariableDict']
 
 # Hardcoded values for verifier and TXM
 VER_HOST = "txmtwo"

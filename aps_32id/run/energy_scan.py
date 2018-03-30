@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #######################
 
-'''For each energy step, a projection and then a flat field is
+'''For each energy step, a projection and then a flat field are
 acquired. The script calls the move_energy method from the TXM class.
 
 '''
@@ -22,7 +22,7 @@ import numpy as np
 import h5py
 import tqdm
 from epics import PV
-from scanlib.tomo_scan_lib import update_variable_dict, stop_scan
+from scanlib.scan_variables import update_variable_dict
 from aps_32id.txm import NanoTXM
 
 __author__ = 'Mark Wolf'
@@ -30,7 +30,7 @@ __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
-__all__ = ['run_energy_scan']
+__all__ = ['run_energy_scan', 'getVariableDict']
 
 
 variableDict = {
@@ -46,7 +46,6 @@ variableDict = {
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 3,
-    'FileWriteMode': 'Stream',
     'Energy_Start': 8.3,
     'Energy_End': 8.5, # Inclusive
     'Energy_Step': 0.001,
@@ -220,8 +219,9 @@ def main():
     # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
     # logging.basicConfig(level=logging.DEBUG)
     logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
-    logging.basicConfig(level=logging.DEBUG, filename=logfile)
-    logging.captureWarnings(True)
+    if os.path.exists(logfile):
+        logging.basicConfig(level=logging.DEBUG, filename=logfile)
+        logging.captureWarnings(True)
     # Enter the main script function
     update_variable_dict(variableDict)
     # Get the requested sample positions
