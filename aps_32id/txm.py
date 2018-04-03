@@ -794,7 +794,7 @@ class NanoTXM(object):
         self.HDF1_NumCapture = num_projections
         self.HDF1_FileWriteMode = write_mode
         self.HDF1_Capture = self.CAPTURE_ENABLED
-        self.wait_pv('HDF1_Capture', self.CAPTURE_ENABLED)
+        self.wait_pv('HDF1_Capture_RBV', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
         log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
         self.hdf_writer_ready = True
@@ -1123,6 +1123,15 @@ class NanoTXM(object):
         # Make sure the root logger will actually emit the requested level
         if level:
             root_log.setLevel(min(level, root_log.level))
+        # Save a timestamp to the logger
+        try:
+            now = dt.datetime.now(pytz.utc).astimezone()
+        except TypeError:
+            local_tz = pytz.timezone('America/Chicago')
+            warnings.warn("Cannot detect local timezone, assuming %s."
+                          " Are you still using python 2?" % str(local_tz))
+            now = dt.datetime.now(pytz.utc).astimezone(local_tz)
+        log.info("Log started at %s", now.isoformat())
         return handler
     
     @contextmanager
@@ -1136,14 +1145,6 @@ class NanoTXM(object):
         root_logger = logging.getLogger()
         old_log_level = root_logger.level
         old_handlers = tuple(root_logger.handlers)
-        try:
-            now = dt.datetime.now(pytz.utc).astimezone()
-        except TypeError:
-            local_tz = pytz.timezone('America/Chicago')
-            warnings.warn("Cannot detect local timezone, assuming %s."
-                          " Are you still using python 2?" % str(local_tz))
-            now = dt.datetime.now(pytz.utc).astimezone(local_tz)
-        log.info("Scan started at %s", now.isoformat())
         # Save the initial values
         init_position = self.sample_position()
         init_E = self.energy()
