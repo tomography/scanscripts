@@ -24,7 +24,7 @@ def getVariableDict():
     return variableDict
 
 
-def move_energy(energy, constant_mag=True, has_permit=False):
+def move_energy(energy, constant_mag=True, has_permit=False, txm=None):
     """Change the X-ray microscope to a new energy.
     
     Parameters
@@ -37,11 +37,15 @@ def move_energy(energy, constant_mag=True, has_permit=False):
     is_attached, has_permit : bool, optional
       Determine if the TXM is attached and is allowed to open
       shutters.
+    txm : optional
+      An instance of the NanoTXM class. If not given, a new one will
+      be created. Mostly used for testing.
     
     """
     assert not has_permit
     # Prepare TXM object
-    txm = NanoTXM(has_permit=has_permit)
+    if txm is None:
+        txm = NanoTXM(has_permit=has_permit)
     # Attach to the TXM and change energy
     with txm.wait_pvs():
         txm.move_energy(energy, constant_mag=constant_mag)

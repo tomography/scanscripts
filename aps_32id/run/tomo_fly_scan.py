@@ -79,7 +79,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                       rotation_end=180, exposure=0.2,
                       num_white=(5, 5), num_dark=(5, 0),
                       sample_pos=(None,), out_pos=(None,),
-                      log_level=None,
+                      log_level=logging.INFO,
                       has_permit=False, txm=None):
     """Collect a 180° tomogram in fly-scan mode.
     
@@ -108,7 +108,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
     out_pos : 4-tuple(float), optional
       4 (or less) tuple of (x, y, z, θ°) for white field position.
     log_level : int, optional
-      Temporary log level to use. None (default) does not change the logging.
+      Temporary log level to use. ``None`` does not change the logging.
     has_permit : bool, optional
       Does the user have permission to open the shutters and change
       source energy.
@@ -133,10 +133,11 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                       use_shutter_A=False,
                       use_shutter_B=True)
     # Execute the actual scan script
-    with txm.run_scan(log_level=log_level):
+    with txm.run_scan():
         # Prepare camera, etc.
-        txm.setup_detector(exposure=exposure)
         txm.setup_hdf_writer(num_projections=total_projections)
+        txm.start_logging(level=log_level)
+        txm.setup_detector(exposure=exposure)
         # Capture pre dark field images
         if num_pre_dark_images > 0:
             txm.close_shutters()

@@ -1078,13 +1078,33 @@ class NanoTXM(object):
         """
         return self.__class__.__dict__[pv_name].epics_PV(txm=self)
     
-    @contextmanager
-    def run_scan(self, loggers=(), log_level=None):
-        """A context manager for executing long-running scripts. At the end of
-        the context, the CCD gets reset, several motor positions
-        get restored, and extra logging handlers get removed.
+    def start_logging(self, level=logging.NOTSET):
+        """Open a handler for logging TXM actions and add it to root logger.
+        
+        If the HDF plugin has been started, logs will be sent to a
+        matching file. Otherwise, logs will be sent to stderr since we
+        can't know the HDF filename before it's been set.
+        
+        This method works best when called inside a ``run_scan()``
+        context manager, so the changes get undone once the scan is
+        finished.
+        
+        Parameters
+        ----------
+        level : int, optional
+          Logging level to use for creating the logging.Handler
+          object. If None or -1, nothing happens.
+        
+        Returns
+        -------
+        handler
+          The new logging handler that was added to the root logger.
         
         """
+        # Check for poison pill values to not start logging
+        if (level is None) or (level < logging.NOTSET):
+            log.debug('Logging not started (%s)' % level)
+            return
         # Setup logging handler
         if self.HDF1_Capture_RBV == self.HDF_WRITING:
             basename, ext = os.path.splitext(self.hdf_filename)
@@ -1094,14 +1114,28 @@ class NanoTXM(object):
             warnings.warn('HDF writer not yet running, logging sent to stderr.'
                           ' Consider calling Txm().``setup_hdf_writer``'
                           ' outside run_scan block')
-        if log_level is not None:
-            handler.setLevel(log_level)
-            formatter = logging.Formatter(
-                '%(levelname)s:%(name)s:%(message)s (%(asctime)s)')
-            handler.setFormatter(formatter)
-            root_log = logging.getLogger()
-            root_log.addHandler(handler)
-            root_log.setLevel(log_level)
+        handler.setLevel(level)
+        formatter = logging.Formatter(
+            '%(levelname)s:%(name)s:%(message)s (%(asctime)s)')
+        handler.setFormatter(formatter)
+        root_log = logging.getLogger()
+        root_log.addHandler(handler)
+        # Make sure the root logger will actually emit the requested level
+        if level:
+            root_log.setLevel(min(level, root_log.level))
+        return handler
+    
+    @contextmanager
+    def run_scan(self):
+        """A context manager for executing long-running scripts. At the end of
+        the context, the CCD gets reset, several motor positions get
+        restored, and extra logging handlers get removed.
+        
+        """
+        # Save logging info for later
+        root_logger = logging.getLogger()
+        old_log_level = root_logger.level
+        old_handlers = tuple(root_logger.handlers)
         try:
             now = dt.datetime.now(pytz.utc).astimezone()
         except TypeError:
@@ -1124,10 +1158,6 @@ class NanoTXM(object):
             raise
         else:
             log.info("Scan finished.")
-            # Stop logging
-            if log_level is not None:
-                root_log.removeHandler(handler)
-                handler.close()
         finally:
             log.debug("Restoring previous state")
             # Disable/re-enable the fast shutter
@@ -1153,8 +1183,14 @@ class NanoTXM(object):
             # Reset the CCD so it's in continuous mode
             self.reset_ccd()
             self.exposure_time = init_exposure
-            # Notify the user of that we're done
+            # Notify the user that we're done
             log.debug("Finished shutting down")
+            # Restore original logging
+            root_logger.setLevel(old_log_level)
+            # Remove any added logging handlers
+            for hndlr in root_logger.handlers:
+                if hndlr not in old_handlers:
+                    root_logger.removeHandler(hndlr)
     
     def reset_ccd(self):
         log.debug("Resetting CCD")

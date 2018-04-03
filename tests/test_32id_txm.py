@@ -403,6 +403,7 @@ class TXMTestCase(unittest.TestCase):
     def test_capture_tomogram_flyscan(self):
         txm = UnpluggedTXM(has_permit=True)
         txm.exposure_time = 0.3
+        txm.Fly_Calc_Projections = 360
         # Execute tomogram scan
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message="Could not retrieve actual angles")
@@ -416,6 +417,46 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Reset_Theta, 1)
         self.assertEqual(txm.Cam1_TriggerMode, "Overlapped")
     
+    def test_start_logging(self):
+        # Prepare the test resources
+        logfile = 'run_scan_test_file.log'
+        if os.path.exists(logfile):
+            os.remove(logfile)
+        txm = UnpluggedTXM(has_permit=True)
+        root_logger = logging.getLogger()
+        num_handlers = len(logging.getLogger().handlers)
+        # Disable the stderr logger for now
+        old_handler_level = root_logger.handlers[0].level
+        old_root_level = root_logger.level
+        # Make sure nothing happens if level=(-1|None)
+        txm.start_logging(level=None)
+        self.assertEqual(len(root_logger.handlers), num_handlers)
+        txm.start_logging(level=-1)
+        self.assertEqual(len(root_logger.handlers), num_handlers)
+        # Now do some actual logging
+        try:
+            root_logger.handlers[0].setLevel(logging.WARNING)
+            # Test that a new stream handler is added
+            with warnings.catch_warnings(record=True) as w:
+                txm.start_logging(level=logging.DEBUG)
+                self.assertEqual(len(w), 1)
+            self.assertFalse(os.path.exists(logfile))
+            handlers = logging.getLogger().handlers
+            self.assertEqual(len(handlers), num_handlers + 1)
+            self.assertEqual(root_logger.level, logging.DEBUG)
+            # Test that a file handler is added if possible
+            root_logger.removeHandler(root_logger.handlers[-1])
+            txm.HDF1_Capture_RBV = txm.HDF_WRITING
+            txm.HDF1_FullFileName_RBV = 'run_scan_test_file.h5'
+            txm.start_logging(level=logging.DEBUG)
+            self.assertTrue(os.path.exists('run_scan_test_file.log'))
+        except:
+            # Restore default logging levels
+            root_logger.setLevel(old_root_level)
+            root_logger.handlers[0].setLevel(old_handler_level)
+            raise
+        os.remove(logfile)
+    
     def test_run_scan(self):
         txm = UnpluggedTXM(has_permit=True)
         # txm.Cam1_AcquireTime = 1.
@@ -425,33 +466,24 @@ class TXMTestCase(unittest.TestCase):
         txm.move_sample(*init_position)
         E_init = 8.7
         txm.move_energy(8.7)
-        txm.HDF1_FullFileName_RBV = 'run_scan_test_file.h5'
+        root_logger = logging.getLogger()
+        num_handlers = len(root_logger.handlers)
+        old_level = root_logger.level
+        if old_level == logging.CRITICAL:
+            warnings.warn("Starting at logging.CRITICAL makes this test trivial")
         # Disable the stderr logger for now
-        root_level = logging.getLogger().handlers[0].level
-        logging.getLogger().handlers[0].setLevel(logging.WARNING)
-        num_handlers = len(logging.getLogger().handlers)
-        with txm.run_scan(log_level=logging.DEBUG):
-            # Check that the log file was created
-            self.assertTrue(os.path.exists('run_scan_test_file.log'))
-            handlers = logging.getLogger().handlers
-            self.assertEqual(len(handlers), num_handlers+1) # stderr and test file
-            test_logger = logging.getLogger('aps_32id.txm')
-            oldLevel = test_logger.level
-            test_logger.setLevel(logging.INFO)
-            test_logger.info("Inside run_scan() block")
-            test_logger.setLevel(oldLevel)
-            # Change the values inside the manager
+        with txm.run_scan():
+            # Change that the log handlers are set
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', message='HDF writer not yet running')
+                txm.start_logging(level=logging.CRITICAL)
+            self.assertEqual(len(root_logger.handlers), num_handlers + 1)
+            # Do some TXM experiment stuff
             txm.move_sample(1, 2, 3, 45)
             txm.move_energy(9)
-        # Check that logging to file was completed
-        logging.getLogger().handlers[0].setLevel(root_level)        
-        handlers = logging.getLogger().handlers
-        self.assertEqual(len(handlers), num_handlers)
-        with open('run_scan_test_file.log', mode='r') as f:
-            self.assertTrue(f.read(), 'Logs not written to')
         # Check that the value was restored when the context completed
         self.assertEqual(txm.sample_position(), init_position)
         self.assertEqual(txm.energy(), 8.7)
-        # Remove temporary files
-        # os.remove('run_scan_test_file.h5')
-        os.remove('run_scan_test_file.log')
+        # Check that the logging was restored
+        self.assertEqual(root_logger.level, old_level)
+        self.assertEqual(len(root_logger.handlers), num_handlers)

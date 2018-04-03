@@ -42,32 +42,35 @@ class ScriptTestCase(unittest.TestCase):
 
 
 class MoveEnergyTests(ScriptTestCase):
-    @unittest.skip('Need to re-work the integrations tests')
     def test_move_energy(self):
-        txm = TXM()
-        txm.HDF1_FullFileName_RBV = self.hdf_filename
-        move_energy.move_energy(energy=6.7, has_permit=False)
+        txm = TXMStub(has_permit=True)
+        move_energy.move_energy(energy=6.7, txm=txm)
 
 
-@unittest.skip('Need to re-work the integrations tests')
-@mock.patch('txm.TXM._trigger_projections')
-@mock.patch('txm.EpicsPV')
 class TomoStepScanTests(ScriptTestCase):
+    def setUp(self):
+        self.txm = TXMStub(has_permit=True)
+        self.txm.exposure_time = 1
     
-    @mock.patch('txm.TXM.setup_detector')
-    @mock.patch('txm.TXM.setup_hdf_writer')
-    @mock.patch('txm.TXM.move_sample')
+    def tearDown(self):
+        if os.path.exists(self.txm.hdf_filename):
+            os.remove(self.txm.hdf_filename)
+    
     def test_full_tomo_scan(self, *args):
         angles = np.linspace(0, 180, 361)
-        txm = tomo_step_scan.tomo_step_scan(angles=angles,
-                                            num_recursive_images=3,
-                                            num_white=(2, 7),
-                                            num_dark=(13, 21))
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='Could not cast')
+            warnings.filterwarnings('ignore', message='Collecting white field')
+            warnings.filterwarnings('ignore', message='Could not save angles')
+            tomo_step_scan.run_tomo_step_scan(
+                angles=angles, exposure=3,
+                num_recursive_images=1, num_white=(2, 7),
+                num_dark=(13, 21), txm=self.txm, log_level=None)
         # Check that the right txm functions were called
-        txm.setup_detector.assert_called_once_with(exposure=3)
+        self.txm.setup_detector.assert_called_once_with(exposure=3)
         expected_projections = 361 + 2 + 7 + 13 + 21
-        txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections,
-                                                     num_recursive_images=3)
+        self.txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections,
+                                                          num_recursive_images=1)
 
 
 class TomoFlyScanTests(unittest.TestCase):
@@ -85,7 +88,7 @@ class TomoFlyScanTests(unittest.TestCase):
             warnings.filterwarnings('ignore', message='Could not cast None')
             warnings.filterwarnings('ignore', message='Could not retrieve actual angles')
             warnings.filterwarnings('ignore', message='Collecting white field')
-            txm = tomo_fly_scan.run_tomo_fly_scan(txm=self.txm)
+            txm = tomo_fly_scan.run_tomo_fly_scan(txm=self.txm, log_level=None)
 
 
 class EnergyScanTests(unittest.TestCase):
@@ -115,7 +118,7 @@ class EnergyScanTests(unittest.TestCase):
             txm = energy_scan.run_energy_scan(energies=energies,
                                               n_pre_dark=n_pre_dark,
                                               exposure=0.77, repetitions=2,
-                                              txm=self.txm)
+                                              txm=self.txm, log_level=None)
         # Check that what happened was done correctly
         self.assertEqual(txm.capture_projections.call_count, 2*len(energies))
         txm.capture_projections.assert_called_with(num_projections=1)

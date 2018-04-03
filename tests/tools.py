@@ -31,9 +31,12 @@ class UnpluggedTXM(NanoTXM):
     def wait_pv(self, *args, **kwargs):
             return True
     
-    def _pv_put(self, pv_name, value, *args, **kwargs):
+    def _pv_put(self, pv_name, value, callback=None, *args, **kwargs):
         self._put_calls.append((pv_name, value))
         self._pv_dict[pv_name] = value
+        # Run the callback if given to trick the wait_pvs method
+        if callback is not None:
+            callback()
         return True
 
 

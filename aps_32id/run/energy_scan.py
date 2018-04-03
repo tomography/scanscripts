@@ -120,7 +120,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                     constant_mag=True, stabilize_sleep_ms=1000,
                     num_recursive_images=1, repetitions=1,
                     use_fast_shutter=False, fast_shutter_sleep=100,
-                    log_level=None,
+                    log_level=logging.INFO,
                     txm=None):
     """Collect a series of 2-dimensional projections across a range of energies.
     
@@ -162,7 +162,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
       If using the fast shutter, how much time to sleep (in ms) after
       changing its status.
     log_level : int, optional
-      Temporary log level to use. None (default) does not change the logging.
+      Temporary log level to use. ``None`` does not change the logging.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
@@ -177,7 +177,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                       use_shutter_A=False,
                       use_shutter_B=True)
     # Execute the actual scan script
-    with txm.run_scan(log_level=log_level):
+    with txm.run_scan():
         # txm.enable_fast_shutter()
         # Prepare TXM for capturing data
         txm.setup_detector(exposure=exposure)
@@ -185,6 +185,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
         for rep in range(repetitions):
             txm.setup_hdf_writer(num_projections=total_projections,
                                  num_recursive_images=num_recursive_images)
+            txm.start_logging(log_level)
             # Capture pre dark field images
             if n_pre_dark > 0:
                 txm.close_shutters()

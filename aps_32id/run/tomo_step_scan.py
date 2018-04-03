@@ -14,13 +14,14 @@ import signal
 import random
 import string
 import logging
+import warnings
 
 import h5py
 from epics import PV
 import numpy as np
 
 from aps_32id import NanoTXM
-from scanlib import update_variable_dict
+from scanlib import update_variable_dict, tools
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
@@ -80,8 +81,8 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
                        num_white=(5, 5), num_dark=(5, 0),
                        sample_pos=(None,), out_pos=(None,),
                        rot_speed_deg_per_s=0.5, key=None,
-                       log_level=None,
-                       num_recursive_images=1):
+                       log_level=logging.INFO,
+                       num_recursive_images=1, txm=None):
     """Collect a series of projections at multiple angles.
     
     The given angles should span a range of 180°. The frames will be
@@ -116,26 +117,33 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
       Temporary log level to use. None (default) does not change the logging.
     num_recursive_images : int, optional
       Recurisve averaging filter for combining multiple exposures.
+    txm : optional
+      An instance of the NanoTXM class. If not given, a new one will
+      be created. Mostly used for testing.
     
     """
     # Unpack options
     num_pre_white_images, num_post_white_images = num_white
     num_pre_dark_images, num_post_dark_images = num_dark
+    out_pos = tools.expand_position(out_pos, 4)
+    sample_pos = tools.expand_position(sample_pos, 4)
     # Some intial logging
     start_time = time.time()
     log.debug('called start_scan()')
     # # Start verifier on remote machine
     # start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
     # Prepare X-ray microscope
-    txm = NanoTXM(has_permit=has_permit)
+    if txm is None:
+        txm = NanoTXM(has_permit=has_permit)
     # Prepare the microscope for collecting data
-    with txm.run_scan(log_level=log_level):
+    with txm.run_scan():
         txm.setup_detector(exposure=exposure)
         total_projections = len(angles)
         total_projections += num_pre_white_images + num_post_white_images
         total_projections += num_pre_dark_images + num_post_dark_images
         txm.setup_hdf_writer(num_projections=total_projections,
                              num_recursive_images=num_recursive_images)
+        txm.start_logging(level=log_level)
         # Collect pre-scan dark-field images
         if num_pre_dark_images > 0:
             txm.close_shutters()
@@ -167,12 +175,20 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
         txm.close_shutters()
         if num_post_dark_images > 0:
             txm.capture_dark_field(num_projections=num_post_dark_images)
+        log.info("Captured %d projections in %d sec.",
+                 total_projections, time.time() - start_time)
         # Save hdf filename for storing angles
         hdf_filename = txm.hdf_filename
     # Save metadata
-    with txm.hdf_file(hdf_filename, mode='r+') as f:
-        f.create_dataset('/exchange/theta', data=angles)
-    log.info("Captured %d projections in %d sec.", total_projections, time.time() - start_time)
+    try:
+        with txm.hdf_file(hdf_filename, mode='r+') as f:
+            log.debug('Saving angles to file: %s', hdf_filename)
+            f.create_dataset('/exchange/theta', data=angles)
+    except (OSError, IOError):
+        # Could not load HDF file, so raise a warning
+        msg = "Could not save angles to file %s" % hdf_filename
+        warnings.warn(msg, RuntimeWarning)
+        log.warning(msg)
     return txm
 
 
