@@ -127,6 +127,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                          num_post_dark_images + num_pre_white_images +
                          num_post_white_images)
     # Create the TXM object for this scan
+    assert not has_permit
     if txm is None:
         txm = NanoTXM(has_permit=has_permit,
                       use_shutter_A=False,

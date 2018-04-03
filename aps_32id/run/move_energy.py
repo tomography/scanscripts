@@ -20,8 +20,6 @@ variableDict = {
     'constant_mag': True, # 1 means magnification will be maintained adjusting CCD location
 }
 
-SHUTTER_PERMIT = True
-
 def getVariableDict():
     return variableDict
 
@@ -41,6 +39,7 @@ def move_energy(energy, constant_mag=True, has_permit=False):
       shutters.
     
     """
+    assert not has_permit
     # Prepare TXM object
     txm = NanoTXM(has_permit=has_permit)
     # Attach to the TXM and change energy

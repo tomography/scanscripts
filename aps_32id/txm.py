@@ -24,6 +24,7 @@ from collections import namedtuple
 import numpy as np
 import h5py
 import tqdm
+import pytz
 from epics import PV as EpicsPV, get_pv
 
 from scanlib import TxmPV, permit_required, exceptions_
@@ -1080,24 +1081,35 @@ class NanoTXM(object):
     @contextmanager
     def run_scan(self, loggers=(), log_level=None):
         """A context manager for executing long-running scripts. At the end of
-        the context, the CCD gets reset and several motor positions
-        get restored.
+        the context, the CCD gets reset, several motor positions
+        get restored, and extra logging handlers get removed.
         
         """
         # Setup logging handler
-        log_filename = self.hdf_filename
-        basename, ext = os.path.splitext(log_filename)
-        if log_level is not None:
+        if self.HDF1_Capture_RBV == self.HDF_WRITING:
+            basename, ext = os.path.splitext(self.hdf_filename)
             handler = logging.FileHandler(filename=basename + '.log')
+        else:
+            handler = logging.StreamHandler()
+            warnings.warn('HDF writer not yet running, logging sent to stderr.'
+                          ' Consider calling Txm().``setup_hdf_writer``'
+                          ' outside run_scan block')
+        if log_level is not None:
             handler.setLevel(log_level)
             formatter = logging.Formatter(
-                '%(levelname)s:%(pathname)s:%(message)s (%(asctime)s)')
+                '%(levelname)s:%(name)s:%(message)s (%(asctime)s)')
             handler.setFormatter(formatter)
             root_log = logging.getLogger()
             root_log.addHandler(handler)
             root_log.setLevel(log_level)
-        now = dt.datetime.now(dt.timezone.utc).astimezone().isoformat()
-        log.info("Scan started at %s", now)
+        try:
+            now = dt.datetime.now(pytz.utc).astimezone()
+        except TypeError:
+            local_tz = pytz.timezone('America/Chicago')
+            warnings.warn("Cannot detect local timezone, assuming %s."
+                          " Are you still using python 2?" % str(local_tz))
+            now = dt.datetime.now(pytz.utc).astimezone(local_tz)
+        log.info("Scan started at %s", now.isoformat())
         # Save the initial values
         init_position = self.sample_position()
         init_E = self.energy()

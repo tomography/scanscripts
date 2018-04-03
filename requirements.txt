@@ -3,3 +3,4 @@ h5py
 numpy
 tqdm
 pyepics
+pytz
