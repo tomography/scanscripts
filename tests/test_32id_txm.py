@@ -1,5 +1,6 @@
 """Unit tests for the transmission x-ray microscope `TXM()` class."""
 
+import os
 import logging
 logging.basicConfig(level=logging.WARNING)
 logging.captureWarnings(True)
@@ -60,7 +61,7 @@ class TXMTestCase(unittest.TestCase):
         txm.pv_queue = []
         txm.pv_put('my_pv', 3, wait=True)
         self.assertEqual(len(txm.pv_queue), 1, "%d PV promises added to queue" % len(txm.pv_queue))
-
+    
     def test_pv_put_twice(self):
         """Check what happens if two non-blocking calls to pv_put are made."""
         # Have a dummy PV method to check if it actually calls
@@ -390,7 +391,7 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm._pv_dict['cam1:Acquire'], txm.DETECTOR_ACQUIRE)
         # Check that the method waits for cam1_acquire
         txm.wait_pv.assert_called_once_with('Cam1_Acquire', txm.DETECTOR_ACQUIRE, timeout=2)
-
+    
     def test_sample_position(self):
         txm = UnpluggedTXM()
         txm.Motor_Sample_Top_X = 3
@@ -398,7 +399,7 @@ class TXMTestCase(unittest.TestCase):
         txm.Motor_Sample_Top_Z = 7
         txm.Motor_SampleRot = 9
         self.assertEqual(txm.sample_position(), (3, 5, 7, 9))
-
+    
     def test_capture_tomogram_flyscan(self):
         txm = UnpluggedTXM(has_permit=True)
         txm.exposure_time = 0.3
@@ -424,10 +425,33 @@ class TXMTestCase(unittest.TestCase):
         txm.move_sample(*init_position)
         E_init = 8.7
         txm.move_energy(8.7)
-        with txm.run_scan():
+        txm.HDF1_FullFileName_RBV = 'run_scan_test_file.h5'
+        # Disable the stderr logger for now
+        root_level = logging.getLogger().handlers[0].level
+        logging.getLogger().handlers[0].setLevel(logging.WARNING)
+        num_handlers = len(logging.getLogger().handlers)
+        with txm.run_scan(log_level=logging.DEBUG):
+            # Check that the log file was created
+            self.assertTrue(os.path.exists('run_scan_test_file.log'))
+            handlers = logging.getLogger().handlers
+            self.assertEqual(len(handlers), num_handlers+1) # stderr and test file
+            test_logger = logging.getLogger('aps_32id.txm')
+            oldLevel = test_logger.level
+            test_logger.setLevel(logging.INFO)
+            test_logger.info("Inside run_scan() block")
+            test_logger.setLevel(oldLevel)
             # Change the values inside the manager
             txm.move_sample(1, 2, 3, 45)
             txm.move_energy(9)
+        # Check that logging to file was completed
+        logging.getLogger().handlers[0].setLevel(root_level)        
+        handlers = logging.getLogger().handlers
+        self.assertEqual(len(handlers), num_handlers)
+        with open('run_scan_test_file.log', mode='r') as f:
+            self.assertTrue(f.read(), 'Logs not written to')
         # Check that the value was restored when the context completed
         self.assertEqual(txm.sample_position(), init_position)
         self.assertEqual(txm.energy(), 8.7)
+        # Remove temporary files
+        # os.remove('run_scan_test_file.h5')
+        os.remove('run_scan_test_file.log')

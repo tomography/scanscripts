@@ -41,29 +41,32 @@ INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
 
 global variableDict
 
-variableDict = {'PreDarkImages': 5,
-                'PreWhiteImages': 10,
-                'Projections': 3000,
-                'PostDarkImages': 5,
-                'PostWhiteImages': 10,
-                'SampleXOut': 8,
-                'SampleYOut': 0.0,
-                'SampleZOut': 0.0,
-                'SampleXIn': 0.0,
-                'SampleYIn': 0.0,
-                'SampleZIn': 0.0,
-                'SampleStartPos': 0.0,
-                'SampleEndPos': 180.0,
-                'StartSleep_min': 0,
-                'StabilizeSleep_ms': 0,
-                'ExposureTime': 0.2,
-                'ExposureTime_Flat': 0.2,
-                'ShutterOpenDelay': 0.00,
-                'IOC_Prefix': '32idcPG3:',
-                #'ExternalShutter': 0,
-                'FileWriteMode': 'Stream',
-                'UseInterferometer': 0,
-                }
+variableDict = {
+    'PreDarkImages': 5,
+    'PreWhiteImages': 10,
+    'Projections': 3000,
+    'PostDarkImages': 5,
+    'PostWhiteImages': 10,
+    'SampleXOut': 8,
+    'SampleYOut': 0.0,
+    'SampleZOut': 0.0,
+    'SampleXIn': 0.0,
+    'SampleYIn': 0.0,
+    'SampleZIn': 0.0,
+    'SampleStartPos': 0.0,
+    'SampleEndPos': 180.0,
+    'StartSleep_min': 0,
+    'StabilizeSleep_ms': 0,
+    'ExposureTime': 0.2,
+    'ExposureTime_Flat': 0.2,
+    'ShutterOpenDelay': 0.00,
+    'IOC_Prefix': '32idcPG3:',
+    #'ExternalShutter': 0,
+    'FileWriteMode': 'Stream',
+    'UseInterferometer': 0,
+    # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
+    'Log_Level': logging.INFO,
+}
 
 
 def getVariableDict():
@@ -76,6 +79,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                       rotation_end=180, exposure=0.2,
                       num_white=(5, 5), num_dark=(5, 0),
                       sample_pos=(None,), out_pos=(None,),
+                      log_level=None,
                       has_permit=False, txm=None):
     """Collect a 180° tomogram in fly-scan mode.
     
@@ -103,12 +107,14 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
       4 (or less) tuple of (x, y, z, θ°) for the sample position.
     out_pos : 4-tuple(float), optional
       4 (or less) tuple of (x, y, z, θ°) for white field position.
+    log_level : int, optional
+      Temporary log level to use. None (default) does not change the logging.
+    has_permit : bool, optional
+      Does the user have permission to open the shutters and change
+      source energy.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
-    has_permit : bool, optional
-      Does the user have permission to open the shutters and change
-      source energy.    
     """
     logging.debug("Starting run_tomo_fly_scan()")
     start_time = time.time()
@@ -126,7 +132,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                       use_shutter_A=False,
                       use_shutter_B=True)
     # Execute the actual scan script
-    with txm.run_scan():
+    with txm.run_scan(log_level=log_level):
         # Prepare camera, etc.
         txm.setup_detector(exposure=exposure)
         txm.setup_hdf_writer(num_projections=total_projections)
@@ -181,7 +187,14 @@ def main():
     log.debug("Sleeping for %d seconds", int(sleep_time))
     time.sleep(sleep_time)
     # Start the experiment
-    run_tomo_fly_scan(projections=variableDict['Projections'])
+    
+    run_tomo_fly_scan(projections=variableDict['Projections'],
+                      rotation_start=variableDict['SampleStartPos'],
+                      rotation_end=variableDict['SampleEndPos'],
+                      exposure=variableDict['ExposureTime'],
+                      num_white=(5, 5), num_dark=(5, 0),
+                      sample_pos=(None,), out_pos=(None,),
+                      log_level=int(variableDict['Log_Level']),)
 
 
 if __name__ == '__main__':

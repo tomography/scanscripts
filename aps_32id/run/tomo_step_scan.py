@@ -62,6 +62,8 @@ variableDict = {
     # 'FileWriteMode': 'Stream',
     'rot_speed_deg_per_s': 0.5,
     'Recursive_Filter_N_Images': 1,
+    # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
+    'Log_Level': logging.INFO,
 }
 
 
@@ -78,6 +80,7 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
                        num_white=(5, 5), num_dark=(5, 0),
                        sample_pos=(None,), out_pos=(None,),
                        rot_speed_deg_per_s=0.5, key=None,
+                       log_level=None,
                        num_recursive_images=1):
     """Collect a series of projections at multiple angles.
     
@@ -109,6 +112,8 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
       Angular speed for the rotation stage.
     key : 
       Used for controlling the verifier instance.
+    log_level : int, optional
+      Temporary log level to use. None (default) does not change the logging.
     num_recursive_images : int, optional
       Recurisve averaging filter for combining multiple exposures.
     
@@ -124,7 +129,7 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
     # Prepare X-ray microscope
     txm = NanoTXM(has_permit=has_permit)
     # Prepare the microscope for collecting data
-    with txm.run_scan():
+    with txm.run_scan(log_level=log_level):
         txm.setup_detector(exposure=exposure)
         total_projections = len(angles)
         total_projections += num_pre_white_images + num_post_white_images
@@ -210,13 +215,14 @@ def main():
     time.sleep(sleep_time)
     # Call the main tomography function
     return run_tomo_step_scan(angles=angles,
-                          stabilize_sleep_ms=stabilize_sleep_ms,
-                          exposure=exposure,
-                          has_permit=SHUTTER_PERMIT, key=key,
-                          num_white=num_white, num_dark=num_dark,
-                          sample_pos=sample_pos, out_pos=out_pos,
-                          rot_speed_deg_per_s=rot_speed_deg_per_s,
-                          num_recursive_images=num_recursive_images)
+                              stabilize_sleep_ms=stabilize_sleep_ms,
+                              exposure=exposure,
+                              has_permit=SHUTTER_PERMIT, key=key,
+                              num_white=num_white, num_dark=num_dark,
+                              sample_pos=sample_pos, out_pos=out_pos,
+                              rot_speed_deg_per_s=rot_speed_deg_per_s,
+                              log_level=variableDict['Log_Level'],
+                              num_recursive_images=num_recursive_images)
 
 
 if __name__ == '__main__':

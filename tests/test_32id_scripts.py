@@ -80,6 +80,7 @@ class TomoFlyScanTests(unittest.TestCase):
             os.remove(self.txm.hdf_filename)
     
     def test_start_fly_scan(self):
+        self.txm.Fly_Calc_Projections = 300
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message='Could not cast None')
             warnings.filterwarnings('ignore', message='Could not retrieve actual angles')

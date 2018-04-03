@@ -12,6 +12,8 @@ MicroTXM
 
 from __future__ import print_function, division
 
+import os
+import datetime as dt
 import time
 import math
 import logging
@@ -1008,7 +1010,7 @@ class NanoTXM(object):
         self.wait_pv('Cam1_Status', self.DETECTOR_IDLE)
         time.sleep(0.25)
         self.Proc_Theta = 1
-        # self.Fly_ScanControl = "Standard"
+        self.Fly_ScanControl = "Standard"
         # Retrieve the actual theta array to return
         pv_name = getattr(type(self), 'Theta_Array').pv_name(txm=self)
         theta = self.pv_get(pv_name, count=int(num_projections))
@@ -1076,12 +1078,26 @@ class NanoTXM(object):
         return self.__class__.__dict__[pv_name].epics_PV(txm=self)
     
     @contextmanager
-    def run_scan(self):
+    def run_scan(self, loggers=(), log_level=None):
         """A context manager for executing long-running scripts. At the end of
         the context, the CCD gets reset and several motor positions
         get restored.
         
         """
+        # Setup logging handler
+        log_filename = self.hdf_filename
+        basename, ext = os.path.splitext(log_filename)
+        if log_level is not None:
+            handler = logging.FileHandler(filename=basename + '.log')
+            handler.setLevel(log_level)
+            formatter = logging.Formatter(
+                '%(levelname)s:%(pathname)s:%(message)s (%(asctime)s)')
+            handler.setFormatter(formatter)
+            root_log = logging.getLogger()
+            root_log.addHandler(handler)
+            root_log.setLevel(log_level)
+        now = dt.datetime.now(dt.timezone.utc).astimezone().isoformat()
+        log.info("Scan started at %s", now)
         # Save the initial values
         init_position = self.sample_position()
         init_E = self.energy()
@@ -1096,6 +1112,10 @@ class NanoTXM(object):
             raise
         else:
             log.info("Scan finished.")
+            # Stop logging
+            if log_level is not None:
+                root_log.removeHandler(handler)
+                handler.close()
         finally:
             log.debug("Restoring previous state")
             # Disable/re-enable the fast shutter

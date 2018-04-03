@@ -56,6 +56,8 @@ variableDict = {
     'Repetitions': 1,
     'Use_Fast_Shutter': 0,
     'Fast_Shutter_Sleep_ms': 20,
+    # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
+    'Log_Level': logging.INFO,
 }
 
 SHUTTER_PERMIT = False
@@ -118,6 +120,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                     constant_mag=True, stabilize_sleep_ms=1000,
                     num_recursive_images=1, repetitions=1,
                     use_fast_shutter=False, fast_shutter_sleep=100,
+                    log_level=None,
                     txm=None):
     """Collect a series of 2-dimensional projections across a range of energies.
     
@@ -158,6 +161,8 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     fast_shutter_sleep, int, optional
       If using the fast shutter, how much time to sleep (in ms) after
       changing its status.
+    log_level : int, optional
+      Temporary log level to use. None (default) does not change the logging.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
@@ -172,7 +177,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                       use_shutter_A=False,
                       use_shutter_B=True)
     # Execute the actual scan script
-    with txm.run_scan():
+    with txm.run_scan(log_level=log_level):
         # txm.enable_fast_shutter()
         # Prepare TXM for capturing data
         txm.setup_detector(exposure=exposure)
@@ -217,11 +222,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
 def main():
     # Set up default stream logging
     # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    # logging.basicConfig(level=logging.DEBUG)
-    logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
-    if os.path.exists(logfile):
-        logging.basicConfig(level=logging.DEBUG, filename=logfile)
-        logging.captureWarnings(True)
+    logging.basicConfig(level=logging.DEBUG)
     # Enter the main script function
     update_variable_dict(variableDict)
     # Get the requested sample positions
@@ -258,6 +259,7 @@ def main():
         constant_mag=constant_mag,
         num_recursive_images=num_recursive_images,
         repetitions=repetitions,
+        log_level=int(variableDict['Log_Level']),
         use_fast_shutter=bool(variableDict['Use_Fast_Shutter']),
         fast_shutter_sleep=bool(variableDict['Fast_Shutter_Sleep_ms'])
     )
