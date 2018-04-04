@@ -13,13 +13,9 @@ setup(
     description = 'Control software for various X-ray imaging beamlines.',
     entry_points = {
         'console_scripts': [
-            'run-energy-scan=aps_32id.run.energy_scan:main',
             'energy-scan=aps_32id.run.energy_scan:main',
-            'run-tomo-fly-scan=aps_32id.run.tomo_fly_scan:main',
             'tomo-fly-scan=aps_32id.run.tomo_fly_scan:main',
-            'run-tomo-step-scan=aps_32id.run.tomo_step_scan:main',
             'tomo-step-scan=aps_32id.run.tomo_step_scan:main',
-            'run-move-energy=aps_32id.run.move_energy:main',
             'move-energy=aps_32id.run.move_energy:main',
         ],
     },

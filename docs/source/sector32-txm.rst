@@ -1,7 +1,8 @@
+================
 Sector 32-ID TXM
 ================
 
-.. warning::
+.. note::
 
    This code is under active development and may change at any
    time. If you encounter issues, or documentation bugs, please
@@ -33,6 +34,32 @@ hypothetical example:
 
    # Best, even though this method definition would only have one line
    txm.reset_theta()
+
+Stopping Scans Gracefully
+-------------------------
+
+When a scan script ends, we want the **instrument to return to a
+usable configuration** even if an exception occurred. Using the
+:py:meth:`~aps_32id.txm.NanoTXM.run_scan()` context manager, this
+becomes easy. At the start of the context, this manager saves certain
+configuration details about instrument; when exiting the context for
+any reason the configuration is restored, the CCD is set to
+"continuous mode", and any extra logging is stopped:
+
+.. code:: python
+
+   import logging
+   import aps_32id
+
+   txm = aps_32id.NanoTXM()
+   
+   with txm.run_scan():
+       # Setup the microscope as desired
+       txm.setup_hdf_writer()
+       txm.start_logging(logging.INFO)
+       txm.setup_detector()
+       # Now do experiment stuff
+       
 
 Process Variables
 -----------------
@@ -223,7 +250,7 @@ Fast Shutter
 The instrument is equipped with a "fast shutter" than protects the
 specimen from excessive X-ray exposure. Calling
 :py:meth:`~aps_32id.txm.TXM.enable_fast_shutter` turns this feature
-on. If using the :py:meth:`~aps_32id.txm.TXM.run_scan` context manage
+on. If using the :py:meth:`~aps_32id.txm.TXM.run_scan` context manager
 (recommended), the fast shutter is automatically disabled, otherwise
 the :py:meth:`~aps_32id.txm.TXM.disable_fast_shutter` method should be
 called to return to normal behavior. The fast shutter respects

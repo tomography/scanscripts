@@ -2,8 +2,84 @@
 Sector 32-ID Scripts
 ====================
 
+General Features
+================
+
+All the scan scripts below can be executed in one of three ways.
+
+1. Through the ``tomography.sh`` graphical user interface (GUI)
+2. From the command line interface (CLI)
+3. Directly from a python interpreter   
+
+The mechanisms behind the GUI and command-line interfaces are
+identical. Every argument in the GUI parameter panel is also present
+as a long argument on the command-line:
+
+.. code:: bash
+
+   $ energy-scan --Energy_End 8.5 --Energy_Start 8.3 --ExposureTime 1.5 --SampleXOut 0.1
+
+The programatic python versions start with ``run_``. They often have
+slightly differet parameters to the GUI/CLI implementation, allowing
+for more precise control.
+
+.. code:: python
+
+   >>> import aps_32id
+   >>> import numpy as np
+   >>> aps_32id.run_energy(energies=np.linspace(8.3, 8.5, num=101))
+
+Logging
+-------
+
+These scripts (except for ``move_energy``) uses the standard library
+:py:mod:`logging` module to save logs with file names matching the
+HDF5 data files. The default level is ``logging.INFO``, but this can
+be changed by using the ``Log_Level`` variable:
+
+.. code:: bash
+
+   $ energy-scan --Log_Level 10
+
+or the ``log_level`` parameter:
+
+.. code:: python
+
+   >>> import numpy as np
+   >>> import logging
+   >>> import aps_32id
+   >>> aps_32id.run_energy_scan(energies=np.linspace(8.3, 8.5, 100), log_level=logging.DEBUG)
+
+The log levels are the same as those defined in the logging
+module. They get set to the root logger, so logging.UNSET results in
+all messages being sent through. The special value -1 causes no
+changes to the logging configuration.
+
+.. table:: Logging levels for the ``Log_Level`` variable
+   :widths: auto
+
+   =================  =====
+   Level              Value
+   =================  =====
+   (no change)        -1
+   logging.UNSET      0
+   logging.DEBUG      10
+   logging.INFO       20
+   logging.WARNING    30
+   logging.ERROR      40
+   logging.CRITICAL   50
+   =================  =====
+
 Move Energy
 ===========
+
++---------------+--------------------------------+
+| GUI:          | ``run/move_energy.py``         |
++---------------+--------------------------------+
+| Command-line: | ``$ move-energy``              |
++---------------+--------------------------------+
+| Python:       | ``>>> aps_32id.move_energy()`` |
++---------------+--------------------------------+
 
 The :mod:`~aps_32id.run.move_energy` script provides a way to change
 the energy of the beamline. If the parameter ``constant_mag`` is
@@ -14,6 +90,14 @@ programatically.
 
 Energy Scan
 ===========
+
++---------------+------------------------------------+
+| GUI:          | ``run/energy_scan.py``             |
++---------------+------------------------------------+
+| Command-line: | ``$ energy-scan``                  |
++---------------+------------------------------------+
+| Python:       | ``>>> aps_32id.run_energy_scan()`` |
++---------------+------------------------------------+
 
 The :mod:`~aps_32id.run.energy_scan` script collects 2D frames over a
 range of energies, as well as the corresponding flat-field and
@@ -53,6 +137,14 @@ list of energies.
 Tomography Step Scan
 ====================
 
++---------------+---------------------------------------+
+| GUI:          | ``run/tomo_step_scan.py``             |
++---------------+---------------------------------------+
+| Command-line: | ``$ tomo-step-scan``                  |
++---------------+---------------------------------------+
+| Python:       | ``>>> aps_32id.run_tomo_step_scan()`` |
++---------------+---------------------------------------+
+
 The :mod:`~aps_32id.run.tomo_step_scan` script collects a tomogram as
 well as flat-field and dark-field images. The variable dictionary
 entries ``SampleStart_Rot``, ``SampleEnd_Rot``, ``Projections``
@@ -81,14 +173,19 @@ that the angles be equally spaced.
 Tomography Fly Scan
 ===================
 
-.. warning::
-
-   This function has not yet replaced the "old style" script at the
-   beamline.
++---------------+--------------------------------------+
+| GUI:          | ``run/tomo_fly_scan.py``             |
++---------------+--------------------------------------+
+| Command-line: | ``$ tomo-fly-scan``                  |
++---------------+--------------------------------------+
+| Python:       | ``>>> aps_32id.run_tomo_fly_scan()`` |
++---------------+--------------------------------------+
 
 The :mod:`~aps_32id.run.tomo_fly_scan` script is similar to
 :mod:`~aps_32id.run.tomo_step_scan` except it does not come to a
-complete stop when collecting projection.
+complete stop when collecting projection. The timing must be uniform,
+so only equally spaced angles are allowed, even in the python function
+form.
 
 Mosaic Tomography Fly Scan
 ==========================

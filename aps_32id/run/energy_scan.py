@@ -6,30 +6,21 @@ acquired. The script calls the move_energy method from the TXM class.
 
 '''
 
-import sys
-import json
 import time
-import shutil
 import os
-import imp
-import traceback
-import math
-import time
 import logging
 import warnings
 
 import numpy as np
 import h5py
 import tqdm
-from epics import PV
 from scanlib.scan_variables import update_variable_dict
 from aps_32id.txm import NanoTXM
 
-__author__ = 'Mark Wolf'
+__author__ = 'Mark Wolfman'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
-__version__ = '1.6'
 __all__ = ['run_energy_scan', 'getVariableDict']
 
 
