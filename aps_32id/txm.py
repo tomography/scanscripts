@@ -117,6 +117,12 @@ class NanoTXM(object):
     DETECTOR_ABORTED = 10
     HDF_IDLE = 0
     HDF_WRITING = 1
+    TRIGGER_INTERNAL = 'Internal'
+    TRIGGER_EXTERNAL = 'Ext. Standard'
+    TRIGGER_OVERLAPPED = 'Overlapped'
+    GPIO_0 = 0
+    GPIO_2 = 1
+    GPIO_3 = 2
     
     # Process variables
     # -----------------
@@ -128,6 +134,7 @@ class NanoTXM(object):
     Cam1_FrameRate_on_off = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
     Cam1_FrameRate_val = TxmPV('{ioc_prefix}cam1:FrameRateValAbs')
     Cam1_TriggerMode = TxmPV('{ioc_prefix}cam1:TriggerMode')
+    Cam1_TriggerSource = TxmPV('{ioc_prefix}cam1:TriggerSource')
     Cam1_SoftwareTrigger = TxmPV('{ioc_prefix}cam1:SoftwareTrigger')
     Cam1_AcquireTime = TxmPV('{ioc_prefix}cam1:AcquireTime')
     Cam1_FrameRateOnOff = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
@@ -233,7 +240,7 @@ class NanoTXM(object):
     
     # Misc PV's
     Image1_Callbacks = TxmPV('{ioc_prefix}image1:EnableCallbacks')
-    SetSoftGlueForStep = TxmPV('32idcTXM:SG3:MUX2-1_SEL_Signal')
+    # SetSoftGlueForStep = TxmPV('32idcTXM:SG3:MUX2-1_SEL_Signal')
     # ClearTheta = TxmPV('32idcTXM:recPV:PV1_clear')
     ExternShutterDelay = TxmPV('32idcTXM:shutCam:tDly')
     Interferometer = TxmPV('32idcTXM:SG2:UpDnCntr-1_COUNTS_s')
@@ -746,16 +753,17 @@ class NanoTXM(object):
         log.debug("%s live display.", "Enabled" if live_display else "Disabled")
         # Capture a dummy frame to that the HDF5 plugin will work
         self.Cam1_ImageMode = "Single"
-        self.Cam1_TriggerMode = "Internal"
+        self.Cam1_TriggerMode = self.TRIGGER_INTERNAL
         self.exposure_time = 0.01
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
         # Now set the real settings for the detector
         self.Cam1_Display = live_display
         self.Cam1_ArrayCallbacks = 'Enable'
-        self.SetSoftGlueForStep = '0'
+        # self.SetSoftGlueForStep = '0'
         self.Cam1_FrameRateOnOff = False
-        self.Cam1_TriggerMode = 'Overlapped'
+        self.Cam1_TriggerSource = self.GPIO_0
+        self.Cam1_TriggerMode = self.TRIGGER_EXTERNAL
         self.exposure_time = exposure
         log.debug("Finished setting up detector.")
     
@@ -873,6 +881,8 @@ class NanoTXM(object):
         for i in range(num_projections):
             if self.fast_shutter_enabled:
                 # Fast shutter triggering
+                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+                self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
                 self.Fast_Shutter_Trigger = self.FAST_SHUTTER_TRIGGERED
                 self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
             elif self.Cam1_TriggerMode == "Internal":

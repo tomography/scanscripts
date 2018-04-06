@@ -169,7 +169,8 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                       use_shutter_B=True)
     # Execute the actual scan script
     with txm.run_scan():
-        # txm.enable_fast_shutter()
+        if use_fast_shutter:
+            txm.enable_fast_shutter()
         # Prepare TXM for capturing data
         txm.setup_detector(exposure=exposure)
         # Collect repetitions of the energy scan
@@ -252,7 +253,7 @@ def main():
         num_recursive_images=num_recursive_images,
         repetitions=repetitions,
         log_level=int(variableDict['Log_Level']),
-        use_fast_shutter=bool(variableDict['Use_Fast_Shutter']),
+        use_fast_shutter=bool(int(variableDict['Use_Fast_Shutter'])),
         fast_shutter_sleep=bool(variableDict['Fast_Shutter_Sleep_ms'])
     )
 
