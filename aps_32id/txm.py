@@ -103,6 +103,7 @@ class NanoTXM(object):
     FRAME_DATA = 0
     FRAME_DARK = 1
     FRAME_WHITE = 2
+    IMAGE_MODE_SINGLE = 'Single'
     IMAGE_MODE_MULTIPLE = 'Multiple'
     DETECTOR_IDLE = 0
     DETECTOR_ACQUIRE = 1
@@ -749,23 +750,40 @@ class NanoTXM(object):
         self.reset_ccd()
         self.reset_ccd()
         
-    def setup_detector(self, exposure=0.5, live_display=True):
-        log.debug("%s live display.", "Enabled" if live_display else "Disabled")
+    def setup_detector(self, num_projections, exposure=0.5):
+        """Prepare the Poing-Grey detector to start collecting projections.
+        
+        Parameters
+        ----------
+        num_projections : int
+          Total number of projections expected during the
+          experiment. After this number is reach, the detector the
+          become idle.
+        exposure : float, optional
+          How long (in sec) to collect each exposure for.
+        
+        """
+        log.debug("Setting up detector for %d (%f s) projections.",
+                  num_projections, exposure)
         # Capture a dummy frame to that the HDF5 plugin will work
-        self.Cam1_ImageMode = "Single"
+        self.Cam1_ImageMode = self.IMAGE_MODE_SINGLE
         self.Cam1_TriggerMode = self.TRIGGER_INTERNAL
         self.exposure_time = 0.01
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
         # Now set the real settings for the detector
-        self.Cam1_Display = live_display
+        self.Cam1_ImageMode = self.IMAGE_MODE_MULTIPLE
+        self.Cam1_NumImages = num_projections
+        self.Cam1_Display = True
         self.Cam1_ArrayCallbacks = 'Enable'
-        # self.SetSoftGlueForStep = '0'
         self.Cam1_FrameRateOnOff = False
         self.Cam1_TriggerSource = self.GPIO_0
         self.Cam1_TriggerMode = self.TRIGGER_EXTERNAL
         self.exposure_time = exposure
-        log.debug("Finished setting up detector.")
+        # Make sure the detector is ready for triggering
+        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
+        self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
+        # log.debug("Finished setting up detector.")
     
     def setup_hdf_writer(self, num_projections=1, write_mode="Stream",
                          num_recursive_images=1):
@@ -848,61 +866,33 @@ class NanoTXM(object):
         self.wait_pv('TIFF1_Capture', self.CAPTURE_ENABLED)
         log.debug("Finished setting up TIFF writer for %s.", filename)
     
-    def _trigger_projections(self, num_projections=1, exposure=None,
-                             continued=False):
-        """Trigger the detector to capture one (or more) projections.
+    def _trigger_projection(self):
+        """Trigger the detector to capture one projection.
         
         This method should only be used after setup_detector() and
-        setup_hdf_writer() have been called. The value for
-        num_projections given here should be less than or equal to the
-        number given to each of the setup methods.
+        setup_hdf_writer() have been called.
         
-        Parameters
-        ==========
-        num_projections : int, optional
-          How many projections to trigger.
-        exposure : float, optional
-          Exposure time, in second. If omitted, the value will be read
-          from instrument (takes 10-20 ms)
-        continued : bool, optional
-          If true, assume that this projection is one in a long series
-          that is being handled by some external function (eg
-          ``capture_tomogram``)
-
         """
-        if exposure is None:
-            exposure = self.exposure_time
-        suffix = 's' if num_projections > 1 else ''
-        log.debug("Triggering %d projection%s", num_projections, suffix)
-        if not continued:
-            self.Cam1_ImageMode = "Single"
-            self.Cam1_NumImages = 1
+        log.debug("Triggering projection")
+        # Retrieve current image counter
+        old_num = None
+        init_time = time.time()
+        while old_num is None:
+            old_num = self.Cam1_NumImagesCounter
         # Collect each frame one at a time
-        for i in range(num_projections):
-            if self.fast_shutter_enabled:
-                # Fast shutter triggering
-                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-                self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
-                self.Fast_Shutter_Trigger = self.FAST_SHUTTER_TRIGGERED
-                self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
-            elif self.Cam1_TriggerMode == "Internal":
-                # Faster, but less reliable exposure times
-                self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-                time.sleep(exposure)
-            else:
-                # Regular external triggering
-                if not continued:
-                    self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-                self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
-                # Wait for the camera to be ready
-                old_num = None
-                while old_num is None:
-                    old_num = self.Cam1_NumImagesCounter
-                init_time = time.time()
-                self.Cam1_SoftwareTrigger = 1
-                self.wait_pv('Cam1_NumImagesCounter', old_num+1)
-                log.debug('Captured projection in %f sec', time.time() - init_time)
-                # self.wait_pv('Cam1_Status', self.DETECTOR_IDLE)
+        if self.fast_shutter_enabled:
+            # Fast shutter triggering
+            self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
+            self.Fast_Shutter_Trigger = self.FAST_SHUTTER_TRIGGERED
+            self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
+        else:
+            # Regular external triggering
+            self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
+            # Wait for the camera to be ready
+            self.Cam1_SoftwareTrigger = 1
+        # Make sure that the projection is done collecting
+        self.wait_pv('Cam1_NumImagesCounter', old_num+1)
+        log.debug('Captured projection in %f sec', time.time() - init_time)
     
     def capture_projections(self, num_projections=1):
         """Trigger the capturing of projection images from the detector.
@@ -920,19 +910,21 @@ class NanoTXM(object):
         # Set frame collection data
         self.Cam1_FrameType = self.FRAME_DATA
         # Collect the data
-        ret = self._trigger_projections(num_projections=num_projections)
-        return ret
+        for i in range(num_projections):
+            self._trigger_projection()
     
     def capture_white_field(self, num_projections=1):
         """Trigger the capturing of projection images from the detector with
         the shutters open and no sample present.
         
+        This method does NOT actually open the shutters or move the
+        sample: these things must be done prior to calling this
+        method.
+        
         Parameters
         ----------
         num_projections : int, optional
           How many projections to acquire.
-        exposure : float, optional
-          Exposure time for each frame in seconds.
         
         """
         # Raise a warning if the shutters are closed.
@@ -942,8 +934,8 @@ class NanoTXM(object):
             log.warning(msg)
         self.Cam1_FrameType = self.FRAME_WHITE
         # Collect the data
-        ret = self._trigger_projections(num_projections=num_projections)
-        return ret
+        for i in range(num_projections):
+            self._trigger_projection()
     
     def capture_dark_field(self, num_projections=1):
         """Trigger the capturing of projection images from the detector with
@@ -955,8 +947,6 @@ class NanoTXM(object):
         ----------
         num_projections : int, optional
           How many projections to acquire.
-        exposure : float, optional
-          Exposure time for each frame in seconds.
         
         """
         # Raise a warning if the shutters are open.
@@ -966,8 +956,8 @@ class NanoTXM(object):
             log.warning(msg)
         self.Cam1_FrameType = self.FRAME_DARK
         # Collect the data
-        ret = self._trigger_projections(num_projections=num_projections)
-        return ret
+        for i in range(num_projections):
+            self._trigger_projection()
     
     def capture_tomogram_flyscan(self, start_angle, end_angle,
                                  num_projections, ccd_readout=0.270):
@@ -1032,8 +1022,7 @@ class NanoTXM(object):
             theta = np.linspace(start_angle, end_angle, num=num_projections)
         return theta
     
-    def capture_tomogram(self, angles, num_projections=1,
-                         stabilize_sleep=10):
+    def capture_tomogram(self, angles, stabilize_sleep=10):
         """Collect data frames over a range of angles.
         
         Parameters
@@ -1041,8 +1030,6 @@ class NanoTXM(object):
         angles : np.ndarray
           An array of angles (in degrees) to use for collecting
           projections.
-        num_projections : int, optional
-          Number of projections to average at each angle.
         stablize_sleep : int, optional
           How long (in milliseconds) to wait after moving the rotation
           stage.
@@ -1052,28 +1039,15 @@ class NanoTXM(object):
         log.debug('called tomo_scan()')
         # Prepare the instrument for data collection
         self.Cam1_FrameType = self.FRAME_DATA
-        self.Cam1_ImageMode = "Multiple"
-        self.Cam1_NumImages = len(angles)
-        self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-        # self.Cam1_NumImages = 1
-        assert num_projections == 1
-        if num_projections > 1:
-            old_filter = self.Proc1_Filter_Enable
-            self.Proc1_Filter_Enable = 'Enable'
         # Configure detector to be more efficient
         exposure = self.exposure_time
-        # self.Cam1_TriggerMode = "Internal"
         # Cycle through each angle and collect data
         for sample_rot in tqdm.tqdm(angles, desc="Capturing tomogram", unit='ang'):
             self.move_sample(theta=sample_rot)
             log.debug('Stabilize Sleep: %d ms', stabilize_sleep)
             time.sleep(stabilize_sleep / 1000.)
             # Trigger the camera
-            self._trigger_projections(num_projections=num_projections,
-                                      exposure=exposure, continued=True)
-        # Restore previous filter enabled state
-        if num_projections > 1:
-            self.Proc1_Filter_Enable = old_filter
+            self._trigger_projection()
     
     def epics_PV(self, pv_name):
         """Retrieve the epics process variable (PV) object for the given

@@ -142,15 +142,16 @@ class TXMTestCase(unittest.TestCase):
     def test_setup_detector(self):
         txm = UnpluggedTXM(has_permit=False)
         txm.pg_external_trigger = False
-        txm.setup_detector(live_display=False, exposure=1.3)
+        txm.setup_detector(num_projections=35, exposure=1.3)
         # Check that PV values were set
-        self.assertEqual(txm.Cam1_Display, False)
-        self.assertEqual(txm.Cam1_ImageMode, 'Single')
+        self.assertEqual(txm.Cam1_Display, True)
+        self.assertEqual(txm.Cam1_ImageMode, 'Multiple')
         self.assertEqual(txm.Cam1_ArrayCallbacks, 'Enable')
         self.assertEqual(txm.Fast_Shutter_Exposure, 1.3)
-        self.assertEqual(txm.SetSoftGlueForStep, '0')
         self.assertEqual(txm.Cam1_FrameRateOnOff, 0)
-        self.assertEqual(txm.Cam1_TriggerMode, "Overlapped")
+        self.assertEqual(txm.Cam1_TriggerMode, "Ext. Standard")
+        self.assertEqual(txm.Cam1_NumImages, 35)
+        self.assertEqual(txm.Cam1_Acquire, txm.DETECTOR_ACQUIRE)
     
     def test_setup_hdf_writer(self):
         txm = UnpluggedTXM(has_permit=True)
@@ -288,15 +289,15 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.ShutterA_Close, None)
         self.assertEqual(txm.ShutterB_Close, 1)
     
-    @unittest.skip('while loop runs forever')
-    def test_trigger_projections(self):
+    def test_trigger_projection(self):
         # Currently this test only checks that the method can run without error
         txm = UnpluggedTXM()
-        txm._trigger_projections(num_projections=3)
+        txm.Cam1_NumImagesCounter = 0
+        txm._trigger_projection()
     
     def test_capture_projections(self):
         txm = UnpluggedTXM()
-        txm._trigger_projections = mock.MagicMock()
+        txm._trigger_projection = mock.MagicMock()
         # Check for warning if collecting with shutters closed
         txm.shutters_are_open = False
         with warnings.catch_warnings(record=True) as w:
@@ -306,17 +307,21 @@ class TXMTestCase(unittest.TestCase):
             self.assertIn('Collecting projections with shutters closed.',
                           str(w[0].message))
         # Test when num_projections is > 1
+        txm._trigger_projection.reset_mock()
         txm.shutters_are_open = True
         txm.capture_projections(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_DATA)
-        txm._trigger_projections.assert_called_with(num_projections=3)
+        txm._trigger_projection.assert_called_with()
+        self.assertEqual(txm._trigger_projection.call_count, 3)
         # Test when num_projections == 1
+        txm._trigger_projection.reset_mock()
         txm.capture_projections(num_projections=1)
-        txm._trigger_projections.assert_called_with(num_projections=1)
+        txm._trigger_projection.assert_called_with()
+        self.assertEqual(txm._trigger_projection.call_count, 1)
     
     def test_capture_dark_field(self):
         txm = UnpluggedTXM()
-        txm._trigger_projections = mock.MagicMock()
+        txm._trigger_projection = mock.MagicMock()
         # Check for warning if collecting with shutters open
         txm.shutters_are_open = True
         with warnings.catch_warnings(record=True) as w:
@@ -331,22 +336,22 @@ class TXMTestCase(unittest.TestCase):
                                     category=RuntimeWarning)
             warnings.filterwarnings('ignore', message='Shutters not closed')
             txm.close_shutters()
-        txm._trigger_projections.reset_mock()
+        txm._trigger_projection.reset_mock()
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
             txm.capture_dark_field(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_DARK)
-        txm._trigger_projections.assert_called_once_with(num_projections=3)
+        self.assertEqual(txm._trigger_projection.call_count, 3)
         # Test when calling only one projection
-        txm._trigger_projections.reset_mock()
+        txm._trigger_projection.reset_mock()
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
             txm.capture_dark_field(num_projections=1)
-        txm._trigger_projections.assert_called_once_with(num_projections=1)
+        self.assertEqual(txm._trigger_projection.call_count, 1)
     
     def test_capture_flat_field(self):
         txm = UnpluggedTXM()
-        txm._trigger_projections = mock.MagicMock()
+        txm._trigger_projection = mock.MagicMock()
         # Check for warning if collecting with shutters closed
         txm.shutters_are_open = False
         with warnings.catch_warnings(record=True) as w:
@@ -362,18 +367,20 @@ class TXMTestCase(unittest.TestCase):
             warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
             warnings.filterwarnings('ignore', message=".*TXM doesn't have beamline permit.")
             txm.open_shutters()
-        txm._trigger_projections.reset_mock()
+        txm._trigger_projection.reset_mock()
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
             txm.capture_white_field(num_projections=3)
         self.assertEqual(txm.Cam1_FrameType, txm.FRAME_WHITE)
-        txm._trigger_projections.assert_called_with(num_projections=3)
+        txm._trigger_projection.assert_called_with()
+        self.assertEqual(txm._trigger_projection.call_count, 3)
         # Test when calling only one projection
-        txm._trigger_projections.reset_mock()
+        txm._trigger_projection.reset_mock()
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', module='aps_32id', category=RuntimeWarning)
             txm.capture_white_field(num_projections=1)
-        txm._trigger_projections.assert_called_once_with(num_projections=1)
+        txm._trigger_projection.assert_called_with()
+        self.assertEqual(txm._trigger_projection.call_count, 1)
     
     def test_reset_ccd(self):
         txm = UnpluggedTXM()
@@ -439,7 +446,8 @@ class TXMTestCase(unittest.TestCase):
             # Test that a new stream handler is added
             with warnings.catch_warnings(record=True) as w:
                 txm.start_logging(level=logging.DEBUG)
-                self.assertEqual(len(w), 1)
+                if six.PY3:
+                    self.assertEqual(len(w), 1)
             self.assertFalse(os.path.exists(logfile))
             handlers = logging.getLogger().handlers
             self.assertEqual(len(handlers), num_handlers + 1)

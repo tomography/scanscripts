@@ -43,10 +43,8 @@ variableDict = {
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
-    'Recursive_Filter_N_Images': 1,
     'Repetitions': 1,
     'Use_Fast_Shutter': 0,
-    'Fast_Shutter_Sleep_ms': 20,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
 }
@@ -61,8 +59,7 @@ def getVariableDict():
 
 
 def _capture_energy_frames(txm, energies, constant_mag,
-                           stabilize_sleep_ms, sample_pos, out_pos,
-                           num_recursive_images):
+                           stabilize_sleep_ms, sample_pos, out_pos):
     """A helper method for collected a set of energy frames.
     
     The TXM should already be set up before calling this function.
@@ -88,29 +85,27 @@ def _capture_energy_frames(txm, energies, constant_mag,
         # Sample projection acquisition (or white-field on odd passes)
         if sample_first:
             log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
-            txm.capture_projections(num_projections=num_recursive_images)
+            txm.capture_projections()
         else:
             log.info("Acquiring white-field position %s at %.4f eV", out_pos, energy)
-            txm.capture_white_field(num_projections=num_recursive_images)
+            txm.capture_white_field()
         # Flat-field projection acquisition (or sample on odd passes)
         if sample_first:
-            # with txm.wait_pvs():
             txm.move_sample(*out_pos)
             log.info("Acquiring white-field position %s at %.4f eV", out_pos, energy)
             # time.sleep(3)
-            txm.capture_white_field(num_projections=num_recursive_images)
+            txm.capture_white_field()
         else:
-            # with txm.wait_pvs():
             txm.move_sample(*sample_pos)
             log.info("Acquiring sample position %s at %.4f eV", sample_pos, energy)
-            txm.capture_projections(num_projections=num_recursive_images)
+            txm.capture_projections()
 
 
 def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                     has_permit=True, sample_pos=(None,), out_pos=(None,),
                     constant_mag=True, stabilize_sleep_ms=1000,
-                    num_recursive_images=1, repetitions=1,
-                    use_fast_shutter=False, fast_shutter_sleep=100,
+                    repetitions=1,
+                    use_fast_shutter=False,
                     log_level=logging.INFO,
                     txm=None):
     """Collect a series of 2-dimensional projections across a range of energies.
@@ -142,16 +137,11 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     stabilize_sleep_ms : int, optional
       How long, in milliseconds, to wait for the beam to stabilize
       before collecting projections.
-    num_recursive_images : int, optional
-      If greater than 1, several consecutive images can be collected.
     repetitions : int, optional
       How many times to run this energy scan, including the first one.
     use_fast_shutter : bool, optional
       Whether to open and shut the fast shutter before triggering
       projections.
-    fast_shutter_sleep, int, optional
-      If using the fast shutter, how much time to sleep (in ms) after
-      changing its status.
     log_level : int, optional
       Temporary log level to use. ``None`` does not change the logging.
     txm : optional
@@ -172,17 +162,17 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
         if use_fast_shutter:
             txm.enable_fast_shutter()
         # Prepare TXM for capturing data
-        txm.setup_detector(exposure=exposure)
+        txm.setup_detector(exposure=exposure,
+                           num_projections=total_projections)
         # Collect repetitions of the energy scan
         for rep in range(repetitions):
-            txm.setup_hdf_writer(num_projections=total_projections,
-                                 num_recursive_images=num_recursive_images)
+            txm.setup_hdf_writer(num_projections=total_projections)
             txm.start_logging(log_level)
             # Capture pre dark field images
             if n_pre_dark > 0:
                 txm.close_shutters()
                 log.info('Capturing %d Pre Dark Field images', n_pre_dark)
-                txm.capture_dark_field(num_projections=n_pre_dark * num_recursive_images)
+                txm.capture_dark_field(num_projections=n_pre_dark)
             # Calculate the array of energies that will be scanned
             log.info('Capturing %d energies', len(energies))
             # Collect frames at each energy
@@ -190,8 +180,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
             _capture_energy_frames(txm=txm, energies=energies,
                                    constant_mag=constant_mag,
                                    stabilize_sleep_ms=stabilize_sleep_ms,
-                                   sample_pos=sample_pos, out_pos=out_pos,
-                                   num_recursive_images=num_recursive_images)
+                                   sample_pos=sample_pos, out_pos=out_pos)
             txm.close_shutters()
             # Add the energy array to the active HDF file
             hdf_filename = txm.hdf_filename
@@ -235,9 +224,9 @@ def main():
     # Start scan sleep in min so min * 60 = sec
     sleep_min = float(variableDict.get('StartSleep_min', 0))
     stabilize_sleep_ms = float(variableDict.get("StabilizeSleep_ms"))
-    num_recursive_images = int(variableDict['Recursive_Filter_N_Images'])
     repetitions = int(variableDict['Repetitions'])
     constant_mag = bool(variableDict['constant_mag'])
+    use_fast_shutter = bool(int(variableDict['Use_Fast_Shutter']))
     if sleep_min > 0:
         log.debug("Sleeping for %f min", sleep_min)
         time.sleep(sleep_min * 60.0)
@@ -250,11 +239,9 @@ def main():
         out_pos=out_pos,
         stabilize_sleep_ms=stabilize_sleep_ms,
         constant_mag=constant_mag,
-        num_recursive_images=num_recursive_images,
         repetitions=repetitions,
         log_level=int(variableDict['Log_Level']),
-        use_fast_shutter=bool(int(variableDict['Use_Fast_Shutter'])),
-        fast_shutter_sleep=bool(variableDict['Fast_Shutter_Sleep_ms'])
+        use_fast_shutter=use_fast_shutter,
     )
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ class UnpluggedTXM(NanoTXM):
         super(UnpluggedTXM, self).__init__(*args, **kwargs)
     
     def pv_get(self, pv_name, *args, **kwargs):
-        if pv_name == 'cam1:Acquire':
+        if pv_name == 'cam1:Acquire' and False:
             # This prevents stalling when triggering projections
             out = NanoTXM.DETECTOR_IDLE
         else:
@@ -49,3 +49,4 @@ class TXMStub(UnpluggedTXM):
     setup_hdf_writer = mock.MagicMock()
     setup_detector = mock.MagicMock()
     open_shutters = mock.MagicMock()
+    Cam1_NumImagesCounter = 0

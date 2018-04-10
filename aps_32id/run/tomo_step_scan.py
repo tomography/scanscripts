@@ -62,7 +62,7 @@ variableDict = {
     # 'ExternalShutter': 0,
     # 'FileWriteMode': 'Stream',
     'rot_speed_deg_per_s': 0.5,
-    'Recursive_Filter_N_Images': 1,
+    'Use_Fast_Shutter': 1,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
 }
@@ -82,7 +82,8 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
                        sample_pos=(None,), out_pos=(None,),
                        rot_speed_deg_per_s=0.5, key=None,
                        log_level=logging.INFO,
-                       num_recursive_images=1, txm=None):
+                       use_fast_shutter=True,
+                       txm=None):
     """Collect a series of projections at multiple angles.
     
     The given angles should span a range of 180°. The frames will be
@@ -113,10 +114,11 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
       Angular speed for the rotation stage.
     key : 
       Used for controlling the verifier instance.
+    use_fast_shutter : bool, optional
+      Whether to open and shut the fast shutter before triggering
+      projections.
     log_level : int, optional
       Temporary log level to use. None (default) does not change the logging.
-    num_recursive_images : int, optional
-      Recurisve averaging filter for combining multiple exposures.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
@@ -137,12 +139,13 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
         txm = NanoTXM(has_permit=has_permit)
     # Prepare the microscope for collecting data
     with txm.run_scan():
+        if use_fast_shutter:
+            txm.enable_fast_shutter()
         txm.setup_detector(exposure=exposure)
         total_projections = len(angles)
         total_projections += num_pre_white_images + num_post_white_images
         total_projections += num_pre_dark_images + num_post_dark_images
-        txm.setup_hdf_writer(num_projections=total_projections,
-                             num_recursive_images=num_recursive_images)
+        txm.setup_hdf_writer(num_projections=total_projections)
         txm.start_logging(level=log_level)
         # Collect pre-scan dark-field images
         if num_pre_dark_images > 0:
@@ -164,7 +167,7 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
             txm.move_sample(*sample_pos)
             txm.open_shutters()
         log.debug('Starting tomography scan')
-        txm.capture_tomogram(angles=angles, num_projections=num_recursive_images,
+        txm.capture_tomogram(angles=angles,
                              stabilize_sleep=stabilize_sleep_ms)
         # Capture post-scan white-field images
         if num_post_white_images > 0:
@@ -223,9 +226,9 @@ def main():
                variableDict.get('SampleYOut', None),
                variableDict.get('SampleZOut', None),
                variableDict.get('SampleRotOut', None))
-    num_recursive_images = int(variableDict['Recursive_Filter_N_Images'])
     step_size = ((sample_rot_end - sample_rot_start) / (num_projections - 1.0))
     stabilize_sleep_ms = float(variableDict['StabilizeSleep_ms'])
+    use_fast_shutter = use_fast_shutter=bool(int(variableDict['Use_Fast_Shutter']))
     # Pre-scan sleep
     log.debug("Sleeping for %d seconds", int(sleep_time))
     time.sleep(sleep_time)
@@ -237,8 +240,8 @@ def main():
                               num_white=num_white, num_dark=num_dark,
                               sample_pos=sample_pos, out_pos=out_pos,
                               rot_speed_deg_per_s=rot_speed_deg_per_s,
-                              log_level=variableDict['Log_Level'],
-                              num_recursive_images=num_recursive_images)
+                              use_fast_shutter=use_fast_shutter,
+                              log_level=variableDict['Log_Level'])
 
 
 if __name__ == '__main__':

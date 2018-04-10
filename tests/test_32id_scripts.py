@@ -121,9 +121,9 @@ class EnergyScanTests(unittest.TestCase):
                                               txm=self.txm, log_level=None)
         # Check that what happened was done correctly
         self.assertEqual(txm.capture_projections.call_count, 2*len(energies))
-        txm.capture_projections.assert_called_with(num_projections=1)
+        txm.capture_projections.assert_called_with()
         txm.capture_dark_field.assert_called_with(num_projections=4)
         # Verify the detector and hdf writer were colled properly
-        txm.setup_hdf_writer.assert_called_with(num_projections=expected_projections,
-                                                     num_recursive_images=1)
-        txm.setup_detector.assert_called_with(exposure=0.77)
+        txm.setup_hdf_writer.assert_called_with(num_projections=expected_projections)
+        txm.setup_detector.assert_called_with(exposure=0.77,
+                                              num_projections=expected_projections)
