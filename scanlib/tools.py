@@ -28,8 +28,49 @@ def expand_position(position, length=4):
     return new_position
 
 
+def energy_range_from_points(energy_points, energy_steps):
+    """Convert energy ranges to a flat energy list.
+    
+    This function is called with a list of energy limits and spacings between
+    those energy points:
+        
+        .. code:: python
+        
+            energy_range(
+                energy_points=(8.3, 8.5, 8.7),
+                energy_steps=*(0.02, 0.01)
+            )
+    
+    """
+    # Validate the length of the lists
+    if len(energy_points) != (len(energy_steps) + 1):
+        raise ValueError("Number of energy points must be one more than "
+                         "number of energy steps: %d, %d"
+                         "" % (len(energy_points), len(energy_steps)))
+    # First prepare a list of ranges
+    ranges = []
+    for idx in range(len(energy_steps)):
+        start = energy_points[idx]
+        stop = energy_points[idx+1]
+        step = energy_steps[idx]
+        ranges.append((start, stop, step))
+    # Convert the list of ranges to a list of energies
+    energies = energy_range(*ranges)
+    return energies
+    
+
+
 def energy_range(*ranges):
     """Convert energy ranges to a flat energy list.
+    
+    This function is called with multiple energy ranges:
+        
+        .. code:: python
+        
+            energy_range(
+                (8.3, 8.5, 0.02),
+                (8.5, 8.7, 0.01),
+            )
     
     Each entry in ``ranges`` should be a tuple of (start, stop,
     step). Unlike the standard ``range`` function, stop is

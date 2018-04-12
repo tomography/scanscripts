@@ -44,7 +44,7 @@ variableDict = {
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Repetitions': 1,
-    'Use_Fast_Shutter': 0,
+    'Use_Fast_Shutter': 1,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
 }
@@ -152,6 +152,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     log.debug("Starting run_energy_scan()")
     start_time = time.time()
     total_projections = n_pre_dark + 2 * len(energies)
+    assert not has_permit
     # Create the TXM object for this scan
     if txm is None:
         txm = NanoTXM(has_permit=has_permit,
@@ -204,7 +205,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
 def main():
     # Set up default stream logging
     # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    logging.basicConfig(level=logging.DEBUG)
+    # logging.basicConfig(level=logging.WARNING)
     # Enter the main script function
     update_variable_dict(variableDict)
     # Get the requested sample positions

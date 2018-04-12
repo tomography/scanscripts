@@ -53,6 +53,20 @@ class PVPromise():
         self.is_complete = True
 
 
+def new_txm(*args, **kwargs):
+    """A factory that creates a instrument object, either MicroCT or NanoTXM.
+    
+    Parameters
+    ----------
+    args, kwargs : optional
+      Arguments that get passed to the constructor of the TXM.
+    
+    """
+    txm = NanoTXM(*args, **kwargs)
+    # txm = MicroCT(*args, **kwargs)
+    return txm
+
+
 ############################
 # Main TXM Class definition
 ############################
@@ -1191,9 +1205,17 @@ class NanoTXM(object):
         self.wait_pv('Cam1_Acquire', self.DETECTOR_ACQUIRE, timeout=2)
 
 
-class MicroTXM(NanoTXM):
+class MicroCT(NanoTXM):
+    
     """TXM operating with the front micro-CT stage."""
-    # Common settings for this TXM
+
+    def __init__(self, has_permit=False, use_shutter_A=True,
+                 use_shutter_B=False):
+        self.has_permit = has_permit
+        self.use_shutter_A = use_shutter_A
+        self.use_shutter_B = use_shutter_B
+
+    # Common settings for this micro-CT
     FAST_SHUTTER_TRIGGER_ENCODER = 0 # Hydra encoder
     # Flyscan PV's
     Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')

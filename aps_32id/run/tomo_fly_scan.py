@@ -20,7 +20,7 @@ import signal
 import random
 import string
 
-from aps_32id.txm import NanoTXM
+from aps_32id.txm import new_txm
 from scanlib.tools import expand_position
 from scanlib.scan_variables import update_variable_dict
 
@@ -80,7 +80,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                       num_white=(5, 5), num_dark=(5, 0),
                       sample_pos=(None,), out_pos=(None,),
                       log_level=logging.INFO,
-                      has_permit=False, txm=None):
+                      txm=None):
     """Collect a 180° tomogram in fly-scan mode.
     
     The defining feature here is that the rotation axis does not stop,
@@ -109,9 +109,6 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
       4 (or less) tuple of (x, y, z, θ°) for white field position.
     log_level : int, optional
       Temporary log level to use. ``None`` does not change the logging.
-    has_permit : bool, optional
-      Does the user have permission to open the shutters and change
-      source energy.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
@@ -127,11 +124,8 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                          num_post_dark_images + num_pre_white_images +
                          num_post_white_images)
     # Create the TXM object for this scan
-    assert not has_permit
     if txm is None:
-        txm = NanoTXM(has_permit=has_permit,
-                      use_shutter_A=False,
-                      use_shutter_B=True)
+        txm = new_txm()
     # Execute the actual scan script
     with txm.run_scan():
         # Prepare camera, etc.

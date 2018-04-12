@@ -20,7 +20,8 @@ import h5py
 from epics import PV
 import numpy as np
 
-from aps_32id import NanoTXM
+# from aps_32id import MicroCT as TXM
+from aps_32id import NanoTXM, new_txm
 from scanlib import update_variable_dict, tools
 
 __author__ = 'Mark Wolf'
@@ -36,7 +37,6 @@ VER_PORT = "5011"
 VER_DIR = "/local/usr32idc/conda/data-quality/"
 INSTRUMENT = "/home/beams/USR32IDC/.dquality/32id_micro"
 IOC_PREFIX = '32idcPG3'
-SHUTTER_PERMIT = True
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ variableDict = {
     'Projections': 721,
     'PostDarkImages': 4,
     'PostWhiteImages': 10,
-    'SampleXOut': 0.4,
+    'SampleXOut': 0.2,
     # 'SampleYOut': 0.1,
     # 'SampleZOut': 0,
     'SampleRotOut': 0.0,
@@ -62,7 +62,7 @@ variableDict = {
     # 'ExternalShutter': 0,
     # 'FileWriteMode': 'Stream',
     'rot_speed_deg_per_s': 0.5,
-    'Use_Fast_Shutter': 1,
+    'Use_Fast_Shutter': 0,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
 }
@@ -77,7 +77,6 @@ def getVariableDict():
 
 
 def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
-                       has_permit=True,
                        num_white=(5, 5), num_dark=(5, 0),
                        sample_pos=(None,), out_pos=(None,),
                        rot_speed_deg_per_s=0.5, key=None,
@@ -100,8 +99,6 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
       rotation stage to settle.
     exposure : float, optional
       Exposure time in seconds for each projection.
-    has_permit : bool, optional
-      Whether the user has a priority for the shutters and source.
     num_white : 2-tuple(int), optional
       (pre, post) tuple for number of white field images to collect.
     num_dark : 2-tuple(int), optional
@@ -136,15 +133,16 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
     # start_verifier(INSTRUMENT, None, variableDict, VER_DIR, VER_HOST, VER_PORT, key)
     # Prepare X-ray microscope
     if txm is None:
-        txm = NanoTXM(has_permit=has_permit)
+        txm = new_txm()
     # Prepare the microscope for collecting data
     with txm.run_scan():
         if use_fast_shutter:
             txm.enable_fast_shutter()
-        txm.setup_detector(exposure=exposure)
         total_projections = len(angles)
         total_projections += num_pre_white_images + num_post_white_images
         total_projections += num_pre_dark_images + num_post_dark_images
+        txm.setup_detector(num_projections=total_projections,
+                           exposure=exposure)
         txm.setup_hdf_writer(num_projections=total_projections)
         txm.start_logging(level=log_level)
         # Collect pre-scan dark-field images
@@ -196,6 +194,10 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
 
 
 def main():
+    # Set up default stream logging
+    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
+    #logging.basicConfig(level=logging.DEBUG) # uncomment to get info in the console
+
     # Prepare the exit handler
     key = ''.join(random.choice(string.letters[26:]+string.digits) for _ in range(10))
     def on_exit(sig, func=None):
@@ -235,8 +237,7 @@ def main():
     # Call the main tomography function
     return run_tomo_step_scan(angles=angles,
                               stabilize_sleep_ms=stabilize_sleep_ms,
-                              exposure=exposure,
-                              has_permit=SHUTTER_PERMIT, key=key,
+                              exposure=exposure, key=key,
                               num_white=num_white, num_dark=num_dark,
                               sample_pos=sample_pos, out_pos=out_pos,
                               rot_speed_deg_per_s=rot_speed_deg_per_s,
@@ -245,10 +246,5 @@ def main():
 
 
 if __name__ == '__main__':
-    # Set up default stream logging
-    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
-    logging.basicConfig(level=logging.DEBUG, filename=logfile)
-    logging.captureWarnings(True)
     # Launch the main script portion
     main()
