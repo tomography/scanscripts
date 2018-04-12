@@ -102,10 +102,10 @@ def _capture_energy_frames(txm, energies, constant_mag,
 
 
 def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
-                    has_permit=True, sample_pos=(None,), out_pos=(None,),
+                    has_permit=True, sample_pos=(0.,), out_pos=(0.2,),
                     constant_mag=True, stabilize_sleep_ms=1000,
                     repetitions=1,
-                    use_fast_shutter=False,
+                    use_fast_shutter=True,
                     log_level=logging.INFO,
                     txm=None):
     """Collect a series of 2-dimensional projections across a range of energies.
