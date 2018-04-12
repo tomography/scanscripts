@@ -15,7 +15,8 @@ import numpy as np
 import h5py
 import tqdm
 from scanlib.scan_variables import update_variable_dict
-from aps_32id.txm import NanoTXM
+from scanlib.tools import energy_range_from_points
+from aps_32id.txm import new_txm
 
 __author__ = 'Mark Wolfman'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
@@ -37,9 +38,8 @@ variableDict = {
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 3,
-    'Energy_Start': 8.3,
-    'Energy_End': 8.5, # Inclusive
-    'Energy_Step': 0.001,
+    'Energy_limits': '7.1, 7.2, 7.35',
+    'Energy_Step': '0.002, 0.0003',
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
@@ -155,9 +155,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     assert not has_permit
     # Create the TXM object for this scan
     if txm is None:
-        txm = NanoTXM(has_permit=has_permit,
-                      use_shutter_A=False,
-                      use_shutter_B=True)
+        txm = new_txm()
     # Execute the actual scan script
     with txm.run_scan():
         if use_fast_shutter:
@@ -208,6 +206,7 @@ def main():
     # logging.basicConfig(level=logging.WARNING)
     # Enter the main script function
     update_variable_dict(variableDict)
+    
     # Get the requested sample positions
     sample_pos = (variableDict.get('SampleXIn', None),
                   variableDict.get('SampleYIn', None),
@@ -217,11 +216,14 @@ def main():
                variableDict.get('SampleYOut', None),
                variableDict.get('SampleZOut', None),
                variableDict.get('SampleRotOut', None))
+
     # Prepare the list of energies requested
-    energy_start = float(variableDict['Energy_Start'])
-    energy_end = float(variableDict['Energy_End'])
-    energy_step = float(variableDict['Energy_Step'])
-    energies = np.arange(energy_start, energy_end + energy_step, energy_step)
+    energy_limits = [float(x) for x in variableDict['Energy_limits'].split(',') ]
+    energy_steps = [float(x) for x in variableDict['Energy_Step'].split(',') ]
+    energies = energy_range_from_points(energy_points=energy_limits,
+                                        energy_steps=energy_steps)
+
+
     # Start scan sleep in min so min * 60 = sec
     sleep_min = float(variableDict.get('StartSleep_min', 0))
     stabilize_sleep_ms = float(variableDict.get("StabilizeSleep_ms"))
