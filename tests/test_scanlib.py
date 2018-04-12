@@ -16,7 +16,7 @@ class ToolsTestCase(unittest.TestCase):
     
     def test_energy_range_from_points(self):
         points = (8300, 8500, 8700)
-        steps = (100, 50, 100)
+        steps = (100, 50, )
         expected = np.array((8300, 8400, 8500, 8550, 8600, 8650, 8700))
         output = energy_range_from_points(energy_points=points,
                                           energy_steps=steps)

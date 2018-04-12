@@ -152,7 +152,6 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     log.debug("Starting run_energy_scan()")
     start_time = time.time()
     total_projections = n_pre_dark + 2 * len(energies)
-    assert not has_permit
     # Create the TXM object for this scan
     if txm is None:
         txm = new_txm()

@@ -38,7 +38,7 @@ def energy_range_from_points(energy_points, energy_steps):
         
             energy_range(
                 energy_points=(8.3, 8.5, 8.7),
-                energy_steps=*(0.02, 0.01)
+                energy_steps=(0.02, 0.01)
             )
     
     """

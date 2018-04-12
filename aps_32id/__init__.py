@@ -50,7 +50,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from .txm import NanoTXM, MicroTXM
+from .txm import NanoTXM, MicroCT, new_txm
 from .run.energy_scan import run_energy_scan
 from .run.move_energy import move_energy
 from .run.tomo_step_scan import run_tomo_step_scan

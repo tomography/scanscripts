@@ -64,13 +64,15 @@ class TomoStepScanTests(ScriptTestCase):
             warnings.filterwarnings('ignore', message='Could not save angles')
             tomo_step_scan.run_tomo_step_scan(
                 angles=angles, exposure=3,
-                num_recursive_images=1, num_white=(2, 7),
-                num_dark=(13, 21), txm=self.txm, log_level=None)
+                num_white=(2, 7), num_dark=(13, 21),
+                txm=self.txm, log_level=None)
         # Check that the right txm functions were called
-        self.txm.setup_detector.assert_called_once_with(exposure=3)
         expected_projections = 361 + 2 + 7 + 13 + 21
-        self.txm.setup_hdf_writer.assert_called_once_with(num_projections=expected_projections,
-                                                          num_recursive_images=1)
+        self.txm.setup_detector.assert_called_once_with(
+            exposure=3,
+            num_projections=expected_projections)
+        self.txm.setup_hdf_writer.assert_called_once_with(
+            num_projections=expected_projections)
 
 
 class TomoFlyScanTests(unittest.TestCase):
