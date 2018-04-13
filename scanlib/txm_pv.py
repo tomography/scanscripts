@@ -145,7 +145,8 @@ class TxmPV(object):
                 try:
                     result = self.dtype(result)
                 except TypeError:
-                    msg = "Could not cast {} to type {}".format(result, self.dtype)
+                    msg = "Could not cast {} = {} to type {}"
+                    msg = msg.format(pv_name, result, self.dtype)
                     warnings.warn(msg, RuntimeWarning)
                     log.warning(msg)
         return result
