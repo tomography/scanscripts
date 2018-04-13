@@ -896,12 +896,12 @@ class NanoTXM(object):
         # Collect each frame one at a time
         if self.fast_shutter_enabled:
             # Fast shutter triggering
-            self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
+            #self.wait_pv('Cam1_Status', self.DETECTOR_WAITING) # Not needed since we acquire multiple mode
             self.Fast_Shutter_Trigger = self.FAST_SHUTTER_TRIGGERED
             self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
         else:
             # Regular external triggering
-            self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
+            #self.wait_pv('Cam1_Status', self.DETECTOR_WAITING) # Not needed since we acquire multiple mode
             # Wait for the camera to be ready
             self.Cam1_SoftwareTrigger = 1
         # Make sure that the projection is done collecting
