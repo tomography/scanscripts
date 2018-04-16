@@ -411,6 +411,7 @@ class TXMTestCase(unittest.TestCase):
         txm = UnpluggedTXM(has_permit=True)
         txm.exposure_time = 0.3
         txm.Fly_Calc_Projections = 360
+        txm.Cam1_NumImages = 370
         # Execute tomogram scan
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message="Could not retrieve actual angles")
