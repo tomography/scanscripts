@@ -25,9 +25,9 @@ import numpy as np
 import h5py
 import tqdm
 import pytz
-from epics import PV as EpicsPV, get_pv
+from epics import PV as EpicsPV, get_pv, poll as epics_poll
 
-from scanlib import TxmPV, permit_required, exceptions_
+from scanlib import TxmPV, permit_required, exceptions_, PVMonitor
 
 __author__ = 'Mark Wolf'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
@@ -111,9 +111,13 @@ class NanoTXM(object):
     FAST_SHUTTER_RELAY_DIRECT = 0
     FAST_SHUTTER_RELAY_SYNCED = 1
     FAST_SHUTTER_TRIGGER_ENCODER = 1 # TXM Ensemble PSO
+    UNIBLITZ_CLOSED = 0
+    UNIBLITZ_OPEN = 1
     RECURSIVE_FILTER_TYPE = "RecursiveAve"
     CAPTURE_ENABLED = 1
     CAPTURE_DISABLED = 0
+    CALLBACK_DISABLED = 'Disable'
+    CALLBACK_ENABLED = 'Enable'
     FRAME_DATA = 0
     FRAME_DARK = 1
     FRAME_WHITE = 2
@@ -167,8 +171,10 @@ class NanoTXM(object):
     HDF1_BlockingCallbacks = TxmPV('{ioc_prefix}HDF1:BlockingCallbacks')
     HDF1_FileWriteMode = TxmPV('{ioc_prefix}HDF1:FileWriteMode')
     HDF1_NumCapture = TxmPV('{ioc_prefix}HDF1:NumCapture')
+    HDF1_NumCapture_RBV = TxmPV('{ioc_prefix}HDF1:NumCapture_RBV')
     HDF1_Capture = TxmPV('{ioc_prefix}HDF1:Capture', wait=False)
     HDF1_Capture_RBV = TxmPV('{ioc_prefix}HDF1:Capture_RBV')
+    HDF1_WriteFile_RBV = TxmPV('{ioc_prefix}HDF1:WriteFile_RBV')
     HDF1_FileName = TxmPV('{ioc_prefix}HDF1:FileName', dtype=str,
                           as_string=True)
     HDF1_FullFileName_RBV = TxmPV('{ioc_prefix}HDF1:FullFileName_RBV',
@@ -197,7 +203,7 @@ class NanoTXM(object):
     # Professional Instrument air bearing rotary stage
     Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL', dtype=float)
     Motor_SampleRot_Speed = TxmPV('32idcTXM:ens:c1:m1.VELO', dtype=float)
-    Motor_SampleRot_Stop = TxmPV('32idcTXM:ens:c1:m1.STOP')
+    Motor_SampleRot_Stop = TxmPV('32idcTXM:ens:c1:m1.STOP', wait=False)
     # Smaract XZ TXM set
     Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL', dtype=float)
     Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c3:m8.VAL', dtype=float)
@@ -236,6 +242,7 @@ class NanoTXM(object):
     Fast_Shutter_Control = TxmPV('32idcTXM:shutCam:ShutterCtrl')
     Fast_Shutter_Relay = TxmPV('32idcTXM:shutCam:Enable')
     Fast_Shutter_Trigger_Source = TxmPV('32idcTXM:flyTriggerSelect')
+    Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control')
     
     # Fly scan PV's for nano-ct TXM using Profession Instrument air-bearing stage
     Fly_ScanDelta = TxmPV('32idcTXM:PSOFly3:scanDelta')
@@ -297,7 +304,7 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=True, use_shutter_A=False,
+    def __init__(self, has_permit=False, use_shutter_A=False,
                  use_shutter_B=True):
         self.has_permit = has_permit
         self.use_shutter_A = use_shutter_A
@@ -412,39 +419,34 @@ class NanoTXM(object):
         val : bool
             True if value was set properly.
         
-        Raises
-        ------
-        exceptions_.TimeoutError
-            If the PV did not reach the target value before the
-            timeout expired.
-        
         """
         log_msg = "called wait_pv({name}, {val}, timeout={timeout})"
         log.debug(log_msg.format(name=pv_name, val=target_val,
                                  timeout=timeout))
         # Delay for pv to change
-        time.sleep(self.POLL_INTERVAL)
+        # time.sleep(self.POLL_INTERVAL)
         startTime = time.time()
         # Enter into infinite loop polling the PV status
         real_PV = getattr(type(self), pv_name)
-        while(True):
-            pv_val = real_PV.__get__(self)
-            if (pv_val != target_val):
-                if timeout > -1:
-                    # Check for timeouts and break out of the loop
-                    curTime = time.time()
-                    diffTime = curTime - startTime
-                    if diffTime >= timeout:
-                        msg = ("Timed out '{}' ({}) after {}s"
-                               "".format(pv_name, target_val, timeout))
-                        warnings.warn(msg, RuntimeWarning)
-                        log.warn(msg)
-                        break
-                time.sleep(0.01)
-            else:
-                log.debug("Ended wait_pv() after {:.2f} sec."
-                          "".format(time.time() - startTime))
-                return True
+        pv_name = real_PV.pv_name(self)
+        with PVMonitor(pv_name) as mon:
+            while(True):
+                if (mon.latest_value != target_val):
+                    if timeout > -1:
+                        # Check for timeouts and break out of the loop
+                        curTime = time.time()
+                        diffTime = curTime - startTime
+                        if diffTime >= timeout:
+                            msg = ("Timed out '{}' ({}) after {}s"
+                                   "".format(pv_name, target_val, timeout))
+                            warnings.warn(msg, RuntimeWarning)
+                            log.warn(msg)
+                            break
+                    epics_poll()
+                else:
+                    log.debug("Ended wait_pv({}) after {:.2f} sec."
+                              "".format(pv_name, time.time() - startTime))
+                    return True
     
     def sample_position(self):
         """Retrieve the x, y, z and theta positions of the sample stage.
@@ -630,6 +632,8 @@ class NanoTXM(object):
         self.fast_shutter_enabled = True
         # Set the camera delay
         self.Fast_Shutter_Delay = delay
+        # Disable the "uniblitz" fast shutter safety
+        self.Fast_Shutter_Uniblitz = self.UNIBLITZ_CLOSED
     
     def disable_fast_shutter(self):
         """Disable the hardware-triggered fast shutter.
@@ -667,11 +671,11 @@ class NanoTXM(object):
         if self.use_shutter_A:
             log.debug("Opening shutter A")
             self.ShutterA_Open = 1
-            self.wait_pv('ShutterA_Move_Status', self.SHUTTER_OPEN)
+            self.wait_pv('ShutterA_Move_Status', self.SHUTTER_OPEN, timeout=5)
         if self.use_shutter_B:
             log.debug("Opening shutter B")
             self.ShutterB_Open = 1
-            self.wait_pv('ShutterB_Move_Status', self.SHUTTER_OPEN)
+            self.wait_pv('ShutterB_Move_Status', self.SHUTTER_OPEN, timeout=5)
         # Set status flags
         if self.use_shutter_A or self.use_shutter_B:
             self.shutters_are_open = True
@@ -782,25 +786,48 @@ class NanoTXM(object):
         log.debug("Setting up detector for %d (%f s) projections.",
                   num_projections, exposure)
         # Capture a dummy frame to that the HDF5 plugin will work
+        self.HDF1_EnableCallbacks = self.CALLBACK_DISABLED
         self.Cam1_ImageMode = self.IMAGE_MODE_SINGLE
         self.Cam1_TriggerMode = self.TRIGGER_INTERNAL
         self.exposure_time = 0.01
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Acquire', self.DETECTOR_IDLE)
+        self.HDF1_EnableCallbacks = self.CALLBACK_ENABLED
         # Now set the real settings for the detector
         self.Cam1_ImageMode = self.IMAGE_MODE_MULTIPLE
-        self.Cam1_NumImages = num_projections
         self.Cam1_Display = True
         self.Cam1_ArrayCallbacks = 'Enable'
         self.Cam1_FrameRateOnOff = False
         self.Cam1_TriggerSource = self.GPIO_0
         self.Cam1_TriggerMode = self.TRIGGER_EXTERNAL
-        self.exposure_time = exposure
+        # Now enable the detector for acquisition
+        self.start_detector(num_projections=num_projections, exposure=exposure)
+        # log.debug("Finished setting up detector.")
+
+    def start_detector(self, num_projections=1, exposure=None):
+        """Starts the detector for however many projections are requested.
+
+        This does not change the imaging mode or the trigger setup,
+        use :py:meth:`setup_detector` for this.
+
+        Parameters
+        ----------
+        num_projections : int, optional
+          How many projections to expect for this round of capture.
+        exposure : float, optional
+          How long to capture each projection for. If ``None``
+          (default), the current exposure time will be used.
+        
+        """
+        self.Cam1_NumImages = num_projections
+        # Set exposure
+        if exposure is not None:
+            self.exposure_time = exposure
         # Make sure the detector is ready for triggering
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
-        self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
-        # log.debug("Finished setting up detector.")
-    
+        self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)        
+
+
     def setup_hdf_writer(self, num_projections=1, write_mode="Stream",
                          num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
@@ -900,7 +927,7 @@ class NanoTXM(object):
             # Fast shutter triggering
             #self.wait_pv('Cam1_Status', self.DETECTOR_WAITING) # Not needed since we acquire multiple mode
             self.Fast_Shutter_Trigger = self.FAST_SHUTTER_TRIGGERED
-            self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
+            # self.wait_pv('Fast_Shutter_Trigger', self.FAST_SHUTTER_DONE)
         else:
             # Regular external triggering
             #self.wait_pv('Cam1_Status', self.DETECTOR_WAITING) # Not needed since we acquire multiple mode
@@ -1021,9 +1048,9 @@ class NanoTXM(object):
         self.Fly_EndPos = end_angle
         self.Fly_SlewSpeed = slew_speed
         # Pause to let the values update
-        time.sleep(0.25)
+        time.sleep(3)
         # Update the value for the number of projections from instrument
-        extra_projections = self.Cam1_NumImages - num_projections
+        extra_projections = self.HDF1_NumCapture_RBV - num_projections
         log.debug('Acquiring %d extra projections (flat/dark)', extra_projections)
         calc_num_proj = math.ceil(self.Fly_Calc_Projections)
         if calc_num_proj is not None:
@@ -1034,7 +1061,7 @@ class NanoTXM(object):
         # Prepare the instrument for scanning
         self.Reset_Theta = 1
         self.Cam1_TriggerMode = 'Overlapped'
-        self.Cam1_NumImages = num_projections + extra_projections
+        self.Cam1_NumImages = num_projections
         self.HDF1_NumCapture = num_projections + extra_projections
         self.Cam1_ImageMode = self.IMAGE_MODE_MULTIPLE
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
@@ -1137,7 +1164,7 @@ class NanoTXM(object):
             warnings.warn('HDF writer not yet running, logging sent to stderr.'
                           ' Consider calling Txm().``setup_hdf_writer``'
                           ' outside run_scan block')
-        handler.setLevel(level)
+        handler.setLevel(int(level))
         formatter = logging.Formatter(
             '%(levelname)s:%(name)s:%(message)s (%(asctime)s)')
         handler.setFormatter(formatter)
@@ -1173,6 +1200,7 @@ class NanoTXM(object):
         init_E = self.energy()
         init_exposure = self.exposure_time
         fast_shutter_was_enabled = self.fast_shutter_enabled
+        uniblitz_status = self.Fast_Shutter_Uniblitz
         # Return to the inner code block
         try:
             yield
@@ -1186,6 +1214,7 @@ class NanoTXM(object):
             log.debug("Restoring previous state")
             self.stop_fly_scan()
             # Disable/re-enable the fast shutter
+            self.Fast_Shutter_Uniblitz = uniblitz_status
             if fast_shutter_was_enabled:
                 self.enable_fast_shutter()
             else:
@@ -1194,7 +1223,7 @@ class NanoTXM(object):
             self.TIFF1_AutoSave = 'No'
             self.TIFF1_Capture = 0
             self.HDF1_Capture = 0
-            self.wait_pv('HDF1_Capture', 0)
+            self.wait_pv('HDF1_WriteFile_RBV', self.HDF_IDLE)
             # Restore the saved initial motor positions
             self.move_sample(*init_position)
             # Restore the initial energy if necessary

@@ -21,7 +21,7 @@ import random
 import string
 
 from aps_32id.txm import new_txm
-from scanlib.tools import expand_position
+from scanlib.tools import expand_position, loggingConfig
 from scanlib.scan_variables import update_variable_dict
 
 __author__ = 'Mark Wolfman'
@@ -120,9 +120,9 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
     num_pre_dark_images, num_post_dark_images = num_dark
     sample_pos = expand_position(sample_pos)
     out_pos = expand_position(out_pos)
-    total_projections = (projections + num_pre_dark_images +
-                         num_post_dark_images + num_pre_white_images +
-                         num_post_white_images)
+    num_pre_images = num_pre_dark_images + num_pre_white_images
+    num_post_images = num_pre_dark_images + num_pre_white_images
+    total_projections = (projections + num_pre_images + num_post_images)
     # Create the TXM object for this scan
     if txm is None:
         txm = new_txm()
@@ -138,6 +138,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
             txm.close_shutters()
             log.info("Capturing %d pre-dark-fields",
                      num_pre_dark_images)
+            txm.start_detector(num_projections=num_pre_dark_images)
             txm.capture_dark_field(num_projections=num_pre_dark_images)
         # Collect pre-scan white-field images
         if num_pre_white_images > 0:
@@ -148,12 +149,14 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
             with txm.wait_pvs():
                 txm.move_sample(*out_pos)
                 txm.open_shutters()
+            txm.start_detector(num_projections=num_pre_white_images)
             txm.capture_white_field(num_projections=num_pre_white_images)
         # Collect the actual tomogram flyscan
         txm.move_sample(theta=sample_pos[3])
         with txm.wait_pvs():
             txm.move_sample(*sample_pos)
             txm.open_shutters()
+        txm.start_detector(num_projections=projections)
         angles = txm.capture_tomogram_flyscan(start_angle=rotation_start,
                                               end_angle=rotation_end,
                                               num_projections=projections)
@@ -163,12 +166,14 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                      num_post_white_images, str(out_pos))
             with txm.wait_pvs():
                 txm.move_sample(*out_pos)
+            txm.start_detector(num_projections=num_post_white_images)
             txm.capture_white_field(num_projections=num_post_white_images)
         # Capture post-scan dark-field images
         txm.close_shutters()
         if num_post_dark_images > 0:
             log.info("Capturing %d post-dark-fields",
                      num_post_dark_images)
+            txm.start_detector(num_projections=num_post_dark_images)
             txm.capture_dark_field(num_projections=num_post_dark_images)
         # wait_pv(global_PVs["HDF1_Capture_RBV"], 0, 600)
         hdf_filename = txm.hdf_filename
@@ -182,6 +187,9 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
 def main():
     # The script was launched (not imported) so use the variable dictionary
     update_variable_dict(variableDict)
+    # Basic global logging config, per file logging is setup later
+    log_level = variableDict['Log_Level']
+    loggingConfig(level=log_level)
     # Extract variables from the global dictionary
     sleep_time = float(variableDict['StartSleep_min']) * 60.0
     # Prepare variables

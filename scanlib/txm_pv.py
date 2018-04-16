@@ -64,6 +64,50 @@ def permit_required(real_func, return_value=None):
     return wrapped_func
 
 
+class PVMonitor():
+    """A context manager that updates with the latest PV value.
+    
+    This uses epics callbacks behind the scenes, so avoids the extra
+    overhead of constantly running epics.caget(). The value of
+    ``latest_value`` is updated whenever the value changes.
+
+    A common pattern might be to use this within a while loop
+    alongside epics.poll() to test when a value has reached a desired
+    target.
+
+    .. code:: python
+
+        with PVMonitor(pv_name='my:awesome:motor') as mon:
+            while True:
+                if mon.latest_value = target_value:
+                    break
+                else:
+                    epics.poll()
+
+    """
+    latest_value = None
+    def __init__(self, pv_name):
+        self.pv_name = pv_name
+        self.pv = EpicsPV(self.pv_name)
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, typ, value, traceback):
+        self.stop()
+
+    def start(self):
+        # self.update_value(pvname=self.pv_name, value=self.pv.get())
+        self.callback_idx = self.pv.add_callback(self.update_value)
+
+    def stop(self):
+        self.pv.remove_callback(self.callback_idx)
+
+    def update_value(self, pvname, value, **kwargs):
+        self.latest_value = value
+
+
 class TxmPV(object):
     """A descriptor representing a process variable in the EPICS system.
     

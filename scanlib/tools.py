@@ -7,13 +7,25 @@ TxmPV
 
 """
 
+import logging
+import datetime as dt
+import os
+
+import epics
 import numpy as np
 
-__author__ = 'Mark Wolf'
+__author__ = 'Mark Wolfman'
 __copyright__ = 'Copyright (c) 2017, UChicago Argonne, LLC.'
 __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
+
+
+def loggingConfig(level=logging.INFO):
+    """Prepare a basic logging file setup with the date of the experiment."""
+    path = epics.caget('32idcPG3:HDF1:FilePath', as_string=True)
+    filename = "{}.log".format(dt.date.today().isoformat())
+    logging.basicConfig(level=int(level), filename=os.path.join(path, filename))
 
 
 def expand_position(position, length=4):

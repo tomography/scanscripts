@@ -11,7 +11,7 @@ import math
 log = logging.getLogger(__name__)
 
 from scanlib import update_variable_dict
-from aps_32id.txm import NanoTXM
+from aps_32id.txm import NanoTXM, new_txm
 
 __all__ = ['move_energy', 'getVariableDict']
 
@@ -24,7 +24,6 @@ def getVariableDict():
     return variableDict
 
 
-#def move_energy(energy, constant_mag=True, has_permit=False, txm=None):
 def move_energy(energy, constant_mag=True, txm=None):
     """Change the X-ray microscope to a new energy.
     
@@ -35,18 +34,14 @@ def move_energy(energy, constant_mag=True, txm=None):
     constant_mag : bool, optional
       If truthy, the camera will move to maintain a constant
       magnification.
-    is_attached, has_permit : bool, optional
-      Determine if the TXM is attached and is allowed to open
-      shutters.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
     
     """
-#    assert not has_permit
     # Prepare TXM object
     if txm is None:
-        txm = NanoTXM()
+        txm = new_txm()
     # Attach to the TXM and change energy
     with txm.wait_pvs():
         txm.move_energy(energy, constant_mag=constant_mag)

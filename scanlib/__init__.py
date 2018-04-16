@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from .txm_pv import TxmPV, permit_required
+from .txm_pv import TxmPV, permit_required, PVMonitor
 
 from .scan_variables import update_variable_dict
 

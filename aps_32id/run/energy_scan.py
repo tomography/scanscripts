@@ -15,7 +15,7 @@ import numpy as np
 import h5py
 import tqdm
 from scanlib.scan_variables import update_variable_dict
-from scanlib.tools import energy_range_from_points
+from scanlib.tools import energy_range_from_points, loggingConfig
 from aps_32id.txm import new_txm
 
 __author__ = 'Mark Wolfman'
@@ -39,7 +39,7 @@ variableDict = {
     'StabilizeSleep_ms': 1000,
     'ExposureTime': 3,
     'Energy_limits': '7.1, 7.2, 7.35',
-    'Energy_Step': '0.002, 0.0003',
+    'Energy_Step': '0.002, 0.003',
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
@@ -200,12 +200,13 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
 
 
 def main():
-    # Set up default stream logging
-    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    # logging.basicConfig(level=logging.WARNING)
     # Enter the main script function
     update_variable_dict(variableDict)
-    
+    # Set up default logging
+    # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
+    # logging.basicConfig(level=logging.WARNING)
+    log_level = variableDict['Log_Level']
+    loggingConfig(level=log_level)
     # Get the requested sample positions
     sample_pos = (variableDict.get('SampleXIn', None),
                   variableDict.get('SampleYIn', None),
@@ -215,14 +216,11 @@ def main():
                variableDict.get('SampleYOut', None),
                variableDict.get('SampleZOut', None),
                variableDict.get('SampleRotOut', None))
-
     # Prepare the list of energies requested
     energy_limits = [float(x) for x in variableDict['Energy_limits'].split(',') ]
     energy_steps = [float(x) for x in variableDict['Energy_Step'].split(',') ]
     energies = energy_range_from_points(energy_points=energy_limits,
                                         energy_steps=energy_steps)
-
-
     # Start scan sleep in min so min * 60 = sec
     sleep_min = float(variableDict.get('StartSleep_min', 0))
     stabilize_sleep_ms = float(variableDict.get("StabilizeSleep_ms"))
@@ -242,7 +240,7 @@ def main():
         stabilize_sleep_ms=stabilize_sleep_ms,
         constant_mag=constant_mag,
         repetitions=repetitions,
-        log_level=int(variableDict['Log_Level']),
+        log_level=log_level,
         use_fast_shutter=use_fast_shutter,
     )
 
