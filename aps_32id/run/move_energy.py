@@ -16,7 +16,7 @@ from aps_32id.txm import NanoTXM
 __all__ = ['move_energy', 'getVariableDict']
 
 variableDict = {
-    'new_energy': 9.01, # keV
+    'new_energy': 9.769, # keV
     'constant_mag': True, # 1 means magnification will be maintained adjusting CCD location
 }
 
@@ -24,7 +24,8 @@ def getVariableDict():
     return variableDict
 
 
-def move_energy(energy, constant_mag=True, has_permit=False, txm=None):
+#def move_energy(energy, constant_mag=True, has_permit=False, txm=None):
+def move_energy(energy, constant_mag=True, txm=None):
     """Change the X-ray microscope to a new energy.
     
     Parameters
@@ -42,10 +43,10 @@ def move_energy(energy, constant_mag=True, has_permit=False, txm=None):
       be created. Mostly used for testing.
     
     """
-    assert not has_permit
+#    assert not has_permit
     # Prepare TXM object
     if txm is None:
-        txm = NanoTXM(has_permit=has_permit)
+        txm = NanoTXM()
     # Attach to the TXM and change energy
     with txm.wait_pvs():
         txm.move_energy(energy, constant_mag=constant_mag)

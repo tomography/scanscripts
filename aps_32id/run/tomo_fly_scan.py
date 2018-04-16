@@ -44,10 +44,10 @@ global variableDict
 variableDict = {
     'PreDarkImages': 5,
     'PreWhiteImages': 10,
-    'Projections': 3000,
+    'Projections': 1201,
     'PostDarkImages': 5,
     'PostWhiteImages': 10,
-    'SampleXOut': 8,
+    'SampleXOut': 0.2,
     'SampleYOut': 0.0,
     'SampleZOut': 0.0,
     'SampleXIn': 0.0,
@@ -57,15 +57,15 @@ variableDict = {
     'SampleEndPos': 180.0,
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 0,
-    'ExposureTime': 0.2,
-    'ExposureTime_Flat': 0.2,
+    'ExposureTime': 1,
+    'ExposureTime_Flat': 1,
     'ShutterOpenDelay': 0.00,
     'IOC_Prefix': '32idcPG3:',
     #'ExternalShutter': 0,
     'FileWriteMode': 'Stream',
     'UseInterferometer': 0,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
-    'Log_Level': logging.INFO,
+    'Log_Level': logging.DEBUG,
 }
 
 
@@ -129,17 +129,20 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
     # Execute the actual scan script
     with txm.run_scan():
         # Prepare camera, etc.
+        txm.setup_detector(exposure=exposure,
+                           num_projections=total_projections)
         txm.setup_hdf_writer(num_projections=total_projections)
         txm.start_logging(level=log_level)
-        txm.setup_detector(exposure=exposure)
         # Capture pre dark field images
         if num_pre_dark_images > 0:
             txm.close_shutters()
-            log.info('Capturing %d Pre Dark Field images', num_pre_dark_images)
+            log.info("Capturing %d pre-dark-fields",
+                     num_pre_dark_images)
             txm.capture_dark_field(num_projections=num_pre_dark_images)
         # Collect pre-scan white-field images
         if num_pre_white_images > 0:
-            logging.info("Capturing %d white-fields at %s", num_pre_white_images, out_pos)
+            log.info("Capturing %d pre-flat-fields at %s",
+                     num_pre_white_images, str(out_pos))
             # Move the sample out and collect whitefields
             txm.move_sample(theta=out_pos[3]) # So we don't have crashes
             with txm.wait_pvs():
@@ -156,12 +159,16 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
                                               num_projections=projections)
         # Capture post-scan white-field images
         if num_post_white_images > 0:
+            log.info("Capturing %d post-flat-fields at %s",
+                     num_post_white_images, str(out_pos))
             with txm.wait_pvs():
                 txm.move_sample(*out_pos)
             txm.capture_white_field(num_projections=num_post_white_images)
         # Capture post-scan dark-field images
         txm.close_shutters()
         if num_post_dark_images > 0:
+            log.info("Capturing %d post-dark-fields",
+                     num_post_dark_images)
             txm.capture_dark_field(num_projections=num_post_dark_images)
         # wait_pv(global_PVs["HDF1_Capture_RBV"], 0, 600)
         hdf_filename = txm.hdf_filename
@@ -183,16 +190,27 @@ def main():
     log.debug("Sleeping for %d seconds", int(sleep_time))
     time.sleep(sleep_time)
     # Start the experiment
-    
+    num_white = (int(variableDict['PreWhiteImages']),
+                 int(variableDict['PostWhiteImages']))
+    num_dark = (int(variableDict['PreDarkImages']),
+                int(variableDict['PostDarkImages']))
+    sample_pos = (variableDict.get('SampleXIn', None),
+                  variableDict.get('SampleYIn', None),
+                  variableDict.get('SampleZIn', None),
+                  float(variableDict['SampleStartPos']))
+    out_pos = (variableDict.get('SampleXOut', None),
+               variableDict.get('SampleYOut', None),
+               variableDict.get('SampleZOut', None),
+               variableDict.get('SampleRotOut', None), )
+    # Execute the scan!!
     run_tomo_fly_scan(projections=variableDict['Projections'],
                       rotation_start=variableDict['SampleStartPos'],
                       rotation_end=variableDict['SampleEndPos'],
                       exposure=variableDict['ExposureTime'],
-                      num_white=(5, 5), num_dark=(5, 0),
-                      sample_pos=(None,), out_pos=(None,),
+                      num_white=num_white, num_dark=num_dark,
+                      sample_pos=sample_pos, out_pos=out_pos,
                       log_level=int(variableDict['Log_Level']),)
 
 
 if __name__ == '__main__':
     main()
-

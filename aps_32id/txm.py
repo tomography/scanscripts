@@ -150,7 +150,7 @@ class NanoTXM(object):
     Cam1_FrameRate_val = TxmPV('{ioc_prefix}cam1:FrameRateValAbs')
     Cam1_TriggerMode = TxmPV('{ioc_prefix}cam1:TriggerMode')
     Cam1_TriggerSource = TxmPV('{ioc_prefix}cam1:TriggerSource')
-    Cam1_SoftwareTrigger = TxmPV('{ioc_prefix}cam1:SoftwareTrigger')
+    Cam1_SoftwareTrigger = TxmPV('{ioc_prefix}cam1:SoftwareTrigger', wait=False)
     Cam1_AcquireTime = TxmPV('{ioc_prefix}cam1:AcquireTime')
     Cam1_FrameRateOnOff = TxmPV('{ioc_prefix}cam1:FrameRateOnOff')
     Cam1_FrameType = TxmPV('{ioc_prefix}cam1:FrameType')
@@ -196,6 +196,8 @@ class NanoTXM(object):
     Motor_SampleY = TxmPV('32idcTXM:mxv:c1:m1.VAL', dtype=float)
     # Professional Instrument air bearing rotary stage
     Motor_SampleRot = TxmPV('32idcTXM:ens:c1:m1.VAL', dtype=float)
+    Motor_SampleRot_Speed = TxmPV('32idcTXM:ens:c1:m1.VELO', dtype=float)
+    Motor_SampleRot_Stop = TxmPV('32idcTXM:ens:c1:m1.STOP')
     # Smaract XZ TXM set
     Motor_Sample_Top_X = TxmPV('32idcTXM:mcs:c3:m7.VAL', dtype=float)
     Motor_Sample_Top_Z = TxmPV('32idcTXM:mcs:c3:m8.VAL', dtype=float)
@@ -295,7 +297,7 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False, use_shutter_A=False,
+    def __init__(self, has_permit=True, use_shutter_A=False,
                  use_shutter_B=True):
         self.has_permit = has_permit
         self.use_shutter_A = use_shutter_A
@@ -424,8 +426,8 @@ class NanoTXM(object):
         time.sleep(self.POLL_INTERVAL)
         startTime = time.time()
         # Enter into infinite loop polling the PV status
+        real_PV = getattr(type(self), pv_name)
         while(True):
-            real_PV = getattr(type(self), pv_name)
             pv_val = real_PV.__get__(self)
             if (pv_val != target_val):
                 if timeout > -1:
@@ -473,7 +475,7 @@ class NanoTXM(object):
         """
         log.debug('Moving sample to (%s, %s, %s)', x, y, z)
         if theta is not None:
-            self.Motor_SampleRot = theta
+            self.Motor_SampleRot = float(theta)
         if x is not None:
             self.Motor_Sample_Top_X = float(x)
         if y is not None:
@@ -924,6 +926,7 @@ class NanoTXM(object):
         # Set frame collection data
         self.Cam1_FrameType = self.FRAME_DATA
         # Collect the data
+        log.debug('Capturing %d projection images', num_projections)
         for i in range(num_projections):
             self._trigger_projection()
     
@@ -948,6 +951,7 @@ class NanoTXM(object):
             log.warning(msg)
         self.Cam1_FrameType = self.FRAME_WHITE
         # Collect the data
+        log.debug('Capturing %d flat-field images', num_projections)
         for i in range(num_projections):
             self._trigger_projection()
     
@@ -970,11 +974,27 @@ class NanoTXM(object):
             log.warning(msg)
         self.Cam1_FrameType = self.FRAME_DARK
         # Collect the data
+        log.debug('Capturing %d flat-field images', num_projections)
         for i in range(num_projections):
             self._trigger_projection()
+
+
+    def stop_fly_scan(self):
+        """Abort and actively running fly scan.
+
+        Even if the script is stopped, the motors continue
+        turning. This method stops the rotation and restores the
+        original speed.
+
+        """
+        log.debug("Stopping fly scan motors.")
+        self.Motor_SampleRot_Stop = 1
+        self.Motor_SampleRot_Speed = 40
+
     
     def capture_tomogram_flyscan(self, start_angle, end_angle,
-                                 num_projections, ccd_readout=0.270):
+                                 num_projections, ccd_readout=0.270,
+                                 extra_projections=0):
         """Capture projections over a range of angles using fly-scan mode.
         
         Parameters
@@ -988,7 +1008,7 @@ class NanoTXM(object):
         ccd_readout : float, optional
           Time in seconds that it takes for the CCD to read out the
           data.
-        
+       
         """
         # Calculate angle parameters
         delta = (end_angle - start_angle) / (num_projections)
@@ -1003,14 +1023,19 @@ class NanoTXM(object):
         # Pause to let the values update
         time.sleep(0.25)
         # Update the value for the number of projections from instrument
+        extra_projections = self.Cam1_NumImages - num_projections
+        log.debug('Acquiring %d extra projections (flat/dark)', extra_projections)
         calc_num_proj = math.ceil(self.Fly_Calc_Projections)
         if calc_num_proj is not None:
             num_projections = calc_num_proj
+            log.debug('Fly scan resetting num_projections to %d (%d)',
+                      num_projections, extra_projections)
         # Logging
         # Prepare the instrument for scanning
         self.Reset_Theta = 1
         self.Cam1_TriggerMode = 'Overlapped'
-        self.Cam1_NumImages = num_projections
+        self.Cam1_NumImages = num_projections + extra_projections
+        self.HDF1_NumCapture = num_projections + extra_projections
         self.Cam1_ImageMode = self.IMAGE_MODE_MULTIPLE
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)
@@ -1159,6 +1184,7 @@ class NanoTXM(object):
             log.info("Scan finished.")
         finally:
             log.debug("Restoring previous state")
+            self.stop_fly_scan()
             # Disable/re-enable the fast shutter
             if fast_shutter_was_enabled:
                 self.enable_fast_shutter()
