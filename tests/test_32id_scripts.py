@@ -86,8 +86,9 @@ class TomoFlyScanTests(unittest.TestCase):
     
     def test_start_fly_scan(self):
         self.txm.Fly_Calc_Projections = 300
+        self.txm.Cam1_NumImages = 315
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', message='Could not cast None')
+            warnings.filterwarnings('ignore', message='Could not cast')
             warnings.filterwarnings('ignore', message='Could not retrieve actual angles')
             warnings.filterwarnings('ignore', message='Collecting white field')
             txm = tomo_fly_scan.run_tomo_fly_scan(txm=self.txm, log_level=None)
@@ -114,7 +115,7 @@ class EnergyScanTests(unittest.TestCase):
         expected_projections = n_pre_dark + 2 * len(energies)
         self.txm.Cam1_Acquire = self.txm.DETECTOR_IDLE
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', message='Could not cast None')
+            warnings.filterwarnings('ignore', message='Could not cast')
             warnings.filterwarnings('ignore', message='Could not save energies')
             warnings.filterwarnings('ignore', message='Collecting white field with')
             txm = energy_scan.run_energy_scan(energies=energies,
