@@ -40,6 +40,7 @@ variableDict = {
     'ExposureTime': 3,
     'Energy_limits': '7.1, 7.2, 7.35',
     'Energy_Step': '0.002, 0.003',
+    'ZP_X_drift': 0.,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
@@ -59,11 +60,31 @@ def getVariableDict():
 
 
 def _capture_energy_frames(txm, energies, constant_mag,
-                           stabilize_sleep_ms, sample_pos, out_pos):
+                           stabilize_sleep_ms, sample_pos, out_pos, ZP_X_drift_array):
     """A helper method for collected a set of energy frames.
     
     The TXM should already be set up before calling this function.
-    
+
+    Parameters
+    ----------
+    txm :
+      A NanoTXM or MicroCT object that this script will control.
+    energies : np.ndarray
+      An array with the energies (in keV) for capturing frames.
+    constant_mag : bool
+      Whether to move the detector at each energy to keep the
+      magnification constant.
+    stabilize_sleep_ms : int
+      How long to wait after moving energy to allow the beamline
+      (monochromator, etc.) to stabilize.
+    sample_pos : 4-tuple
+      (x, y, z, θ°) with the position for the sample.
+    out_pos : 4-tuple
+      (x, y, z, θ°) with the position for the flat field.
+    ZP_X_drift_array : np.ndarray
+      Each entry is the change in x position of the zoneplate needed
+      to keep the sample centered at that energy.
+
     """
     correct_backlash = True # First energy only
     for idx, energy in enumerate(tqdm.tqdm(energies, "Energy scan")):
@@ -71,7 +92,8 @@ def _capture_energy_frames(txm, energies, constant_mag,
         # Check whether we should collect the sample or white field first 
         sample_first = not bool(idx % 2)
         log.info("Collecting %s first.", "sample" if sample_first else "white-field")
-        # Move sample and energy
+        # Move sample, zone plate and energy
+        txm.zone_plate_2_x = ZP_X_drift_array[idx]
         if sample_first:
             txm.move_sample(*sample_pos)
         else:
@@ -103,6 +125,7 @@ def _capture_energy_frames(txm, energies, constant_mag,
 
 def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                     has_permit=True, sample_pos=(0.,), out_pos=(0.2,),
+                    ZP_X_drift_array=None,
                     constant_mag=True, stabilize_sleep_ms=1000,
                     repetitions=1,
                     use_fast_shutter=True,
@@ -131,6 +154,9 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
       (x, y, z, θ) tuple for positioning the sample in the beam.
     out_pos : 4-tuple, optional
       (x, y, z, θ) tuple for removing the sample from the beam.
+    ZP_X_drift_array : np.ndarray, optional
+      Each entry is the change in x position of the zoneplate needed
+      to keep the sample centered at that energy.
     constant_mag : bool, optional
       Whether to adjust the camera position to maintain a constant
       focus.
@@ -152,6 +178,13 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     log.debug("Starting run_energy_scan()")
     start_time = time.time()
     total_projections = n_pre_dark + 2 * len(energies)
+    # Fix up default parameters
+    if ZP_X_drift_array is None:
+        ZP_X_drift_array = np.zeros_like(energies)
+    elif ZP_X_drift_array.shape != energies.shape:
+        raise ValueError("ZP_X_drift_array shape does not match energies: "
+                         "{} vs {}".format(ZP_X_drift_array.shape, energies.shape))
+    log.debug('ZP x-drift corrections: {}'.format(ZP_X_drift_array))
     # Create the TXM object for this scan
     if txm is None:
         txm = new_txm()
@@ -178,7 +211,8 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
             _capture_energy_frames(txm=txm, energies=energies,
                                    constant_mag=constant_mag,
                                    stabilize_sleep_ms=stabilize_sleep_ms,
-                                   sample_pos=sample_pos, out_pos=out_pos)
+                                   sample_pos=sample_pos, out_pos=out_pos,
+                                   ZP_X_drift_array=ZP_X_drift_array)
             txm.close_shutters()
             # Add the energy array to the active HDF file
             hdf_filename = txm.hdf_filename
@@ -215,12 +249,14 @@ def main():
     out_pos = (variableDict.get('SampleXOut', None),
                variableDict.get('SampleYOut', None),
                variableDict.get('SampleZOut', None),
-               variableDict.get('SampleRotOut', None))
+               variableDict.get('SampleRotOut', None))    
     # Prepare the list of energies requested
     energy_limits = [float(x) for x in variableDict['Energy_limits'].split(',') ]
     energy_steps = [float(x) for x in variableDict['Energy_Step'].split(',') ]
     energies = energy_range_from_points(energy_points=energy_limits,
                                         energy_steps=energy_steps)
+    ZP_X_drift = float(variableDict['ZP_X_drift'])
+    ZP_X_drift_array = (energies-energies[0]) * ZP_X_drift / (energies[-1]-energies[0])
     # Start scan sleep in min so min * 60 = sec
     sleep_min = float(variableDict.get('StartSleep_min', 0))
     stabilize_sleep_ms = float(variableDict.get("StabilizeSleep_ms"))
@@ -238,6 +274,7 @@ def main():
         sample_pos=sample_pos,
         out_pos=out_pos,
         stabilize_sleep_ms=stabilize_sleep_ms,
+        ZP_X_drift_array=ZP_X_drift_array,
         constant_mag=constant_mag,
         repetitions=repetitions,
         log_level=log_level,
