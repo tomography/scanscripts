@@ -240,8 +240,9 @@ class TXMTestCase(unittest.TestCase):
             self.assertEqual(len(w), 1)
             self.assertFalse(txm.shutters_are_open)
         # Now check with only shutter A
-        txm = UnpluggedTXM(has_permit=True, use_shutter_A=True,
-                           use_shutter_B=False)
+        txm = UnpluggedTXM(has_permit=True)
+        txm.use_shutter_A = True
+        txm.use_shutter_B = False
         txm.ShutterA_Move_Status = 0
         txm.ShutterA_Open = None
         txm.ShutterB_Move_Status = 0
@@ -274,8 +275,9 @@ class TXMTestCase(unittest.TestCase):
             self.assertEqual(txm.ShutterA_Close, None)
             self.assertEqual(txm.ShutterB_Close, None)
         # Now check with only shutter A
-        txm = UnpluggedTXM(has_permit=True, use_shutter_A=True,
-                           use_shutter_B=False)
+        txm = UnpluggedTXM(has_permit=True)
+        txm.use_shutter_A = True
+        txm.use_shutter_B = False
         txm.ShutterA_Close = None
         txm.ShutterB_Close = None
         txm.close_shutters()
@@ -411,6 +413,7 @@ class TXMTestCase(unittest.TestCase):
         txm = UnpluggedTXM(has_permit=True)
         txm.exposure_time = 0.3
         txm.Fly_Calc_Projections = 360
+        txm.HDF1_NumCapture_RBV = 390
         txm.Cam1_NumImages = 370
         # Execute tomogram scan
         with warnings.catch_warnings():

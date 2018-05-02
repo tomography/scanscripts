@@ -20,6 +20,7 @@ import logging
 import warnings
 from contextlib import contextmanager
 from collections import namedtuple
+import configparser
 
 import numpy as np
 import h5py
@@ -38,8 +39,19 @@ __all__ = ['NanoTXM',
            'MicroTXM']
 
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 
 log = logging.getLogger(__name__)
+
+
+def txm_config(filename=os.path.join(ROOT_DIR, 'sector32_txm.conf')):
+    """Prepare a config parser and load from config file."""
+    # Define the configuration parameters
+    config = configparser.ConfigParser()
+    config['32-ID-C'] = {'has_permit': False}
+    # Load from the gloabl config file
+    config.read(filename)
+    return config
 
 
 class PVPromise():
@@ -62,8 +74,16 @@ def new_txm(*args, **kwargs):
       Arguments that get passed to the constructor of the TXM.
     
     """
-    txm = NanoTXM(*args, **kwargs)
-    # txm = MicroCT(*args, **kwargs)
+    # Check which setup to use
+    conf = txm_config()
+    if conf['setup'] == 'NanoTXM':
+        txm = NanoTXM(*args, **kwargs)
+    elif conf['setup'] == 'MicroCT':
+        txm = MicroCT(*args, **kwargs)
+    else:
+        msg = "Unknown value for '32-ID-C.setup': %s"
+        msg += "Options are ('NanoTXM', 'MicroCT')"
+        raise exceptions_.ConfigurationError(msg % conf['setup'])
     return txm
 
 
@@ -93,6 +113,8 @@ class NanoTXM(object):
     hdf_writer_ready = False
     tiff_writer_ready = False
     pg_external_trigger = True
+    use_shutter_A = False
+    use_shutter_B = True
     shutters_are_open = False
     fast_shutter_enabled = False
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
@@ -304,12 +326,14 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False, use_shutter_A=False,
-                 use_shutter_B=True):
-        self.has_permit = has_permit
-        self.use_shutter_A = use_shutter_A
-        self.use_shutter_B = use_shutter_B
-    
+    def __init__(self, has_permit=None):
+        if has_permit is None:
+            # Load default permit value from config file
+            config = txm_config()['32-ID-C']
+            self.has_permit = config['has_permit']
+        else:
+            self.has_permit = has_permit
+            
     def pv_get(self, pv_name, *args, **kwargs):
         """Retrieve the current process variable value.
         
@@ -769,7 +793,7 @@ class NanoTXM(object):
         self.wait_pv('HDF1_Capture', 0)
         self.reset_ccd()
         self.reset_ccd()
-        
+    
     def setup_detector(self, num_projections, exposure=0.5):
         """Prepare the Poing-Grey detector to start collecting projections.
         
@@ -803,13 +827,13 @@ class NanoTXM(object):
         # Now enable the detector for acquisition
         self.start_detector(num_projections=num_projections, exposure=exposure)
         # log.debug("Finished setting up detector.")
-
+    
     def start_detector(self, num_projections=1, exposure=None):
         """Starts the detector for however many projections are requested.
-
+        
         This does not change the imaging mode or the trigger setup,
         use :py:meth:`setup_detector` for this.
-
+        
         Parameters
         ----------
         num_projections : int, optional
@@ -826,8 +850,7 @@ class NanoTXM(object):
         # Make sure the detector is ready for triggering
         self.Cam1_Acquire = self.DETECTOR_ACQUIRE
         self.wait_pv('Cam1_Status', self.DETECTOR_WAITING)        
-
-
+    
     def setup_hdf_writer(self, num_projections=1, write_mode="Stream",
                          num_recursive_images=1):
         """Prepare the HDF file writer to accept data.
@@ -1004,20 +1027,18 @@ class NanoTXM(object):
         log.debug('Capturing %d flat-field images', num_projections)
         for i in range(num_projections):
             self._trigger_projection()
-
-
+    
     def stop_fly_scan(self):
         """Abort and actively running fly scan.
-
+        
         Even if the script is stopped, the motors continue
         turning. This method stops the rotation and restores the
         original speed.
-
+        
         """
         log.debug("Stopping fly scan motors.")
         self.Motor_SampleRot_Stop = 1
         self.Motor_SampleRot_Speed = 40
-
     
     def capture_tomogram_flyscan(self, start_angle, end_angle,
                                  num_projections, ccd_readout=0.270,
@@ -1261,17 +1282,12 @@ class NanoTXM(object):
 
 
 class MicroCT(NanoTXM):
-    
     """TXM operating with the front micro-CT stage."""
-
-    def __init__(self, has_permit=False, use_shutter_A=True,
-                 use_shutter_B=False):
-        self.has_permit = has_permit
-        self.use_shutter_A = use_shutter_A
-        self.use_shutter_B = use_shutter_B
-
+    
     # Common settings for this micro-CT
     FAST_SHUTTER_TRIGGER_ENCODER = 0 # Hydra encoder
+    use_shutter_A = True
+    use_shutter_B = False
     # Flyscan PV's
     Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')
     Fly_StartPos = TxmPV('32idcTXM:eFly:startPos')

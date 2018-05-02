@@ -11,6 +11,7 @@ setup(
     packages=['aps_32id', 'aps_02bm', 'scanlib'],
     version=open(os.path.join(os.path.dirname(__file__), 'VERSION')).read().strip(),
     description = 'Control software for various X-ray imaging beamlines.',
+    install_requires = ("numpy", "pyepics", "h5py", 'tqdm', 'pytz'),
     entry_points = {
         'console_scripts': [
             'energy-scan=aps_32id.run.energy_scan:main',
