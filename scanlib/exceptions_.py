@@ -19,3 +19,6 @@ class PVError(RuntimeError):
 class TimeoutError(RuntimeError):
     """Took too long connecting to a PV."""
     pass
+
+class ConfigurationError(RuntimeError):
+    pass
