@@ -44,11 +44,14 @@ ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 log = logging.getLogger(__name__)
 
 
-def txm_config(filename=os.path.join(ROOT_DIR, 'sector32_txm.conf')):
+def txm_config(filename=os.path.join(ROOT_DIR, 'beamline_config.conf')):
     """Prepare a config parser and load from config file."""
     # Define the configuration parameters
     config = configparser.ConfigParser()
-    config['32-ID-C'] = {'has_permit': False}
+    config['32-ID-C'] = {
+        'has_permit': False,
+        'setup': 'NanoTXM'
+    }
     # Load from the gloabl config file
     config.read(filename)
     return config
@@ -75,15 +78,18 @@ def new_txm(*args, **kwargs):
     
     """
     # Check which setup to use
-    conf = txm_config()
-    if conf['setup'] == 'NanoTXM':
+    conf = txm_config()['32-ID-C']
+    instrument = conf['setup']
+    log.debug("Loading instrument setup: %s", instrument)
+    print(instrument)
+    if instrument == 'NanoTXM':
         txm = NanoTXM(*args, **kwargs)
-    elif conf['setup'] == 'MicroCT':
+    elif instrument == 'MicroCT':
         txm = MicroCT(*args, **kwargs)
     else:
         msg = "Unknown value for '32-ID-C.setup': %s"
         msg += "Options are ('NanoTXM', 'MicroCT')"
-        raise exceptions_.ConfigurationError(msg % conf['setup'])
+        raise exceptions_.ConfigurationError(msg % instrument)
     return txm
 
 
@@ -330,7 +336,7 @@ class NanoTXM(object):
         if has_permit is None:
             # Load default permit value from config file
             config = txm_config()['32-ID-C']
-            self.has_permit = config['has_permit']
+            self.has_permit = config.getboolean('has_permit')
         else:
             self.has_permit = has_permit
             
