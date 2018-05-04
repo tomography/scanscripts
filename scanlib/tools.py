@@ -69,9 +69,8 @@ def energy_range_from_points(energy_points, energy_steps):
     # Convert the list of ranges to a list of energies
     energies = energy_range(*ranges)
     return energies
+
     
-
-
 def energy_range(*ranges):
     """Convert energy ranges to a flat energy list.
     

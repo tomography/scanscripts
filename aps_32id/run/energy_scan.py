@@ -14,7 +14,7 @@ import warnings
 import numpy as np
 import h5py
 import tqdm
-from scanlib.scan_variables import update_variable_dict
+from scanlib.scan_variables import update_variable_dict, parse_list_variable
 from scanlib.tools import energy_range_from_points, loggingConfig
 from aps_32id.txm import new_txm
 
@@ -26,26 +26,26 @@ __all__ = ['run_energy_scan', 'getVariableDict']
 
 
 variableDict = {
-    'PreDarkImages': 5,
-    'SampleXOut': 0.5,
-    # 'SampleYOut': 0.0,
-    # 'SampleZOut': 0.5,
-    # 'SampleRotOut': 90, # In degrees
+    'PreDarkImages': 4,
+    'SampleXOut': 3.0,
+    'SampleYOut': 0.0,
+    'SampleZOut': 0.0,
+    'SampleRotOut': 0.0, # In degrees
     'SampleXIn': 0.0,
-    # 'SampleYIn': 0.0,
-    # 'SampleZIn': 0,
-    #'SampleRotIn': 0, # In degrees
-    'StartSleep_min': 0,
-    'StabilizeSleep_ms': 1000,
+    'SampleYIn': 0.0,
+    'SampleZIn': 0.0,
+    'SampleRotIn': 0.0, # In degrees
+    'StartSleep_min': 0.0,
+    'StabilizeSleep_ms': 3000,
     'ExposureTime': 3,
-    'Energy_limits': '7.1, 7.2, 7.35',
-    'Energy_Step': '0.002, 0.003',
-    'ZP_X_drift': 0.,
+    'Energy_limits': '7.100, 7.110, 7.117, 7.130, 7.150, 7.200',
+    'Energy_Step': '0.003, 0.001, 0.0005, 0.001, 0.003',
+    'ZP_X_drift': 0.01,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Repetitions': 1,
-    'Use_Fast_Shutter': 1,
+    'Use_Fast_Shutter': 0,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
 }
@@ -251,8 +251,8 @@ def main():
                variableDict.get('SampleZOut', None),
                variableDict.get('SampleRotOut', None))    
     # Prepare the list of energies requested
-    energy_limits = [float(x) for x in variableDict['Energy_limits'].split(',') ]
-    energy_steps = [float(x) for x in variableDict['Energy_Step'].split(',') ]
+    energy_limits = parse_list_variable(variableDict['Energy_limits'], dtype=float)
+    energy_steps = parse_list_variable(variableDict['Energy_Step'], dtype=float)
     energies = energy_range_from_points(energy_points=energy_limits,
                                         energy_steps=energy_steps)
     ZP_X_drift = float(variableDict['ZP_X_drift'])

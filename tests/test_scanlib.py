@@ -8,6 +8,7 @@ import unittest
 import numpy as np
 
 from scanlib.tools import energy_range, energy_range_from_points
+from scanlib.scan_variables import parse_list_variable
 
 log = logging.getLogger(__name__)
 
@@ -27,3 +28,20 @@ class ToolsTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             energy_range_from_points(energy_points=points,
                                      energy_steps=steps)
+
+
+class ScanVariableTestCase(unittest.TestCase):
+
+    def test_parse_list_variable(self):
+        # Test with a single value
+        output = parse_list_variable('0.03')
+        self.assertEqual(output, (0.03, ))
+        # Test with multiple values
+        output = parse_list_variable('0.03, 0.05')
+        self.assertEqual(output, (0.03, 0.05))
+        # Test with a non-string value
+        output = parse_list_variable(0.03)
+        self.assertEqual(output, (0.03, ))
+        # Test with a non-string 
+        output = parse_list_variable([0.03, 0.05])
+        self.assertEqual(output, (0.03, 0.05))

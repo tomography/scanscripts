@@ -304,7 +304,7 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=False, use_shutter_A=False,
+    def __init__(self, has_permit=True, use_shutter_A=False,
                  use_shutter_B=True):
         self.has_permit = has_permit
         self.use_shutter_A = use_shutter_A
