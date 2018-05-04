@@ -35,6 +35,27 @@ hypothetical example:
    # Best, even though this method definition would only have one line
    txm.reset_theta()
 
+.. _sector-32-config:
+
+Sector 32-ID Configuration
+--------------------------
+
+The following configuration options can be set in the
+``beamline_config.conf`` file under the ``[32-ID-C]`` heading:
+
+has_permit (yes|no)
+  If ``has_permit`` is "no", then the script will not attempt to
+  change the X-ray source, monochromator, shutters, etc. This allows
+  testing of scripts while the B-hutch is operating without risking
+  interferance.
+stage (NanoTXM|MicroCT)
+  Controls which stage/optics/shutters to use for manipulating the
+  sample. ``MicroCT`` uses the front stage and ``NanoTXM`` uses the
+  rear stage.
+
+.. literalinclude:: examples/beamline_config.conf
+
+
 Stopping Scans Gracefully
 -------------------------
 

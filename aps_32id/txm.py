@@ -50,7 +50,7 @@ def txm_config(filename=os.path.join(ROOT_DIR, 'beamline_config.conf')):
     config = configparser.ConfigParser()
     config['32-ID-C'] = {
         'has_permit': False,
-        'setup': 'NanoTXM'
+        'stage': 'NanoTXM'
     }
     # Load from the gloabl config file
     config.read(filename)
@@ -60,7 +60,7 @@ def txm_config(filename=os.path.join(ROOT_DIR, 'beamline_config.conf')):
 class PVPromise():
     is_complete = False
     result = None
-
+    
     def __init__(self, pv_name=""):
         self.pv_name = pv_name
     
@@ -79,15 +79,14 @@ def new_txm(*args, **kwargs):
     """
     # Check which setup to use
     conf = txm_config()['32-ID-C']
-    instrument = conf['setup']
-    log.debug("Loading instrument setup: %s", instrument)
-    print(instrument)
+    instrument = conf['stage']
+    log.debug("Loading instrument stage: %s", instrument)
     if instrument == 'NanoTXM':
         txm = NanoTXM(*args, **kwargs)
     elif instrument == 'MicroCT':
         txm = MicroCT(*args, **kwargs)
     else:
-        msg = "Unknown value for '32-ID-C.setup': %s"
+        msg = "Unknown value for '32-ID-C.stage': %s"
         msg += "Options are ('NanoTXM', 'MicroCT')"
         raise exceptions_.ConfigurationError(msg % instrument)
     return txm

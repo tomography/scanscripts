@@ -25,3 +25,14 @@ then::
     cd project
     python setup.py install
     
+Beamline Configuration
+======================
+
+The scanscripts library looks for a file in the top director (eg
+``~/TXM/scanscripts``) called ``beamline_config.conf``. This file
+should contain configuration details for how the beamline is
+setup. This allows easy configuration changes without having to modify
+library code. See the documentation for each beamline for more details
+on which options are supported:
+
+- :ref:`sector-32-config`

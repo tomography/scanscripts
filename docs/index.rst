@@ -1,16 +1,16 @@
-=====
-Scans
-=====
+===========
+ScanScripts
+===========
 
 
-.. image:: source/img/project-logo.png
+.. image:: source/img/aps-overhead.jpg
    :width: 320px
    :alt: project
 
 
-This `GitHub repository <https://github.com/tomography/scanscripts>`_ 
-provides a scans scrips in use at various beamline at the Advanced Photon
-Source.
+This `GitHub repository <https://github.com/tomography/scanscripts>`_
+provides a framework for running experiment scripts at various
+beamline at the Advanced Photon Source.
 
 
 Content
@@ -19,7 +19,6 @@ Content
 .. toctree::
    :maxdepth: 1
 
-   source/about
    source/install
    source/sector32-scripts
    source/sector32-txm
