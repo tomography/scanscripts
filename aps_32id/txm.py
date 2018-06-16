@@ -50,7 +50,9 @@ def txm_config(filename=os.path.join(ROOT_DIR, 'beamline_config.conf')):
     config = configparser.ConfigParser()
     config['32-ID-C'] = {
         'has_permit': False,
-        'stage': 'NanoTXM'
+        'stage': 'NanoTXM',
+        'zone_plate_drift_x': 0,
+        'zone_plate_drift_y': 0,
     }
     # Load from the gloabl config file
     config.read(filename)
@@ -104,10 +106,14 @@ class NanoTXM(object):
       Is the instrument authorized to open shutters and change the
       X-ray source. Could be false for any number of reasons, most
       likely the beamline is set for hutch B to operate.
-    use_shutter_A : bool, optional
-      Whether shutter A should be used when getting light.
-    use_shutter_B : bool, optional
-      Whether shutter B should be used when getting light.
+    zone_plate_drift_x : float, optional
+      How much to move the zone-plate x-coordinate for each unit
+      change zone-plate z. If omitted, the value will be pulled from
+      the beamline configuration file (``txm_config()``).
+    zone_plate_drift_y : float, optional
+      How much to move the zone-plate y-coordinate for each unit
+      change zone-plate z. If omitted, the value will be pulled from
+      the beamline configuration file (``txm_config()``).
     
     """
     zp_diameter = 180
@@ -241,13 +247,7 @@ class NanoTXM(object):
     # Zone plate:
     zone_plate_x = TxmPV('32idcTXM:mcs:c2:m2.VAL')
     zone_plate_y = TxmPV('32idc01:m110.VAL')
-    zone_plate_2_z = TxmPV('32idcTXM:mcs:c2:m3.VAL')
-    # MST2 = vertical axis
-    # pv.Smaract_mode.put(':MST3,100,500,100')
-    Smaract_mode = TxmPV('32idcTXM:mcsAsyn1.AOUT')
-    zone_plate_2_x = TxmPV('32idcTXM:mcs:c0:m3.VAL')
-    zone_plate_2_y = TxmPV('32idcTXM:mcs:c0:m1.VAL')
-    zone_plate_z = TxmPV('32idcTXM:mcs:c0:m2.VAL')
+    zone_plate_z = TxmPV('32idcTXM:mcs:c2:m3.VAL')
     
     # CCD motors:
     CCD_Motor = TxmPV('32idcTXM:mxv:c1:m6.VAL', float)
@@ -331,14 +331,22 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=None):
+    def __init__(self, has_permit=None, zone_plate_drift_x=None,
+                 zone_plate_drift_y=None):
+        config = txm_config()['32-ID-C']
         if has_permit is None:
             # Load default permit value from config file
-            config = txm_config()['32-ID-C']
             self.has_permit = config.getboolean('has_permit')
         else:
             self.has_permit = has_permit
-            
+        # Load zone plate skew x and y if not given
+        if zone_plate_drift_x is None:
+            zone_plate_drift_x = config.getfloat('zone_plate_drift_x')
+        self.zone_plate_drift_x = zone_plate_drift_x
+        if zone_plate_drift_y is None:
+            zone_plate_drift_y = config.getfloat('zone_plate_drift_y')
+        self.zone_plate_drift_y = zone_plate_drift_y
+    
     def pv_get(self, pv_name, *args, **kwargs):
         """Retrieve the current process variable value.
         
@@ -603,8 +611,14 @@ class NanoTXM(object):
             ZP_WD = new_D * new_ZP_focal / (new_D - new_ZP_focal)
             new_mag = (old_D - old_ZP_focal) / old_ZP_focal
             log.debug("New magnification: %.2f", new_mag)
+        # Calculate zoneplate x and y based on skew
+        delta_z = (ZP_WD - self.zone_plate_z)
+        new_x = self.zone_plate_x + delta_z * self.zone_plate_drift_x
+        new_y = self.zone_plate_y + delta_z * self.zone_plate_drift_y
         # Move the zoneplate
-        log.debug("New zoneplate z-position: %.5f", ZP_WD)
+        log.debug("New zoneplate position: (%.5f, %.5f, %.5f)", new_x, new_y, ZP_WD)
+        self.zone_plate_x = new_x
+        self.zone_plate_y = new_y
         self.zone_plate_z = ZP_WD
         # Move the upstream source/optics
         log.debug("New DCM Energy and Gap Energy: %f", energy)

@@ -91,7 +91,8 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Motor_SampleRot, 45)
     
     def test_move_energy(self):
-        txm = UnpluggedTXM(has_permit=True)
+        txm = UnpluggedTXM(has_permit=True, zone_plate_drift_x=0.1,
+                           zone_plate_drift_y=-0.2)
         # Check what happens if we accidentally give the energy in eV
         with self.assertRaises(exceptions_.EnergyError):
             txm.move_energy(8500)
@@ -100,8 +101,15 @@ class TXMTestCase(unittest.TestCase):
         txm.DCMmvt = 14
         txm.DCMputEnergy = 8.5
         txm.CCD_Motor = 3400
+        txm.zone_plate_x = 1
+        txm.zone_plate_y = 2
+        txm.zone_plate_z = 70
         txm.move_energy(8.6)
         self.assertEqual(txm.DCMmvt, 14)
+        # Check that the zoneplate is moved correctly
+        dz = txm.zone_plate_z - 70
+        self.assertEqual(txm.zone_plate_x, 1 + dz * 0.1)
+        self.assertEqual(txm.zone_plate_y, 2 - dz * 0.2)
     
     def test_setup_tiff_writer(self):
         txm = UnpluggedTXM(has_permit=True)

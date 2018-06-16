@@ -50,3 +50,6 @@ class TXMStub(UnpluggedTXM):
     setup_detector = mock.MagicMock()
     open_shutters = mock.MagicMock()
     Cam1_NumImagesCounter = 0
+    zone_plate_x = 0
+    zone_plate_y = 0
+    zone_plate_z = 70

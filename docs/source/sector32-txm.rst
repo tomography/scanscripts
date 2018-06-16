@@ -52,6 +52,14 @@ stage (NanoTXM|MicroCT)
   Controls which stage/optics/shutters to use for manipulating the
   sample. ``MicroCT`` uses the front stage and ``NanoTXM`` uses the
   rear stage.
+zone_plate_drift_x (float)
+  Adjusts the zoneplate x position by this amount for every unit
+  change of zoneplate z. When properly set, this will keep the sample
+  centered when changing energy.
+zone_plate_drift_y (float)
+  Adjusts the zoneplate y position by this amount for every unit
+  change of zoneplate z. When properly set, this will keep the sample
+  centered when changing energy.
 
 .. literalinclude:: examples/beamline_config.conf
 

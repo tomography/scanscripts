@@ -40,7 +40,7 @@ variableDict = {
     'ExposureTime': 3,
     'Energy_limits': '7.100, 7.110, 7.117, 7.130, 7.150, 7.200',
     'Energy_Step': '0.003, 0.001, 0.0005, 0.001, 0.003',
-    'ZP_X_drift': 0.01,
+    'ZP_X_drift': 0.,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
@@ -93,7 +93,7 @@ def _capture_energy_frames(txm, energies, constant_mag,
         sample_first = not bool(idx % 2)
         log.info("Collecting %s first.", "sample" if sample_first else "white-field")
         # Move sample, zone plate and energy
-        txm.zone_plate_2_x = ZP_X_drift_array[idx]
+        txm.zone_plate_x = ZP_X_drift_array[idx]
         if sample_first:
             txm.move_sample(*sample_pos)
         else:
