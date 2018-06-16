@@ -130,6 +130,9 @@ class NanoTXM(object):
     fast_shutter_enabled = False
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
+    # XML file values to use
+    detector_xml = "nctDetectorAttributes.xml"
+    hdf_xml = "nct.xml"
     # Commonly used flags for PVs
     SHUTTER_OPEN = 0
     SHUTTER_CLOSED = 1
@@ -196,6 +199,7 @@ class NanoTXM(object):
     Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
     Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV')
+    Cam1_XMLFile = TxmPV('{ioc_prefix}cam1:NDAttributesFile')
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -215,6 +219,7 @@ class NanoTXM(object):
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
     HDF1_NextFile = TxmPV('{ioc_prefix}HDF1:FileNumber')
+    HDF1_XMLFile = TxmPV('{ioc_prefix}HDF1:XMLFileName')
     
     # Tiff writer PV's
     TIFF1_AutoSave = TxmPV('{ioc_prefix}TIFF1:AutoSave')
@@ -828,6 +833,8 @@ class NanoTXM(object):
         """
         log.debug("Setting up detector for %d (%f s) projections.",
                   num_projections, exposure)
+        # Load the correct xml attributes
+        self.Cam1_XMLFile = self.detector_xml
         # Capture a dummy frame to that the HDF5 plugin will work
         self.HDF1_EnableCallbacks = self.CALLBACK_DISABLED
         self.Cam1_ImageMode = self.IMAGE_MODE_SINGLE
@@ -886,8 +893,10 @@ class NanoTXM(object):
         
         """
         log.debug('setup_hdf_writer() called')
+        # Load the correct XML attributes
+        self.HDF1_XMLFile = self.hdf_xml
+        # Enable recursive filter        
         if num_recursive_images > 1:
-            # Enable recursive filter
             self.Proc1_Callbacks = 'Enable'
             self.Proc1_Filter_Enable = 'Disable'
             self.HDF1_ArrayPort = 'PROC1'
@@ -907,7 +916,10 @@ class NanoTXM(object):
         self.HDF1_Capture = self.CAPTURE_ENABLED
         self.wait_pv('HDF1_Capture_RBV', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
-        log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
+        try:
+            log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
+        except:
+            pass
         self.hdf_writer_ready = True
     
     def setup_tiff_writer(self, filename, num_projections=1,
@@ -1302,11 +1314,13 @@ class NanoTXM(object):
 
 class MicroCT(NanoTXM):
     """TXM operating with the front micro-CT stage."""
-    
     # Common settings for this micro-CT
     FAST_SHUTTER_TRIGGER_ENCODER = 0 # Hydra encoder
     use_shutter_A = True
     use_shutter_B = False
+    # XML file values to use
+    detector_xml = "mctDetectorAttributes.xml"
+    hdf_xml = "mct.xml"
     # Flyscan PV's
     Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')
     Fly_StartPos = TxmPV('32idcTXM:eFly:startPos')
