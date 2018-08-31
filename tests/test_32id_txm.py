@@ -91,8 +91,9 @@ class TXMTestCase(unittest.TestCase):
         self.assertEqual(txm.Motor_SampleRot, 45)
     
     def test_move_energy(self):
-        txm = UnpluggedTXM(has_permit=True, zone_plate_drift_x=0.1,
-                           zone_plate_drift_y=-0.2)
+        txm = UnpluggedTXM(has_permit=True)
+        txm.zone_plate_drift_x = 0.1
+        txm.zone_plate_drift_y=-0.2
         # Check what happens if we accidentally give the energy in eV
         with self.assertRaises(exceptions_.EnergyError):
             txm.move_energy(8500)
@@ -479,6 +480,9 @@ class TXMTestCase(unittest.TestCase):
     
     def test_run_scan(self):
         txm = UnpluggedTXM(has_permit=True)
+        txm.zone_plate_x = 0
+        txm.zone_plate_y = 0
+        txm.zone_plate_z = 70
         # txm.Cam1_AcquireTime = 1.
         # txm.Cam1_AcquirePeriod = 1.
         # Set the initial values
