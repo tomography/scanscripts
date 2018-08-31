@@ -1,9 +1,10 @@
 """Unit tests for the transmission x-ray microscope `TXM()` class."""
 
-import os
 import logging
 logging.basicConfig(level=logging.WARNING)
 logging.captureWarnings(True)
+import os
+from contextlib import contextmanager
 
 import six
 import time
@@ -13,8 +14,10 @@ if six.PY2:
 else:
     from unittest import mock
 import warnings
+import epics
 
-from aps_32id.txm import NanoTXM, permit_required
+from aps_32id.txm import NanoTXM, permit_required, txm_config
+import aps_32id.txm as txm_module
 from scanlib import TxmPV, exceptions_
 from tools import UnpluggedTXM
 
@@ -22,6 +25,9 @@ from tools import UnpluggedTXM
 log = logging.getLogger(__name__)
 log.debug('Beginning tests in {}'.format(__name__))
 
+# Flags for determining which tests to run
+HAS_PERMIT = txm_config()['32-ID-C'].getboolean('has_permit')
+TXM_CONNECTED = epics.get_pv('32idb:AShtr:UserArm', connect=True).connected
 
 class PermitDecoratorsTestCase(unittest.TestCase):
     class FakeTXM():
@@ -44,7 +50,53 @@ class PermitDecoratorsTestCase(unittest.TestCase):
         self.assertFalse(txm.test_value, 'Function still called without permit')
 
 
-class TXMTestCase(unittest.TestCase):
+@unittest.skipUnless(TXM_CONNECTED, 'TXM not connected')
+class SystemTests(unittest.TestCase):
+    
+    @contextmanager
+    def filter_permit_warnings(self):
+        """Context manager to filter out warnings resulting from no permit."""
+        with warnings.catch_warnings():
+            
+            warnings.filterwarnings(
+                'ignore', message='Collecting projections with shutters closed.')
+            warnings.filterwarnings(
+                'ignore', message='Shutters not closed because TXM does not have permit')
+            warnings.filterwarnings(
+                'ignore', message='Could not cast 32ida:BraggEAO.VAL = None')
+            yield
+
+    """System-level tests that require the TXM to be connected."""
+    def test_fast_shutter(self):
+        """Make sure the fast shutter responds to triggers."""
+        with self.filter_permit_warnings():
+            txm = NanoTXM(has_permit=False)
+            with txm.run_scan():
+                # Prepare the detector for capture
+                txm.enable_fast_shutter()
+                self.assertEqual(txm.Fast_Shutter_Control, txm.FAST_SHUTTER_CONTROL_AUTO)
+                exposure = 0.5 # seconds
+                txm.setup_detector(1, exposure=exposure)
+                self.assertEqual(txm.Cam1_Acquire, txm.DETECTOR_ACQUIRE)
+                # Trigger an exposure
+                txm.Cam1_SoftwareTrigger = 1
+                # Check that the acquisition finished
+                time.sleep(exposure + 0.1)
+                self.assertEqual(txm.Cam1_Acquire, txm.DETECTOR_IDLE)
+        
+    def test_projections_with_fast_shutter(self):
+        """Make sure projects can be triggered with the fast shutter."""
+        with self.filter_permit_warnings():
+            txm = NanoTXM(has_permit=False)
+            with txm.run_scan():
+                # Collect some projections and wait for them to finish
+                n_prj = 5
+                txm.setup_detector(num_projections=n_prj, exposure=0.5)
+                txm.enable_fast_shutter()
+                txm.capture_projections(n_prj)
+
+
+class TXMUnitTests(unittest.TestCase):
     
     def test_pv_put(self):
         # Have a dummy PV method to check if it actually calls
@@ -312,6 +364,7 @@ class TXMTestCase(unittest.TestCase):
         # Check for warning if collecting with shutters closed
         txm.shutters_are_open = False
         with warnings.catch_warnings(record=True) as w:
+            txm_module.__warningregistry__.clear()            
             warnings.simplefilter('always')
             txm.capture_projections()
             self.assertEqual(len(w), 1, "Did not raise shutter warning")
