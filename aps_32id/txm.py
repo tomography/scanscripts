@@ -20,7 +20,11 @@ import logging
 import warnings
 from contextlib import contextmanager
 from collections import namedtuple
-import configparser
+import six
+if six.PY2:
+    import ConfigParser as configparser
+else:
+    import configparser
 
 import numpy as np
 import h5py
@@ -44,19 +48,28 @@ ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 log = logging.getLogger(__name__)
 
 
-def txm_config(filename=os.path.join(ROOT_DIR, 'beamline_config.conf')):
-    """Prepare a config parser and load from config file."""
-    # Define the configuration parameters
-    config = configparser.ConfigParser()
-    config['32-ID-C'] = {
-        'has_permit': False,
-        'stage': 'NanoTXM',
-        'zone_plate_drift_x': 0,
-        'zone_plate_drift_y': 0,
-    }
-    # Load from the gloabl config file
-    config.read(filename)
-    return config
+class txm_config():
+    """A manager for loading values from the configuration file."""
+    section = '32-ID-C'
+    def __init__(self, filename=os.path.join(ROOT_DIR, 'beamline_config.conf')):
+        self.parser = configparser.ConfigParser()
+        self.parser.add_section(self.section)
+        # Set default values
+        self.parser.set(self.section, 'has_permit', 'False')
+        self.parser.set(self.section, 'stage', 'NanoTXM')
+        self.parser.set(self.section, 'zone_plate_drift_x', '0')
+        self.parser.set(self.section, 'zone_plate_drift_y', '0')
+        # Load from the gloabl config file
+        self.parser.read(filename)
+    
+    def get(self, option):
+        return self.parser.get(self.section, option)
+    
+    def getboolean(self, option):
+        return self.parser.getboolean(self.section, option)
+    
+    def getfloat(self, option):
+        return self.parser.getfloat(self.section, option)
 
 
 class PVPromise():
@@ -333,7 +346,7 @@ class NanoTXM(object):
     
     def __init__(self, has_permit=None, zone_plate_drift_x=None,
                  zone_plate_drift_y=None):
-        config = txm_config()['32-ID-C']
+        config = txm_config()
         if has_permit is None:
             # Load default permit value from config file
             self.has_permit = config.getboolean('has_permit')

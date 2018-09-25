@@ -447,6 +447,7 @@ class TXMTestCase(unittest.TestCase):
         # Disable the stderr logger for now
         old_handler_level = root_logger.handlers[0].level
         old_root_level = root_logger.level
+        root_logger.setLevel(logging.WARNING)
         # Make sure nothing happens if level=(-1|None)
         txm.start_logging(level=None)
         self.assertEqual(len(root_logger.handlers), num_handlers)
