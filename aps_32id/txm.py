@@ -40,7 +40,8 @@ __docformat__ = 'restructuredtext en'
 __platform__ = 'Unix'
 __version__ = '1.6'
 __all__ = ['NanoTXM',
-           'MicroTXM']
+           'MicroCT',
+           'txm_config',]
 
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -49,7 +50,33 @@ log = logging.getLogger(__name__)
 
 
 class txm_config():
-    """A manager for loading values from the configuration file."""
+    """A manager for loading values from the configuration file.
+    
+    Config Variables
+    ----------------
+    has_permit : bool
+      If ``has_permit`` is false, then the script will not attempt to
+      change the X-ray source, monochromator, shutters, etc. This
+      allows testing of scripts while the B-hutch is operating without
+      risking interferance.
+    stage : str
+      Controls which stage/optics/shutters to use for manipulating the
+      sample. "MicroCT" uses the front stage and "NanoTXM" uses the
+      rear stage.
+    zone_plate_drift_x : float
+      How much to move the zone-plate x-coordinate for each unit
+      change zone-plate z. If omitted, the value will be pulled from
+      the beamline configuration file (``txm_config()``).
+    zone_plate_drift_y : float
+      How much to move the zone-plate y-coordinate for each unit
+      change zone-plate z. If omitted, the value will be pulled from
+      the beamline configuration file (``txm_config()``).
+    zone_plate_drn : float
+      Outer zone width of the zone plate (in nm).
+    zone_plate_diameter : float
+      Full diameter of the zone plate (in µm).
+    
+    """
     section = '32-ID-C'
     def __init__(self, filename=os.path.join(ROOT_DIR, 'beamline_config.conf')):
         self.parser = configparser.ConfigParser()
@@ -59,6 +86,8 @@ class txm_config():
         self.parser.set(self.section, 'stage', 'NanoTXM')
         self.parser.set(self.section, 'zone_plate_drift_x', '0')
         self.parser.set(self.section, 'zone_plate_drift_y', '0')
+        self.parser.set(self.section, 'zone_plate_drn', '60')
+        self.parser.set(self.section, 'zone_plate_diameter', '180')
         # Load from the gloabl config file
         self.parser.read(filename)
     
@@ -119,18 +148,8 @@ class NanoTXM(object):
       Is the instrument authorized to open shutters and change the
       X-ray source. Could be false for any number of reasons, most
       likely the beamline is set for hutch B to operate.
-    zone_plate_drift_x : float, optional
-      How much to move the zone-plate x-coordinate for each unit
-      change zone-plate z. If omitted, the value will be pulled from
-      the beamline configuration file (``txm_config()``).
-    zone_plate_drift_y : float, optional
-      How much to move the zone-plate y-coordinate for each unit
-      change zone-plate z. If omitted, the value will be pulled from
-      the beamline configuration file (``txm_config()``).
     
     """
-    zp_diameter = 180
-    drn = 60
     gap_offset = 0.17 # Added to undulator gap setting
     pv_queue = None
     ioc_prefix = "32idcPG3:"
@@ -143,6 +162,9 @@ class NanoTXM(object):
     fast_shutter_enabled = False
     E_RANGE = (6.4, 30) # How far can the X-ray energy be changed (in keV)
     POLL_INTERVAL = 0.01 # How often to check PV's in seconds.
+    # XML file values to use
+    detector_xml = "nctDetectorAttributes.xml"
+    hdf_xml = "nct.xml"
     # Commonly used flags for PVs
     SHUTTER_OPEN = 0
     SHUTTER_CLOSED = 1
@@ -209,6 +231,7 @@ class NanoTXM(object):
     Cam1_Acquire = TxmPV('{ioc_prefix}cam1:Acquire', wait=False)
     Cam1_Display = TxmPV('{ioc_prefix}image1:EnableCallbacks')
     Cam1_Status = TxmPV('{ioc_prefix}cam1:DetectorState_RBV')
+    Cam1_XMLFile = TxmPV('{ioc_prefix}cam1:NDAttributesFile')
     
     # HDF5 writer PV's
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
@@ -228,6 +251,7 @@ class NanoTXM(object):
     HDF1_FileTemplate = TxmPV('{ioc_prefix}HDF1:FileTemplate')
     HDF1_ArrayPort = TxmPV('{ioc_prefix}HDF1:NDArrayPort')
     HDF1_NextFile = TxmPV('{ioc_prefix}HDF1:FileNumber')
+    HDF1_XMLFile = TxmPV('{ioc_prefix}HDF1:XMLFileName')
     
     # Tiff writer PV's
     TIFF1_AutoSave = TxmPV('{ioc_prefix}TIFF1:AutoSave')
@@ -258,8 +282,8 @@ class NanoTXM(object):
     # Motor_Y_Tile = TxmPV('32idc02:m15.VAL')
     
     # Zone plate:
-    zone_plate_x = TxmPV('32idcTXM:mcs:c2:m2.VAL')
-    zone_plate_y = TxmPV('32idc01:m110.VAL')
+    zone_plate_x = TxmPV('32idcTXM:mcs:c2:m1.VAL')
+    zone_plate_y = TxmPV('32idcTXM:mcs:c2:m2.VAL')
     zone_plate_z = TxmPV('32idcTXM:mcs:c2:m3.VAL')
     
     # CCD motors:
@@ -344,21 +368,18 @@ class NanoTXM(object):
     Interlaced_Num_Sub_Cycles = TxmPV('32idcTXM:iFly:interlaceFlySub.B')
     Interlaced_Num_Sub_Cycles_RBV = TxmPV('32idcTXM:iFly:interlaceFlySub.VALG')
     
-    def __init__(self, has_permit=None, zone_plate_drift_x=None,
-                 zone_plate_drift_y=None):
+    def __init__(self, has_permit=None):
         config = txm_config()
         if has_permit is None:
             # Load default permit value from config file
             self.has_permit = config.getboolean('has_permit')
         else:
             self.has_permit = has_permit
-        # Load zone plate skew x and y if not given
-        if zone_plate_drift_x is None:
-            zone_plate_drift_x = config.getfloat('zone_plate_drift_x')
-        self.zone_plate_drift_x = zone_plate_drift_x
-        if zone_plate_drift_y is None:
-            zone_plate_drift_y = config.getfloat('zone_plate_drift_y')
-        self.zone_plate_drift_y = zone_plate_drift_y
+        # Load beamline configuration from file
+        self.zone_plate_drift_x = config.getfloat('zone_plate_drift_x')
+        self.zone_plate_drift_y = config.getfloat('zone_plate_drift_y')
+        self.drn = config.getfloat('zone_plate_drn')
+        self.zp_diameter = config.getfloat('zone_plate_diameter')
     
     def pv_get(self, pv_name, *args, **kwargs):
         """Retrieve the current process variable value.
@@ -841,6 +862,8 @@ class NanoTXM(object):
         """
         log.debug("Setting up detector for %d (%f s) projections.",
                   num_projections, exposure)
+        # Load the correct xml attributes
+        self.Cam1_XMLFile = self.detector_xml
         # Capture a dummy frame to that the HDF5 plugin will work
         self.HDF1_EnableCallbacks = self.CALLBACK_DISABLED
         self.Cam1_ImageMode = self.IMAGE_MODE_SINGLE
@@ -899,8 +922,10 @@ class NanoTXM(object):
         
         """
         log.debug('setup_hdf_writer() called')
+        # Load the correct XML attributes
+        self.HDF1_XMLFile = self.hdf_xml
+        # Enable recursive filter        
         if num_recursive_images > 1:
-            # Enable recursive filter
             self.Proc1_Callbacks = 'Enable'
             self.Proc1_Filter_Enable = 'Disable'
             self.HDF1_ArrayPort = 'PROC1'
@@ -920,7 +945,10 @@ class NanoTXM(object):
         self.HDF1_Capture = self.CAPTURE_ENABLED
         self.wait_pv('HDF1_Capture_RBV', self.CAPTURE_ENABLED)
         # Clean up and set some status variables
-        log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
+        try:
+            log.debug("Finished setting up HDF writer for %s.", self.HDF1_FullFileName_RBV)
+        except:
+            pass
         self.hdf_writer_ready = True
     
     def setup_tiff_writer(self, filename, num_projections=1,
@@ -1315,11 +1343,13 @@ class NanoTXM(object):
 
 class MicroCT(NanoTXM):
     """TXM operating with the front micro-CT stage."""
-    
     # Common settings for this micro-CT
     FAST_SHUTTER_TRIGGER_ENCODER = 0 # Hydra encoder
     use_shutter_A = True
     use_shutter_B = False
+    # XML file values to use
+    detector_xml = "mctDetectorAttributes.xml"
+    hdf_xml = "mct.xml"
     # Flyscan PV's
     Fly_ScanDelta = TxmPV('32idcTXM:eFly:scanDelta')
     Fly_StartPos = TxmPV('32idcTXM:eFly:startPos')

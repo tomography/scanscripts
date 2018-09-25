@@ -52,6 +52,11 @@ stage (NanoTXM|MicroCT)
   Controls which stage/optics/shutters to use for manipulating the
   sample. ``MicroCT`` uses the front stage and ``NanoTXM`` uses the
   rear stage.
+zone_plate_drn (int)
+  The width, in nm, of the outermost zone of the zone-plate of the
+  zone-plate (:math:`\Delta r_n`).
+zone_plate_diameter (int)
+  The total diameter, in µm, of the zone-plate.
 zone_plate_drift_x (float)
   Adjusts the zoneplate x position by this amount for every unit
   change of zoneplate z. When properly set, this will keep the sample
@@ -63,6 +68,20 @@ zone_plate_drift_y (float)
 
 .. literalinclude:: examples/beamline_config.conf
 
+Internally, these options are parsed in
+:py:func:`aps_32id.txm.txm_config` using the standard library's
+`configparser package`_. To make scripts easier to read, it is best to
+read the configuration only inside methods of
+:py:class:`~aps_32id.txm.NanoTXM` (or subclasses). The configuration
+values can be read in the following manner:
+
+.. code:: python
+
+    cfg = txm_config()['32-ID-C']
+    zp_drn = cfg.getfloat('zone_plate_drn')
+    has_permit = cfg.getboolean('has_permit')
+
+.. _configparser package: https://docs.python.org/3/library/configparser.html
 
 Stopping Scans Gracefully
 -------------------------

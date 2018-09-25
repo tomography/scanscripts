@@ -156,6 +156,7 @@ def run_tomo_fly_scan(projections=3000, rotation_start=0,
         with txm.wait_pvs():
             txm.move_sample(*sample_pos)
             txm.open_shutters()
+        txm.move_sample(theta=rotation_start)
         txm.start_detector(num_projections=projections)
         angles = txm.capture_tomogram_flyscan(start_angle=rotation_start,
                                               end_angle=rotation_end,

@@ -38,14 +38,17 @@ variableDict = {
     'StartSleep_min': 0.0,
     'StabilizeSleep_ms': 3000,
     'ExposureTime': 3,
-    'Energy_limits': '7.100, 7.110, 7.117, 7.130, 7.150, 7.200',
-    'Energy_Step': '0.003, 0.001, 0.0005, 0.001, 0.003',
+#    'Energy_limits': '7.100, 7.110, 7.117, 7.130, 7.150, 7.200',
+#    'Energy_Step': '0.003, 0.001, 0.0005, 0.001, 0.003',
+    'Energy_limits': '11.05, 11.075, 11.15, 11.2',
+    'Energy_Step': '0.005, 0.0015, 0.004',
     'ZP_X_drift': 0.,
     'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Repetitions': 1,
-    'Use_Fast_Shutter': 0,
+    'Pause': 0.0, # in minutes
+    'Use_Fast_Shutter': 1,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
 }
@@ -128,6 +131,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                     ZP_X_drift_array=None,
                     constant_mag=True, stabilize_sleep_ms=1000,
                     repetitions=1,
+                    pause=0,
                     use_fast_shutter=True,
                     log_level=logging.INFO,
                     txm=None):
@@ -165,6 +169,8 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
       before collecting projections.
     repetitions : int, optional
       How many times to run this energy scan, including the first one.
+    pause : int, optional
+      How long, in minute, the scan pause in between each energy scan repetition
     use_fast_shutter : bool, optional
       Whether to open and shut the fast shutter before triggering
       projections.
@@ -197,6 +203,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
                            num_projections=total_projections)
         # Collect repetitions of the energy scan
         for rep in range(repetitions):
+            time.sleep(pause * 60.0) # convert min to sec
             txm.setup_hdf_writer(num_projections=total_projections)
             txm.start_logging(log_level)
             # Capture pre dark field images
@@ -261,6 +268,7 @@ def main():
     sleep_min = float(variableDict.get('StartSleep_min', 0))
     stabilize_sleep_ms = float(variableDict.get("StabilizeSleep_ms"))
     repetitions = int(variableDict['Repetitions'])
+    pause = float(variableDict['Pause'])
     constant_mag = bool(variableDict['constant_mag'])
     use_fast_shutter = bool(int(variableDict['Use_Fast_Shutter']))
     if sleep_min > 0:
@@ -277,6 +285,7 @@ def main():
         ZP_X_drift_array=ZP_X_drift_array,
         constant_mag=constant_mag,
         repetitions=repetitions,
+        pause=pause,
         log_level=log_level,
         use_fast_shutter=use_fast_shutter,
     )
