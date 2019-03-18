@@ -111,6 +111,9 @@ class PVPromise():
     def complete(self, pvname=""):
         self.is_complete = True
 
+    def __str__(self):
+        return self.pv_name
+
 
 def new_txm(*args, **kwargs):
     """A factory that creates a instrument object, either MicroCT or NanoTXM.
@@ -210,6 +213,8 @@ class NanoTXM(object):
     GPIO_0 = 0
     GPIO_2 = 1
     GPIO_3 = 2
+    SHAKER_STOP = 0
+    SHAKER_RUN = 1
     
     # Process variables
     # -----------------
@@ -234,6 +239,7 @@ class NanoTXM(object):
     Cam1_XMLFile = TxmPV('{ioc_prefix}cam1:NDAttributesFile')
     
     # HDF5 writer PV's
+    HDF1_LazyOpen = TxmPV('{ioc_prefix}HDF1:LazyOpen')
     HDF1_AutoSave = TxmPV('{ioc_prefix}HDF1:AutoSave')
     HDF1_DeleteDriverFile = TxmPV('{ioc_prefix}HDF1:DeleteDriverFile')
     HDF1_EnableCallbacks = TxmPV('{ioc_prefix}HDF1:EnableCallbacks')
@@ -298,12 +304,12 @@ class NanoTXM(object):
     ShutterB_Move_Status = TxmPV('PB:32ID:STA_B_SBS_CLSD_PL')
     
     # Fast shutter controls
-    Fast_Shutter_Open = TxmPV('32idcTXM:shutCam:ShutterManual')
+    Softglue_Shutter = TxmPV('32idcTXM:SG3:DnCntr-1_PRESET') # Should be always 1
     Fast_Shutter_Delay = TxmPV('32idcTXM:shutCam:tDly')
     Fast_Shutter_Exposure = TxmPV('32idcTXM:shutCam:tExpose')
     Fast_Shutter_Trigger = TxmPV('32idcTXM:shutCam:go', wait=False)
-    Fast_Shutter_Trigger_Mode = TxmPV('32idcTXM:shutCam:Triggered')
-    Fast_Shutter_Control = TxmPV('32idcTXM:shutCam:ShutterCtrl')
+    Fast_Shutter_Trigger_Mode = TxmPV('32idcTXM:shutCam:Triggered') # Manual / Triggered synchronization
+    Fast_Shutter_Control = TxmPV('32idcTXM:shutCam:ShutterCtrl') # Shutter control: manual or Auto
     Fast_Shutter_Relay = TxmPV('32idcTXM:shutCam:Enable')
     Fast_Shutter_Trigger_Source = TxmPV('32idcTXM:flyTriggerSelect')
     Fast_Shutter_Uniblitz = TxmPV('32idcTXM:uniblitz:control')
@@ -328,6 +334,7 @@ class NanoTXM(object):
     
     # Misc PV's
     Image1_Callbacks = TxmPV('{ioc_prefix}image1:EnableCallbacks')
+    Shaker = TxmPV('32idcMC:shaker:run')
     # SetSoftGlueForStep = TxmPV('32idcTXM:SG3:MUX2-1_SEL_Signal')
     # ClearTheta = TxmPV('32idcTXM:recPV:PV1_clear')
     ExternShutterDelay = TxmPV('32idcTXM:shutCam:tDly')
@@ -458,11 +465,18 @@ class NanoTXM(object):
         self.pv_queue = []
         # Return execution to the inner block
         yield self.pv_queue
-        # Wait for all the PVs to be finished
+        # Track some performance values
+        start_time = time.time()
         num_promises = len(self.pv_queue)
+        pv_times = {str(pv): 0 for pv in self.pv_queue}
+        # Wait for all the PVs to be finished
         while block and not all([pv.is_complete for pv in self.pv_queue]):
+            # Update the timing trackers
+            time_diff = time.time() - start_time
+            new_times = {str(pv): time_diff for pv in self.pv_queue if not pv.is_complete}
+            pv_times.update(new_times)
             time.sleep(0.01)
-        log.debug("Completed %d queued PV's", num_promises)
+        log.debug("Completed %d queued PV's: %s", num_promises, pv_times)
         # Restore the old PV queue
         self.pv_queue = old_queue
     
@@ -689,6 +703,8 @@ class NanoTXM(object):
           Time (in seconds) to wait for the fast shutter to close.
         
         """
+        # Make sure Softglue circuit is configure correctly:
+        self.Softglue_Shutter = 1
         # Close the shutter to start with
         self.Fast_Shutter_Control = self.FAST_SHUTTER_CONTROL_MANUAL
         self.Fast_Shutter_Open = self.FAST_SHUTTER_CLOSED
@@ -922,6 +938,7 @@ class NanoTXM(object):
         
         """
         log.debug('setup_hdf_writer() called')
+        self.HDF1_LazyOpen = 0 # has to be 0 (for some reasons...)
         # Load the correct XML attributes
         self.HDF1_XMLFile = self.hdf_xml
         # Enable recursive filter        
@@ -1294,6 +1311,8 @@ class NanoTXM(object):
         finally:
             log.debug("Restoring previous state")
             self.stop_fly_scan()
+            # Close the shutter
+            self.close_shutters()
             # Disable/re-enable the fast shutter
             self.Fast_Shutter_Uniblitz = uniblitz_status
             if fast_shutter_was_enabled:
@@ -1313,8 +1332,6 @@ class NanoTXM(object):
                     self.move_energy(init_E)
                 except exceptions_.EnergyError as e:
                     log.warning(e)
-            # Close the shutter
-            self.close_shutters()
             # Reset the CCD so it's in continuous mode
             self.reset_ccd()
             self.exposure_time = init_exposure

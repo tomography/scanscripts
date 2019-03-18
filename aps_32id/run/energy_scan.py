@@ -26,8 +26,8 @@ __all__ = ['run_energy_scan', 'getVariableDict']
 
 
 variableDict = {
-    'PreDarkImages': 4,
-    'SampleXOut': 3.0,
+    'PreDarkImages': 0,
+    'SampleXOut': 0.0,
     'SampleYOut': 0.0,
     'SampleZOut': 0.0,
     'SampleRotOut': 0.0, # In degrees
@@ -37,17 +37,19 @@ variableDict = {
     'SampleRotIn': 0.0, # In degrees
     'StartSleep_min': 0.0,
     'StabilizeSleep_ms': 3000,
-    'ExposureTime': 3,
+    'ExposureTime': 1,
 #    'Energy_limits': '7.100, 7.110, 7.117, 7.130, 7.150, 7.200',
 #    'Energy_Step': '0.003, 0.001, 0.0005, 0.001, 0.003',
-    'Energy_limits': '11.05, 11.075, 11.15, 11.2',
-    'Energy_Step': '0.005, 0.0015, 0.004',
+#    'Energy_limits': '11.05, 11.075, 11.15, 11.2',
+#    'Energy_limits': '8.3, 8.34, 8.37, 8.4',
+    'Energy_limits': '8.3, 8.305, 8.31', # for quick test
+    'Energy_Step': '0.002, 0.002',
     'ZP_X_drift': 0.,
-    'constant_mag': True, # will CCD move to maintain constant magnification?
+    'constant_mag': False, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Repetitions': 1,
-    'Pause': 0.0, # in minutes
+    'Pause': 0.01, # in minutes
     'Use_Fast_Shutter': 1,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
@@ -205,6 +207,7 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
         for rep in range(repetitions):
             time.sleep(pause * 60.0) # convert min to sec
             txm.setup_hdf_writer(num_projections=total_projections)
+            time.sleep(5)
             txm.start_logging(log_level)
             # Capture pre dark field images
             if n_pre_dark > 0:
@@ -223,7 +226,9 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
             txm.close_shutters()
             # Add the energy array to the active HDF file
             hdf_filename = txm.hdf_filename
+            print ('1', hdf_filename)
     try:
+        print ('2', hdf_filename)
         with txm.hdf_file(hdf_filename, mode="r+") as hdf_f:
             log.debug('Saving energies to file: %s', hdf_filename)
             hdf_f.create_dataset('/exchange/energy',

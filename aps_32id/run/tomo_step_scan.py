@@ -41,12 +41,12 @@ IOC_PREFIX = '32idcPG3'
 log = logging.getLogger(__name__)
 
 variableDict = {
-    'PreDarkImages': 5,
-    'PreWhiteImages': 10,
-    'Projections': 721,
-    'PostDarkImages': 5,
-    'PostWhiteImages': 10,
-    'SampleXOut': 0.2,
+    'PreDarkImages': 0,
+    'PreWhiteImages': 0,
+    'Projections': 40,
+    'PostDarkImages': 0,
+    'PostWhiteImages': 0,
+    'SampleXOut': 0.0,
     # 'SampleYOut': 0.1,
     # 'SampleZOut': 0,
     'SampleRotOut': 0.0,
@@ -54,15 +54,15 @@ variableDict = {
     # 'SampleYIn': 0.1,
     # 'SampleZIn': 0.0,
     'SampleStart_Rot': 0.,
-    'SampleEnd_Rot': 180.,
+    'SampleEnd_Rot': 40.,
     'StartSleep_min': 0,
     'StabilizeSleep_ms': 10,
-    'ExposureTime_sec': 1.0,
+    'ExposureTime_sec': 0.5,
     # 'ShutterOpenDelay': 0.05,
     # 'ExternalShutter': 0,
     # 'FileWriteMode': 'Stream',
     'rot_speed_deg_per_s': 0.5,
-    'Use_Fast_Shutter': 0,
+    'Use_Fast_Shutter': 1,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
 }
@@ -136,7 +136,8 @@ def run_tomo_step_scan(angles, stabilize_sleep_ms=10, exposure=0.5,
         txm = new_txm()
     # Prepare the microscope for collecting data
     with txm.run_scan():
-        assert use_fast_shutter
+        print(use_fast_shutter)
+#        assert use_fast_shutter # No need to assert
         if use_fast_shutter:
             txm.enable_fast_shutter()
         total_projections = len(angles)

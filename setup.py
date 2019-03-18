@@ -18,6 +18,7 @@ setup(
             'tomo-fly-scan=aps_32id.run.tomo_fly_scan:main',
             'tomo-step-scan=aps_32id.run.tomo_step_scan:main',
             'move-energy=aps_32id.run.move_energy:main',
+            'monitor-shaker=aps_32id.run.monitor_shaker:main',
         ],
     },
     license='BSD-3',
