@@ -44,7 +44,8 @@ __all__ = ['NanoTXM',
            'txm_config',]
 
 DEFAULT_TIMEOUT = 20 # PV timeout in seconds
-ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 log = logging.getLogger(__name__)
 
