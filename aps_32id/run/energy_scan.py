@@ -29,7 +29,7 @@ variableDict = {
     'PreDarkImages': 0,
     'SampleXOut': 0.0,
     'SampleYOut': 0.0,
-    'SampleZOut': 0.0,
+    'SampleZOut': 2.5,
     'SampleRotOut': 0.0, # In degrees
     'SampleXIn': 0.0,
     'SampleYIn': 0.0,
@@ -40,16 +40,17 @@ variableDict = {
     'ExposureTime': 1,
 #    'Energy_limits': '7.100, 7.110, 7.117, 7.130, 7.150, 7.200',
 #    'Energy_Step': '0.003, 0.001, 0.0005, 0.001, 0.003',
-#    'Energy_limits': '11.05, 11.075, 11.15, 11.2',
+    'Energy_limits': '11.05, 11.075, 11.15, 11.2',
+    'Energy_Step': '0.005, 0.0015, 0.004',
 #    'Energy_limits': '8.3, 8.34, 8.37, 8.4',
-    'Energy_limits': '8.3, 8.305, 8.31', # for quick test
-    'Energy_Step': '0.002, 0.002',
+#    'Energy_limits': '8.3, 8.305, 8.31', # for quick test
+#    'Energy_Step': '0.002, 0.002',
     'ZP_X_drift': 0.,
-    'constant_mag': False, # will CCD move to maintain constant magnification?
+    'constant_mag': True, # will CCD move to maintain constant magnification?
     # 'BSC_diameter': 1320,
     # 'BSC_drn': 60
     'Repetitions': 1,
-    'Pause': 0.01, # in minutes
+    'Pause': 0, # in minutes
     'Use_Fast_Shutter': 1,
     # Logging: 0=UNSET, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
     'Log_Level': logging.INFO,
@@ -200,12 +201,13 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
     with txm.run_scan():
         if use_fast_shutter:
             txm.enable_fast_shutter()
-        # Prepare TXM for capturing data
-        txm.setup_detector(exposure=exposure,
-                           num_projections=total_projections)
         # Collect repetitions of the energy scan
         for rep in range(repetitions):
-            time.sleep(pause * 60.0) # convert min to sec
+            # Prepare TXM for capturing data
+            txm.setup_detector(exposure=exposure,
+                               num_projections=total_projections)
+            if use_fast_shutter:
+                txm.enable_fast_shutter()
             txm.setup_hdf_writer(num_projections=total_projections)
             time.sleep(5)
             txm.start_logging(log_level)
@@ -227,6 +229,9 @@ def run_energy_scan(energies, exposure=0.5, n_pre_dark=5,
             # Add the energy array to the active HDF file
             hdf_filename = txm.hdf_filename
             print ('1', hdf_filename)
+            if pause:
+                log.info("Pausing between scans for %f min", pause)
+                time.sleep(pause * 60.0) # convert min to sec
     try:
         print ('2', hdf_filename)
         with txm.hdf_file(hdf_filename, mode="r+") as hdf_f:
@@ -250,7 +255,7 @@ def main():
     update_variable_dict(variableDict)
     # Set up default logging
     # Choices are DEBUG, INFO, WARNING, ERROR, CRITICAL
-    # logging.basicConfig(level=logging.WARNING)
+    # logging.basicConfig(filename='energy_scan_debug.log', level=logging.DEBUG)
     log_level = variableDict['Log_Level']
     loggingConfig(level=log_level)
     # Get the requested sample positions
