@@ -33,6 +33,11 @@ except epics.ca.ChannelAccessException:
     TXM_CONNECTED = False
 
 
+class TxmConfigTest(unittest.TestCase):
+    def test_new_txm(self):
+        txm_module.new_txm()
+
+
 class PermitDecoratorsTestCase(unittest.TestCase):
     class FakeTXM():
         has_permit = False

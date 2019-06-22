@@ -92,6 +92,9 @@ class txm_config():
         # Load from the gloabl config file
         self.parser.read(filename)
     
+    def __getitem__(self, key):
+        return self.get(key)
+    
     def get(self, option):
         return self.parser.get(self.section, option)
     
@@ -111,7 +114,7 @@ class PVPromise():
     
     def complete(self, pvname=""):
         self.is_complete = True
-
+    
     def __str__(self):
         return self.pv_name
 
@@ -126,7 +129,7 @@ def new_txm(*args, **kwargs):
     
     """
     # Check which setup to use
-    conf = txm_config()['32-ID-C']
+    conf = txm_config()
     instrument = conf['stage']
     log.debug("Loading instrument stage: %s", instrument)
     if instrument == 'NanoTXM':
