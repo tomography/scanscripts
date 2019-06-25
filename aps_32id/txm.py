@@ -113,6 +113,7 @@ class PVPromise():
         self.pv_name = pv_name
     
     def complete(self, pvname=""):
+        log.debug("Completed pv %s", self.pv_name)
         self.is_complete = True
     
     def __str__(self):
@@ -620,6 +621,10 @@ class NanoTXM(object):
           If enabled, this method will correct for slop in the gap
           motors. Only needed for large changes (eg >0.01 keV)
         """
+        # System hangs if you try and set to the already current energy
+        if energy == self.energy():
+            log.warning("Already at %f keV. Not changing.", energy)
+            return
         # Helper function for converting energy to wavelength
         kev_to_nm = lambda kev: 1240. / (kev * 1000.)
         # Check that the energy given is valid for this instrument

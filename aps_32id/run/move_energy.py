@@ -24,7 +24,7 @@ def getVariableDict():
     return variableDict
 
 
-def move_energy(energy, constant_mag=True, txm=None):
+def move_energy(energy, constant_mag=True, log_level=logging.INFO, txm=None):
     """Change the X-ray microscope to a new energy.
     
     Parameters
@@ -34,6 +34,8 @@ def move_energy(energy, constant_mag=True, txm=None):
     constant_mag : bool, optional
       If truthy, the camera will move to maintain a constant
       magnification.
+    log_level : int, optional
+      Temporary log level to use. ``None`` does not change the logging.
     txm : optional
       An instance of the NanoTXM class. If not given, a new one will
       be created. Mostly used for testing.
@@ -42,6 +44,7 @@ def move_energy(energy, constant_mag=True, txm=None):
     # Prepare TXM object
     if txm is None:
         txm = new_txm()
+    txm.start_logging(level=log_level)
     # Attach to the TXM and change energy
     with txm.wait_pvs():
         txm.move_energy(energy, constant_mag=constant_mag)
@@ -49,10 +52,6 @@ def move_energy(energy, constant_mag=True, txm=None):
 
 
 def main():
-    # Prepare logging
-    logfile = '/home/beams/USR32IDC/wolfman/wolfman-devel.log'
-    if os.path.exists(logfile):
-        logging.basicConfig(level=logging.DEBUG, filename=logfile)
     # Get variables from user dictionary
     update_variable_dict(variableDict)
     energy = float(variableDict['new_energy'])
