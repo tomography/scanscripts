@@ -27,9 +27,9 @@ __all__ = ['run_energy_scan', 'getVariableDict']
 
 variableDict = {
     'PreDarkImages': 0,
-    'SampleXOut': 0.0,
+    'SampleXOut': 0.2,
     'SampleYOut': 0.0,
-    'SampleZOut': 3.5,
+    'SampleZOut': 0.0,
     'SampleRotOut': 90.0, # In degrees
     'SampleXIn': 0.0,
     'SampleYIn': 0.0,
@@ -38,13 +38,7 @@ variableDict = {
     'StartSleep_min': 0.0,
     'StabilizeSleep_ms': 3000,
     'ExposureTime': 1,
-#    'Energy_limits': '7.100, 7.110, 7.117, 7.130, 7.150, 7.200',
-#    'Energy_Step': '0.003, 0.001, 0.0005, 0.001, 0.003',
-#    'Energy_limits': '11.05, 11.075, 11.15, 11.2',
-    'Energy_Step': '0.005, 0.0015, 0.004',
-#    'Energy_limits': '8.3, 8.32, 8.34, 8.37, 8.4',
     'Energy_limits': '8.33, 8.34, 8.37, 8.43',
-#    'Energy_limits': '8.3, 8.305, 8.31', # for quick test
     'Energy_Step': '0.002, 0.001, 0.002',
     'ZP_X_drift': 0.,
     'constant_mag': True, # will CCD move to maintain constant magnification?

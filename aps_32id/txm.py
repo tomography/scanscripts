@@ -112,7 +112,7 @@ class PVPromise():
     def __init__(self, pv_name=""):
         self.pv_name = pv_name
     
-    def complete(self, pvname=""):
+    def complete(self, pvname="", *args, **kwargs):
         log.debug("Completed pv %s", self.pv_name)
         self.is_complete = True
     
